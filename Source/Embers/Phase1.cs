@@ -22,7 +22,7 @@ namespace Embers
         }
         public class Phase1Token {
             public readonly Phase1TokenType Type;
-            public readonly string? Value;
+            public string? Value;
             public readonly bool FollowsWhitespace;
             public Phase1Token(Phase1TokenType type, string? value, bool followsWhitespace) {
                 Type = type;
@@ -273,8 +273,18 @@ namespace Embers
                                 i++;
                             } while (Code[i] != '\n');
                             break;
+                        case '?':
+                            if (Tokens.Count != 0 && Tokens[^1].Type == Phase1TokenType.Identifier && !Tokens[^1].Value!.EndsWith('?') && !FollowsWhitespace) {
+                                Tokens[^1].Value += '?';
+                                continue;
+                            }
+                            else {
+                                throw new SyntaxErrorException("'?' is only valid at the end of a method name identifier");
+                            }
                         default:
                             string Identifier = BuildWhile(c => char.IsAsciiLetter(c) || c == '$' || c == '@');
+                            if (Identifier.Length == 0)
+                                throw new SyntaxErrorException($"Invalid character '{Chara}'");
                             Tokens.Add(new(Phase1TokenType.Identifier, Identifier, FollowsWhitespace));
                             i--;
                             break;

@@ -5,6 +5,8 @@ using System.Text;
 using System.Threading.Tasks;
 using static Embers.Interpreter;
 
+#pragma warning disable CS1998
+
 namespace Embers
 {
     public class Api
@@ -19,32 +21,32 @@ namespace Embers
             return Methods;
         }
 
-        async Task<RubyObject?> Puts(Interpreter Interpreter, List<RubyObject?> Messages) {
-            foreach (RubyObject? Message in Messages) {
-                Console.WriteLine(Message?.Object);
+        async Task<RubyObject> Puts(Interpreter Interpreter, List<RubyObject> Messages) {
+            foreach (RubyObject Message in Messages) {
+                Console.WriteLine(Message.Object);
             }
-            return null;
+            return RubyObject.Nil;
         }
-        async Task<RubyObject?> Print(Interpreter Interpreter, List<RubyObject?> Messages) {
-            foreach (RubyObject? Message in Messages) {
-                Console.Write(Message?.Object);
+        async Task<RubyObject> Print(Interpreter Interpreter, List<RubyObject> Messages) {
+            foreach (RubyObject Message in Messages) {
+                Console.Write(Message.Object);
             }
-            return null;
+            return RubyObject.Nil;
         }
-        async Task<RubyObject?> P(Interpreter Interpreter, List<RubyObject?> Messages) {
-            foreach (RubyObject? Message in Messages) {
-                Console.WriteLine(Message?.Inspect());
+        async Task<RubyObject> P(Interpreter Interpreter, List<RubyObject> Messages) {
+            foreach (RubyObject Message in Messages) {
+                Console.WriteLine(Message.Inspect());
             }
-            return null;
+            return RubyObject.Nil;
         }
-        async Task<RubyObject?> Sleep(Interpreter Interpreter, List<RubyObject?> Time) {
+        async Task<RubyObject> Sleep(Interpreter Interpreter, List<RubyObject> Time) {
             if (Time.Count == 1) {
                 await Task.Delay(1);
             }
             else {
                 await Task.Delay(Timeout.Infinite);
             }
-            return null;
+            return RubyObject.Nil;
         }
     }
 }

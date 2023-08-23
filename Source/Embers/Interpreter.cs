@@ -12,7 +12,7 @@ namespace Embers
         readonly Api Api = new();
         readonly Class RootClass;
         readonly Scope RootScope;
-        readonly Dictionary<string, RubyObject?> GlobalVariables = new();
+        readonly Dictionary<string, RubyObject> GlobalVariables = new();
         Class CurrentClass;
         Scope CurrentScope;
 
@@ -20,7 +20,7 @@ namespace Embers
             public bool IsA<T>() {
                 return GetType() == typeof(T);
             }
-            public abstract object Object { get; }
+            public abstract object? Object { get; }
             public virtual bool Boolean { get { throw new Exception("Ruby object is not a boolean"); } }
             public virtual string String { get { throw new Exception("Ruby object is not a string"); } }
             public virtual long Integer { get { throw new Exception("Ruby object is not an integer"); } }
@@ -33,17 +33,20 @@ namespace Embers
             public Method? Divide = null;
             public Method? Modulo = null;
             public Method? Exponentiate = null;
-            public static RubyObject? CreateFromToken(Phase2Token Token) {
+            public static RubyObject CreateFromToken(Phase2Token Token) {
                 return Token.Type switch {
-                    Phase2TokenType.Nil => null,
-                    Phase2TokenType.True => new RubyTrue(),
-                    Phase2TokenType.False => new RubyFalse(),
+                    Phase2TokenType.Nil => Nil,
+                    Phase2TokenType.True => True,
+                    Phase2TokenType.False => False,
                     Phase2TokenType.String => new RubyString(Token.Value!),
                     Phase2TokenType.Integer => new RubyInteger(long.Parse(Token.Value!)),
                     Phase2TokenType.Float => new RubyFloat(double.Parse(Token.Value!)),
                     _ => throw new InternalErrorException($"Cannot create new object from token type {Token.Type}")
                 };
             }
+            public static readonly RubyNil Nil = new();
+            public static readonly RubyTrue True = new();
+            public static readonly RubyFalse False = new();
         }
         /*public class RubyBoolean : RubyObject {
             readonly bool Value;
@@ -56,8 +59,16 @@ namespace Embers
                 Value = value;
             }
         }*/
+        public class RubyNil : RubyObject {
+            public override object? Object { get { return null; } }
+            public override string Inspect() {
+                return "nil";
+            }
+            public RubyNil() {
+            }
+        }
         public class RubyTrue : RubyObject {
-            public override object Object { get { return true; } }
+            public override object? Object { get { return true; } }
             public override bool Boolean { get { return true; } }
             public override string Inspect() {
                 return "true";
@@ -66,8 +77,8 @@ namespace Embers
             }
         }
         public class RubyFalse : RubyObject {
-            public override object Object { get { return true; } }
-            public override bool Boolean { get { return true; } }
+            public override object? Object { get { return false; } }
+            public override bool Boolean { get { return false; } }
             public override string Inspect() {
                 return "false";
             }
@@ -76,7 +87,7 @@ namespace Embers
         }
         public class RubyString : RubyObject {
             readonly string Value;
-            public override object Object { get { return Value; } }
+            public override object? Object { get { return Value; } }
             public override string String { get { return Value; } }
             public override string Inspect() {
                 return "\"" + Value + "\"";
@@ -84,12 +95,12 @@ namespace Embers
             public RubyString(string value) {
                 Value = value;
 
-                Add = new Method(async (Interpreter Interpreter, List<RubyObject?> Arguments) => {
-                    return new RubyString(Value + Arguments[0]!.String);
+                Add = new Method(async (Interpreter Interpreter, List<RubyObject> Arguments) => {
+                    return new RubyString(Value + Arguments[0].String);
                 }, 1);
-                Multiply = new Method(async (Interpreter Interpreter, List<RubyObject?> Arguments) => {
+                Multiply = new Method(async (Interpreter Interpreter, List<RubyObject> Arguments) => {
                     StringBuilder JoinedString = new();
-                    long DuplicateCount = Arguments[0]!.Integer;
+                    long DuplicateCount = Arguments[0].Integer;
                     for (long i = 0; i < DuplicateCount; i++) {
                         JoinedString.Append(Value);
                     }
@@ -99,7 +110,7 @@ namespace Embers
         }
         public class RubyInteger : RubyObject {
             readonly long Value;
-            public override object Object { get { return Value; } }
+            public override object? Object { get { return Value; } }
             public override long Integer { get { return Value; } }
             public override double Float { get { return Value; } }
             public override string Inspect() {
@@ -116,35 +127,35 @@ namespace Embers
                         return new RubyFloat(Result);
                     }
                 }
-                Add = new Method(async (Interpreter Interpreter, List<RubyObject?> Arguments) => {
-                    RubyObject Right = Arguments[0]!;
+                Add = new Method(async (Interpreter Interpreter, List<RubyObject> Arguments) => {
+                    RubyObject Right = Arguments[0];
                     return GetResult(Value + Right.Float, Right is RubyInteger);
                 }, 1);
-                Subtract = new Method(async (Interpreter Interpreter, List<RubyObject?> Arguments) => {
-                    RubyObject Right = Arguments[0]!;
+                Subtract = new Method(async (Interpreter Interpreter, List<RubyObject> Arguments) => {
+                    RubyObject Right = Arguments[0];
                     return GetResult(Value - Right.Float, Right is RubyInteger);
                 }, 1);
-                Multiply = new Method(async (Interpreter Interpreter, List<RubyObject?> Arguments) => {
-                    RubyObject Right = Arguments[0]!;
+                Multiply = new Method(async (Interpreter Interpreter, List<RubyObject> Arguments) => {
+                    RubyObject Right = Arguments[0];
                     return GetResult(Value * Right.Float, Right is RubyInteger);
                 }, 1);
-                Divide = new Method(async (Interpreter Interpreter, List<RubyObject?> Arguments) => {
-                    RubyObject Right = Arguments[0]!;
+                Divide = new Method(async (Interpreter Interpreter, List<RubyObject> Arguments) => {
+                    RubyObject Right = Arguments[0];
                     return GetResult(Value / Right.Float, Right is RubyInteger);
                 }, 1);
-                Modulo = new Method(async (Interpreter Interpreter, List<RubyObject?> Arguments) => {
-                    RubyObject Right = Arguments[0]!;
+                Modulo = new Method(async (Interpreter Interpreter, List<RubyObject> Arguments) => {
+                    RubyObject Right = Arguments[0];
                     return GetResult(Value % Right.Float, Right is RubyInteger);
                 }, 1);
-                Exponentiate = new Method(async (Interpreter Interpreter, List<RubyObject?> Arguments) => {
-                    RubyObject Right = Arguments[0]!;
+                Exponentiate = new Method(async (Interpreter Interpreter, List<RubyObject> Arguments) => {
+                    RubyObject Right = Arguments[0];
                     return GetResult(Math.Pow(Value, Right.Float), Right is RubyInteger);
                 }, 1);
             }
         }
         public class RubyFloat : RubyObject {
             readonly double Value;
-            public override object Object { get { return Value; } }
+            public override object? Object { get { return Value; } }
             public override double Float { get { return Value; } }
             public override long Integer { get { return (long)Value; } }
             public override string Inspect() {
@@ -153,35 +164,35 @@ namespace Embers
             public RubyFloat(double value) {
                 Value = value;
 
-                Add = new Method(async (Interpreter Interpreter, List<RubyObject?> Arguments) => {
-                    RubyObject Right = Arguments[0]!;
+                Add = new Method(async (Interpreter Interpreter, List<RubyObject> Arguments) => {
+                    RubyObject Right = Arguments[0];
                     return new RubyFloat(Value + Right.Float);
                 }, 1);
-                Subtract = new Method(async (Interpreter Interpreter, List<RubyObject?> Arguments) => {
-                    RubyObject Right = Arguments[0]!;
+                Subtract = new Method(async (Interpreter Interpreter, List<RubyObject> Arguments) => {
+                    RubyObject Right = Arguments[0];
                     return new RubyFloat(Value - Right.Float);
                 }, 1);
-                Multiply = new Method(async (Interpreter Interpreter, List<RubyObject?> Arguments) => {
-                    RubyObject Right = Arguments[0]!;
+                Multiply = new Method(async (Interpreter Interpreter, List<RubyObject> Arguments) => {
+                    RubyObject Right = Arguments[0];
                     return new RubyFloat(Value * Right.Float);
                 }, 1);
-                Divide = new Method(async (Interpreter Interpreter, List<RubyObject?> Arguments) => {
-                    RubyObject Right = Arguments[0]!;
+                Divide = new Method(async (Interpreter Interpreter, List<RubyObject> Arguments) => {
+                    RubyObject Right = Arguments[0];
                     return new RubyFloat(Value / Right.Float);
                 }, 1);
-                Modulo = new Method(async (Interpreter Interpreter, List<RubyObject?> Arguments) => {
-                    RubyObject Right = Arguments[0]!;
+                Modulo = new Method(async (Interpreter Interpreter, List<RubyObject> Arguments) => {
+                    RubyObject Right = Arguments[0];
                     return new RubyFloat(Value % Right.Float);
                 }, 1);
-                Exponentiate = new Method(async (Interpreter Interpreter, List<RubyObject?> Arguments) => {
-                    RubyObject Right = Arguments[0]!;
+                Exponentiate = new Method(async (Interpreter Interpreter, List<RubyObject> Arguments) => {
+                    RubyObject Right = Arguments[0];
                     return new RubyFloat(Math.Pow(Value, Right.Float));
                 }, 1);
             }
         }
         public class RubyMethod : RubyObject {
             readonly Method Value;
-            public override object Object { get { return Value; } }
+            public override object? Object { get { return Value; } }
             public override Method Method { get { return Value; } }
             public override string Inspect() {
                 return Value.ToString()!;
@@ -225,50 +236,58 @@ namespace Embers
             }
         }
         public class Scope : Block {
-            public readonly Dictionary<string, RubyObject?> LocalVariables = new();
+            public readonly Dictionary<string, RubyObject> LocalVariables = new();
             public Scope(Block? parent) : base(parent) { }
         }
         public class Class : Block {
             public readonly Dictionary<string, Method> Methods = new();
             public readonly Dictionary<string, Class> Classes = new();
-            public readonly Dictionary<string, RubyObject?> ClassVariables = new();
+            public readonly Dictionary<string, RubyObject> ClassVariables = new();
             public Class(Class? parent) : base(parent) { }
         }
         public class ClassInstance : Class {
-            public readonly Dictionary<string, RubyObject?> InstanceVariables = new();
+            public readonly Dictionary<string, RubyObject> InstanceVariables = new();
             public ClassInstance(ClassInstance? parent) : base(parent) { }
         }
         public class Method {
-            public Func<Interpreter, List<RubyObject?>, Task<RubyObject?>> Function;
+            public Func<Interpreter, List<RubyObject>, Task<RubyObject>> Function;
             public IntRange ArgumentCountRange;
-            public Method(Func<Interpreter, List<RubyObject?>, Task<RubyObject?>> function, IntRange? argumentCountRange) {
+            public Method(Func<Interpreter, List<RubyObject>, Task<RubyObject>> function, IntRange? argumentCountRange) {
                 Function = function;
                 ArgumentCountRange = argumentCountRange ?? new IntRange();
             }
-            public Method(Func<Interpreter, List<RubyObject?>, Task<RubyObject?>> function, Range argumentCountRange) {
+            public Method(Func<Interpreter, List<RubyObject>, Task<RubyObject>> function, Range argumentCountRange) {
                 Function = function;
                 ArgumentCountRange = new IntRange(
                     argumentCountRange.Start.Value >= 0 ? argumentCountRange.Start.Value : null,
                     argumentCountRange.End.Value >= 0 ? argumentCountRange.End.Value : null
                 );
             }
-            public Method(Func<Interpreter, List<RubyObject?>, Task<RubyObject?>> function, int argumentCount) {
+            public Method(Func<Interpreter, List<RubyObject>, Task<RubyObject>> function, int argumentCount) {
                 Function = function;
                 ArgumentCountRange = new IntRange(argumentCount, argumentCount);
             }
-            public async Task<RubyObject?> Call(Interpreter Interpreter, List<RubyObject?> Arguments) {
+            public async Task<RubyObject> Call(Interpreter Interpreter, List<RubyObject> Arguments) {
                 if (ArgumentCountRange.IsInRange(Arguments.Count)) {
-                    return await Function(Interpreter, Arguments);
+                    // Create temporary scope
+                    Scope PreviousScope = Interpreter.CurrentScope;
+                    Interpreter.CurrentScope = new Scope(PreviousScope);
+                    // Call method
+                    RubyObject ReturnValue = await Function(Interpreter, Arguments);
+                    // Step back a scope
+                    Interpreter.CurrentScope = PreviousScope;
+                    // Return method return value
+                    return ReturnValue;
                 }
                 else {
                     throw new ScriptErrorException($"Too many or too few arguments given for method (expected {ArgumentCountRange}, got {Arguments.Count})");
                 }
             }
-            public async Task<RubyObject?> Call(Interpreter Interpreter, RubyObject? Argument) {
-                return await Call(Interpreter, new List<RubyObject?>() {Argument});
+            public async Task<RubyObject> Call(Interpreter Interpreter, RubyObject Argument) {
+                return await Call(Interpreter, new List<RubyObject>() {Argument});
             }
-            public async Task<RubyObject?> Call(Interpreter Interpreter) {
-                return await Call(Interpreter, new List<RubyObject?>());
+            public async Task<RubyObject> Call(Interpreter Interpreter) {
+                return await Call(Interpreter, new List<RubyObject>());
             }
         }
         public class MethodScope : Scope {
@@ -317,18 +336,18 @@ namespace Embers
             }
         }
 
-        public async Task<RubyObject?> InterpretAsync(List<Statement> Statements) {
+        public async Task<RubyObject> InterpretAsync(List<Statement> Statements) {
             for (int Index = 0; Index < Statements.Count; Index++) {
                 Statement Statement = Statements[Index];
 
-                void AssignToVariable(VariableReference Variable, RubyObject? Value) {
+                void AssignToVariable(VariableReference Variable, RubyObject Value) {
                     switch (Variable.Token.Type) {
                         case Phase2TokenType.LocalVariableOrMethod:
                             CurrentScope.LocalVariables[Variable.Token.Value!] = Value;
                             break;
                         case Phase2TokenType.GlobalVariable:
                             GlobalVariables[Variable.Token.Value!] = Value;
-                            throw new NotImplementedException();
+                            break;
                         case Phase2TokenType.Constant:
                             throw new NotImplementedException();
                         case Phase2TokenType.InstanceVariable:
@@ -356,10 +375,89 @@ namespace Embers
                         return InterpretPath(ValueExpression.Path, CurrentBlock);
                     }
                     else {
-                        throw new ScriptErrorException($"Cannot interpret {Expression.GetType()} as a variable");
+                        throw new ScriptErrorException($"Cannot interpret {Expression.GetType().Name} {Expression.Inspect()} as a variable");
                     }
                 }
-                async Task<RubyObject?> InterpretExpression(Expression Expression, bool WantsVariable = false) {
+                async Task<RubyObject> UseVariable(VariableReference Identifier, ValueExpression DebugOrigin) {
+                    // Local variable or method
+                    if (Identifier.Token.Type == Phase2TokenType.LocalVariableOrMethod) {
+                        // Local variable (priority)
+                        if (Identifier.Block is Scope PathScope && PathScope.LocalVariables.TryGetValue(Identifier.Token.Value!, out RubyObject? Value)) {
+                            return Value;
+                        }
+                        // Method
+                        else if (Identifier.Block.FindAncestorWhichIsA<Class>()!.Methods.TryGetValue(Identifier.Token.Value!, out Method? Method)) {
+                            return await Method.Call(this);
+                        }
+                        // Undefined
+                        else {
+                            throw new ScriptErrorException($"Undefined local variable or method '{Identifier.Token.Value!}' for {DebugOrigin.Inspect()}");
+                        }
+                    }
+                    // Global variable
+                    else if (Identifier.Token.Type == Phase2TokenType.GlobalVariable) {
+                        if (GlobalVariables.TryGetValue(Identifier.Token.Value!, out RubyObject? Value)) {
+                            return Value;
+                        }
+                        else {
+                            return RubyObject.Nil;
+                        }
+                    }
+                    // Error
+                    else {
+                        throw new InternalErrorException($"Using variable type {Identifier.Token.Type.GetType().Name} not implemented");
+                    }
+                }
+                RubyObject GetDefinedResult(VariableReference Identifier) {
+                    // Local variable or method
+                    if (Identifier.Token.Type == Phase2TokenType.LocalVariableOrMethod) {
+                        // Local variable (priority)
+                        if (Identifier.Block is Scope PathScope && PathScope.LocalVariables.TryGetValue(Identifier.Token.Value!, out RubyObject? Value)) {
+                            return new RubyString("local-variable");
+                        }
+                        // Method
+                        else if (Identifier.Block.FindAncestorWhichIsA<Class>()!.Methods.TryGetValue(Identifier.Token.Value!, out Method? Method)) {
+                            return new RubyString("method");
+                        }
+                        // Undefined
+                        else {
+                            return RubyObject.Nil;
+                        }
+                    }
+                    // Global variable
+                    else if (Identifier.Token.Type == Phase2TokenType.GlobalVariable) {
+                        if (GlobalVariables.TryGetValue(Identifier.Token.Value!, out RubyObject? Value)) {
+                            return new RubyString("global-variable");
+                        }
+                        else {
+                            return RubyObject.Nil;
+                        }
+                    }
+                    // Constant
+                    else if (Identifier.Token.Type == Phase2TokenType.Constant) {
+                        // return "constant";
+                        return RubyObject.Nil;
+                    }
+                    // Instance variable
+                    else if (Identifier.Token.Type == Phase2TokenType.InstanceVariable) {
+                        // return "instance-variable";
+                        return RubyObject.Nil;
+                    }
+                    // Class variable
+                    else if (Identifier.Token.Type == Phase2TokenType.ClassVariable) {
+                        if (CurrentClass.ClassVariables.TryGetValue(Identifier.Token.Value!, out RubyObject? Value)) {
+                            return new RubyString("class-variable");
+                        }
+                        else {
+                            return RubyObject.Nil;
+                        }
+                    }
+                    // Other
+                    else {
+                        return new RubyString("expression");
+                    }
+                }
+                async Task<RubyObject> InterpretExpression(Expression Expression, bool WantsVariable = false) {
                     // Method call
                     if (Expression is MethodCallExpression MethodCallExpression) {
                         // Global method
@@ -377,23 +475,9 @@ namespace Embers
                     }
                     // Path
                     else if (Expression is ValueExpression ValueExpression) {
-                        // TODO: Process path not just final token
-
                         Phase2Object PathResult = InterpretPath(ValueExpression.Path, CurrentScope);
                         if (PathResult is VariableReference PathVariable) {
-                            if (PathVariable.Token.Type == Phase2TokenType.LocalVariableOrMethod) {
-                                // Local variable (priority)
-                                if (PathVariable.Block is Scope PathScope && PathScope.LocalVariables.TryGetValue(PathVariable.Token.Value!, out RubyObject? Value)) {
-                                    return Value;
-                                }
-                                // Method
-                                else if (PathVariable.Block.FindAncestorWhichIsA<Class>()!.Methods.TryGetValue(PathVariable.Token.Value!, out Method? Method)) {
-                                    return await Method.Call(this);
-                                }
-                                else {
-                                    throw new ScriptErrorException($"Undefined local variable or method '{PathVariable.Token.Value!}' for {ValueExpression.Inspect()}");
-                                }
-                            }
+                            return await UseVariable(PathVariable, ValueExpression);
                         }
                         else {
                             return RubyObject.CreateFromToken((Phase2Token)PathResult);
@@ -401,10 +485,11 @@ namespace Embers
                     }
                     // Arithmetic
                     else if (Expression is ArithmeticExpression ArithmeticExpression) {
-                        RubyObject? Left = await InterpretExpression(ArithmeticExpression.Left);
-                        RubyObject? Right = await InterpretExpression(ArithmeticExpression.Right);
-                        if (Left == null)
+                        RubyObject Left = await InterpretExpression(ArithmeticExpression.Left);
+                        RubyObject Right = await InterpretExpression(ArithmeticExpression.Right);
+                        if (Left == null) {
                             throw new ScriptErrorException($"Cannot call {ArithmeticExpression.Operator} on nil value");
+                        }
                         Method? Operation = ArithmeticExpression.Operator switch {
                             "+" => Left.Add,
                             "-" => Left.Subtract,
@@ -421,11 +506,26 @@ namespace Embers
                             throw new ScriptErrorException($"Undefined method '{ArithmeticExpression.Operator}' for {Left}");
                         }
                     }
+                    // Defined?
+                    else if (Expression is DefinedExpression DefinedExpression) {
+                        try {
+                            Phase2Object PathResult = InterpretExpressionAsPath(DefinedExpression.Expression, CurrentScope);
+                            if (PathResult is VariableReference PathVariable) {
+                                return GetDefinedResult(PathVariable);
+                            }
+                            else {
+                                return new RubyString("expression");
+                            }
+                        }
+                        catch (EmbersException) {
+                            return new RubyString("expression");
+                        }
+                    }
                     // Unknown
                     throw new InternalErrorException($"Not sure how to interpret expression {Expression.GetType().Name} ({Expression.Inspect()})");
                 }
-                async Task<List<RubyObject?>> InterpretExpressions(IEnumerable<Expression> Expressions) {
-                    List<RubyObject?> Results = new();
+                async Task<List<RubyObject>> InterpretExpressions(IEnumerable<Expression> Expressions) {
+                    List<RubyObject> Results = new();
                     foreach (Expression Expression in Expressions) {
                         Results.Add(await InterpretExpression(Expression));
                     }
@@ -436,7 +536,7 @@ namespace Embers
                     await InterpretExpression(ExpressionStatement.Expression);
                 }
                 else if (Statement is AssignmentStatement AssignmentStatement) {
-                    RubyObject? Right = await InterpretExpression(AssignmentStatement.Right);
+                    RubyObject Right = await InterpretExpression(AssignmentStatement.Right);
 
                     Phase2Object Left = InterpretExpressionAsPath(AssignmentStatement.Left, CurrentScope);
                     if (Left is VariableReference LeftVariable) {
@@ -475,18 +575,17 @@ namespace Embers
                     throw new InternalErrorException($"Not sure how to interpret statement {Statement.GetType().Name}");
                 }
             }
-
-            return null;
+            return RubyObject.Nil;
         }
-        public RubyObject? Interpret(List<Statement> Statements) {
+        public RubyObject Interpret(List<Statement> Statements) {
             return InterpretAsync(Statements).Result;
         }
-        public async Task<RubyObject?> EvaluateAsync(string Code) {
+        public async Task<RubyObject> EvaluateAsync(string Code) {
             List<Phase1.Phase1Token> Tokens = Phase1.GetPhase1Tokens(Code);
             List<Statement> Statements = GetStatements(Tokens);
             return await InterpretAsync(Statements);
         }
-        public RubyObject? Evaluate(string Code) {
+        public RubyObject Evaluate(string Code) {
             return EvaluateAsync(Code).Result;
         }
 

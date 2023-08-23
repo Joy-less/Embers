@@ -77,6 +77,11 @@ namespace Embers
             {"while", Phase2TokenType.While},
             {"yield", Phase2TokenType.Yield}
         };
+        public readonly static string[][] ArithmeticOperatorPrecedence = new[] {
+            new[] {"**"},
+            new[] {"*", "/", "%"},
+            new[] {"+", "-"}
+        };
 
         public class Phase2Token : Phase2Object {
             public readonly Phase2TokenType Type;
@@ -133,6 +138,15 @@ namespace Embers
                 return MethodName.Inspect() + "(" + InspectList(Arguments) + ")";
             }
         }
+        public class DefinedExpression : Expression {
+            public Expression Expression;
+            public DefinedExpression(Expression expression) {
+                Expression = expression;
+            }
+            public override string Inspect() {
+                return "defined? (" + Expression.Inspect() + ")";
+            }
+        }
 
         public abstract class Statement : Expression { }
         public class ExpressionStatement : Statement {
@@ -157,7 +171,7 @@ namespace Embers
                 return Left.Inspect() + " " + Operator + " " + Right.Inspect();
             }
         }
-        public class SetScopeStatement : Statement {
+        /*public class SetScopeStatement : Statement {
             public Scope Scope;
             public SetScopeStatement(Scope scope) {
                 Scope = scope;
@@ -165,7 +179,7 @@ namespace Embers
             public override string Inspect() {
                 return $"Set scope to {Scope}";
             }
-        }
+        }*/
         public class DefineMethodStatement : Statement {
             public ValueExpression MethodName;
             public Method Method;
@@ -352,153 +366,159 @@ namespace Embers
 
             return NewTokens2;
         }
-        static List<Expression> ObjectsToExpressions(List<Phase2Object> Phase2Objects) {
-            List<Phase2Object> ParsedObjects = new();
-
-            /*// Def
-            {
-                if (Phase2Objects[0] is Phase2Token Token) {
-                    if (Token.Type == Phase2TokenType.Def) {
-                        if (Phase2Objects.Count >= 2 && Phase2Objects[1] is ValueExpression MethodName) {
-
-                            List<Expression> Block = ObjectsToExpressions(Phase2Objects);
-
-                            // Build arguments and body
-                            return new DefineMethodStatement(MethodName, null);
-                        }
-                        else {
-                            throw new SyntaxErrorException("Def keyword must be followed by method name");
-                        }
-                    }
-                    else if (Token.Type == Phase2TokenType.End) {
-                        if (InBlock) {
-                            return 
-                        }
-                    }
+        static List<Phase2Object> GetTokensUntil(List<Phase2Object> Objects, ref int Index, Func<Phase2Object, bool> Condition) {
+            List<Phase2Object> Tokens = new();
+            while (Index < Objects.Count) {
+                Phase2Object Token = Objects[Index];
+                if (Condition(Token)) {
+                    break;
                 }
-            }*/
+                Tokens.Add(Token);
+                Index++;
+            }
+            return Tokens;
+        }
+        static List<Expression> BuildArguments(List<Phase2Object> Objects, ref int IndexBeforeArguments, bool WrappedInBrackets) {
+            List<Expression> Arguments = new();
 
-            // Brackets
-
-
-            // Method calls
-            for (int i = 0; i < Phase2Objects.Count; i++) {
-                Phase2Object UnknownToken = Phase2Objects[i];
-                Phase2Object? NextUnknownToken = i + 1 < Phase2Objects.Count ? Phase2Objects[i + 1] : null;
-
-                List<Expression> BuildArguments(bool WrappedInBrackets) {
-                    List<Expression> Arguments = new();
-
-                    bool AcceptArgument = true;
-                    while (i < Phase2Objects.Count) {
-                        void AddArgument() {
-                            List<Phase2Object> Argument = GetTokensUntil(obj => obj is Phase2Token tok && (tok.Type == Phase2TokenType.Comma || tok.Type == Phase2TokenType.CloseBracket));
-                            Arguments.Add(ObjectsToExpression(Argument));
-                            i--;
-                            AcceptArgument = false;
-                        }
-                        if (Phase2Objects[i] is Phase2Token Token) {
-                            if (Token.Type == Phase2TokenType.Comma) {
-                                if (AcceptArgument)
-                                    throw new SyntaxErrorException("Expected argument before ','");
-                                AcceptArgument = true;
-                            }
-                            else if (Token.Type == Phase2TokenType.CloseBracket) {
-                                if (WrappedInBrackets)
-                                    i++;
-                                break;
-                            }
-                            else {
-                                AddArgument();
-                            }
-                        }
-                        else {
-                            AddArgument();
-                        }
-                        i++;
-                    }
-                    return Arguments;
+            bool AcceptArgument = true;
+            while (IndexBeforeArguments < Objects.Count) {
+                int AddArgument(int Index) {
+                    List<Phase2Object> Argument = GetTokensUntil(Objects, ref Index, obj =>
+                        obj is Phase2Token tok && (tok.Type == Phase2TokenType.Comma || tok.Type == Phase2TokenType.CloseBracket));
+                    Arguments.Add(ObjectsToExpression(Argument));
+                    Index--;
+                    AcceptArgument = false;
+                    return Index;
                 }
-                List<Phase2Object> GetTokensUntil(Func<Phase2Object, bool> Condition) {
-                    List<Phase2Object> Tokens = new();
-                    while (i < Phase2Objects.Count) {
-                        Phase2Object Token = Phase2Objects[i];
-                        if (Condition(Token)) {
-                            break;
-                        }
-                        Tokens.Add(Token);
-                        i++;
+                if (Objects[IndexBeforeArguments] is Phase2Token Token) {
+                    if (Token.Type == Phase2TokenType.Comma) {
+                        if (AcceptArgument)
+                            throw new SyntaxErrorException("Expected argument before ','");
+                        AcceptArgument = true;
                     }
-                    return Tokens;
-                }
-
-                if (UnknownToken is ValueExpression Value && (Value.MainType == Phase2TokenType.LocalVariableOrMethod || Value.MainType == Phase2TokenType.Constant)) {
-                    void ParseArgumentsWithBrackets() {
-                        i += 2;
-                        List<Expression> Arguments = BuildArguments(true);
-                        ParsedObjects.Add(new MethodCallExpression(Value, Arguments));
-                    }
-                    void ParseArgumentsWithoutBrackets() {
-                        i++;
-                        List<Expression> Arguments = BuildArguments(false);
-                        ParsedObjects.Add(new MethodCallExpression(Value, Arguments));
-                    }
-                    if (NextUnknownToken is Phase2Token NextToken && NextToken.Type == Phase2TokenType.OpenBracket) {
-                        if (!NextToken.FollowsWhitespace) {
-                            ParseArgumentsWithBrackets();
-                        }
-                        else {
-                            ParseArgumentsWithoutBrackets();
-                        }
-                    }
-                    else if (NextUnknownToken is not Phase2Token && NextUnknownToken != null) {
-                        ParseArgumentsWithoutBrackets();
+                    else if (Token.Type == Phase2TokenType.CloseBracket) {
+                        if (WrappedInBrackets)
+                            IndexBeforeArguments++;
+                        break;
                     }
                     else {
-                        ParsedObjects.Add(Value);
+                        IndexBeforeArguments = AddArgument(IndexBeforeArguments);
                     }
                 }
                 else {
-                    ParsedObjects.Add(UnknownToken);
+                    IndexBeforeArguments = AddArgument(IndexBeforeArguments);
+                }
+                IndexBeforeArguments++;
+            }
+            return Arguments;
+        }
+        static List<Expression> ParseArgumentsWithBrackets(List<Phase2Object> Objects, ref int IndexBeforeArguments) {
+            IndexBeforeArguments += 2;
+            List<Expression> Arguments = BuildArguments(Objects, ref IndexBeforeArguments, true);
+            return Arguments;
+        }
+        static List<Expression> ParseArgumentsWithoutBrackets(List<Phase2Object> Objects, ref int IndexBeforeArguments) {
+            IndexBeforeArguments++;
+            List<Expression> Arguments = BuildArguments(Objects, ref IndexBeforeArguments, false);
+            return Arguments;
+        }
+        static List<Expression>? ParseArguments(List<Phase2Object> Objects, ref int IndexBeforeArguments) {
+            if (IndexBeforeArguments + 1 < Objects.Count) {
+                Phase2Object NextObject = Objects[IndexBeforeArguments + 1];
+                if (NextObject is Phase2Token NextToken && NextToken.Type == Phase2TokenType.OpenBracket) {
+                    if (!NextToken.FollowsWhitespace) {
+                        return ParseArgumentsWithBrackets(Objects, ref IndexBeforeArguments);
+                    }
+                    else {
+                        return ParseArgumentsWithoutBrackets(Objects, ref IndexBeforeArguments);
+                    }
+                }
+                else if (NextObject is not Phase2Token && NextObject != null) {
+                    return ParseArgumentsWithoutBrackets(Objects, ref IndexBeforeArguments);
                 }
             }
+            return null;
+        }
+        static List<Expression> ObjectsToExpressions(List<Phase2Object> Phase2Objects) {
+            List<Phase2Object> ParsedObjects = new(Phase2Objects);
+
+            // Brackets
+            
 
             // Arithmetic operators
-            for (int i = 0; i < ParsedObjects.Count; i++) {
-                Phase2Object UnknownToken = ParsedObjects[i];
-                Phase2Object? LastUnknownToken = i - 1 >= 0 ? ParsedObjects[i - 1] : null;
-                Phase2Object? NextUnknownToken = i + 1 < ParsedObjects.Count ? ParsedObjects[i + 1] : null;
+            foreach (string[] Operators in ArithmeticOperatorPrecedence) {
+                for (int i = 0; i < ParsedObjects.Count; i++) {
+                    Phase2Object UnknownToken = ParsedObjects[i];
+                    Phase2Object? LastUnknownToken = i - 1 >= 0 ? ParsedObjects[i - 1] : null;
+                    Phase2Object? NextUnknownToken = i + 1 < ParsedObjects.Count ? ParsedObjects[i + 1] : null;
 
-                if (UnknownToken is Phase2Token Token) {
-                    if (Token.Type == Phase2TokenType.ArithmeticOperator) {
-                        if (LastUnknownToken != null && NextUnknownToken != null && LastUnknownToken is Expression LastExpression && NextUnknownToken is Expression NextExpression) {
-                            i--;
-                            ParsedObjects.RemoveRange(i, 3);
-                            ParsedObjects.Insert(i, new ArithmeticExpression(LastExpression, Token.Value!, NextExpression));
-                        }
-                        else {
-                            throw new SyntaxErrorException("Arithmetic operator must be between two expressions");
+                    if (UnknownToken is Phase2Token Token) {
+                        if (Token.Type == Phase2TokenType.ArithmeticOperator && Operators.Contains(Token.Value!)) {
+                            if (LastUnknownToken != null && NextUnknownToken != null && LastUnknownToken is Expression LastExpression && NextUnknownToken is Expression NextExpression) {
+                                i--;
+                                ParsedObjects.RemoveRange(i, 3);
+                                ParsedObjects.Insert(i, new ArithmeticExpression(LastExpression, Token.Value!, NextExpression));
+                            }
+                            else {
+                                throw new SyntaxErrorException("Arithmetic operator must be between two expressions");
+                            }
                         }
                     }
                 }
             }
 
-            // Return expressions
+            // Defined?
+            for (int i = 0; i < ParsedObjects.Count; i++) {
+                Phase2Object UnknownToken = ParsedObjects[i];
+
+                if (UnknownToken is Phase2Token Token) {
+                    // defined?
+                    if (Token.Type == Phase2TokenType.Defined) {
+                        int EndOfArgumentsIndex = i;
+                        List<Expression>? Arguments = ParseArguments(ParsedObjects, ref EndOfArgumentsIndex);
+                        if (Arguments != null) {
+                            if (Arguments.Count != 1) {
+                                throw new Exception("might wanna evaluate this expr");
+                            }
+                            ParsedObjects.RemoveRange(i, EndOfArgumentsIndex - i);
+                            ParsedObjects.Insert(i, new DefinedExpression(Arguments[0]));
+                        }
+                        else {
+                            throw new SyntaxErrorException("Expected expression after defined?");
+                        }
+                    }
+                }
+            }
+
+            // Method calls
+            for (int i = 0; i < ParsedObjects.Count; i++) {
+                Phase2Object UnknownToken = ParsedObjects[i];
+
+                if (UnknownToken is ValueExpression Value && (Value.MainType == Phase2TokenType.LocalVariableOrMethod || Value.MainType == Phase2TokenType.Constant)) {
+                    int EndOfArgumentsIndex = i;
+                    List<Expression>? Arguments = ParseArguments(ParsedObjects, ref EndOfArgumentsIndex);
+                    if (Arguments != null) {
+                        ParsedObjects.RemoveRange(i, EndOfArgumentsIndex - i);
+                        ParsedObjects.Insert(i, new MethodCallExpression(Value, Arguments));
+                    }
+                }
+            }
+
+            // Convert objects to expressions
             List<Expression> Expressions = new();
             foreach (Phase2Object ParsedObject in ParsedObjects) {
-                if (ParsedObject is Expression ParsedExpression) {
+                if (ParsedObject is Expression ParsedExpression)
                     Expressions.Add(ParsedExpression);
-                }
-                else {
-                    throw new InternalErrorException($"Parsed object should be an expression (got {ParsedObject.GetType().Name}) {{{ParsedObject.Inspect()}}}");
-                }
+                else
+                    throw new InternalErrorException($"Parsed object should be an expression (got {ParsedObject.GetType().Name} ({ParsedObject.Inspect()}))");
             }
             return Expressions;
         }
         static Expression ObjectsToExpression(List<Phase2Object> Phase2Objects) {
             List<Expression> Expressions = ObjectsToExpressions(Phase2Objects);
             if (Expressions.Count != 1)
-                throw new InternalErrorException($"Parsed objects should result in a single object (got {Expressions.Count} objects {{{InspectList(Expressions)}}})");
+                throw new InternalErrorException($"Parsed objects should result in a single object (got {Expressions.Count} objects ({InspectList(Expressions)}))");
             return Expressions[0];
         }
         /*static Expression TokenListToExpression(List<Phase1Token> Tokens) {
@@ -560,73 +580,29 @@ namespace Embers
                     BlockStackStatements.Peek().Add(CurrentAssignment);
                 }
                 else {
-                    /*Expression exp = TokenListToExpression(Expressions[0]);
-
-
-                    Phase1Token FirstToken = Expressions[0][0];
-                    if (FirstToken.Type == Phase1TokenType.Identifier) {
-                        switch (FirstToken.Type) {
-                            case Keywords.
-                        }
-                    }*/
-
                     // Expression
                     if (Expressions.Count == 1) {
                         List<Phase2Object> Objects = Expressions[0];
-                        Console.WriteLine(InspectList(Objects));
 
-                        /*for (int i = 0; i < Objects.Count; i++) {
-                            Phase2Object Object = Objects[i];
-                            if (Object is Phase2Token Token) {
-                                if (Token.Type == Phase2TokenType.Def) {
-                                    if (i + 1 >= Objects.Count || Objects[i + 1] is not ValueExpression MethodName) {
-                                        throw new SyntaxErrorException("Def must be followed by a method name");
-                                    }
-
-                                    int StartIndex = i + 2;
-
-                                    int EndIndex = -1;
-                                    for (int i2 = StartIndex; i2 < Objects.Count; i2++) {
-                                        if (Objects[i2] is Phase2Token Token2) {
-                                            if (Token2.Type == Phase2TokenType.End) {
-                                                EndIndex = i2;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    if (EndIndex == -1) {
-                                        throw new SyntaxErrorException($"{Token.Type} has no matching end statement");
-                                    }
-                                    Console.WriteLine(InspectList(Objects.GetRange(StartIndex, EndIndex - StartIndex)));
-                                    List<Phase2Object> BlockObjects = Objects.GetRange(StartIndex, EndIndex - StartIndex);
-                                    if (EndIndex - StartIndex < Objects.Count) {
-                                        throw new SyntaxErrorException($"Expected end of statement after end keyword (got {InspectList(Objects.GetRange(EndIndex + 1, Objects.Count - EndIndex))})");
-                                    }
-                                    Objects.RemoveRange(i, EndIndex - StartIndex);
-
-                                    List<Statement> BlockStatements = GetStatements(BlockObjects);
-
-                                    Statements.Add(new DefineMethodStatement(MethodName, new Method(async (Interpreter Interpreter, List<RubyObject?> Arguments) => {
-                                        return await Interpreter.InterpretAsync(BlockStatements);
-                                    }, 0)));
-
-                                    continue;
-                                }
-                                else if (Token.Type == Phase2TokenType.End) {
-                                    throw new SyntaxErrorException("Unexpected end statement");
-                                }
+                        void ExpectEndOfStatement(int CurrentIndex) {
+                            if (CurrentIndex < Objects.Count - 1) {
+                                throw new SyntaxErrorException($"Expected end of statement, got {InspectList(Objects.GetRange(CurrentIndex, Objects.Count - CurrentIndex))}");
                             }
-                        }*/
+                        }
+
+                        // Keywords
                         int LastObjectIndexInStatement = -1;
                         if (Objects[0] is Phase2Token Token) {
+                            // def
                             if (Token.Type == Phase2TokenType.Def) {
                                 if (Objects.Count == 1 || Objects[1] is not ValueExpression MethodName) {
-                                    throw new SyntaxErrorException("Def keyword must be followed by an identifier.");
+                                    throw new SyntaxErrorException("Def keyword must be followed by an identifier");
                                 }
                                 BlockStackInfo.Push(new BuildingMethod(MethodName));
                                 BlockStackStatements.Push(new List<Statement>());
                                 LastObjectIndexInStatement = 1;
                             }
+                            // end
                             else if (Token.Type == Phase2TokenType.End) {
                                 if (BlockStackInfo.Count == 1) {
                                     throw new SyntaxErrorException("Unexpected end statement");
@@ -635,7 +611,7 @@ namespace Embers
                                 List<Statement> BlockStatements = BlockStackStatements.Pop();
                                 if (Block is BuildingMethod MethodBlock) {
                                     BlockStackInfo.Peek().Statements.Add(new DefineMethodStatement(MethodBlock.MethodName,
-                                        new Method(async (Interpreter Interpreter, List<RubyObject?> Arguments) => {
+                                        new Method(async (Interpreter Interpreter, List<RubyObject> Arguments) => {
                                             return await Interpreter.InterpretAsync(BlockStatements);
                                         }, 0
                                     )));
@@ -647,10 +623,9 @@ namespace Embers
                             }
                         }
                         if (LastObjectIndexInStatement != -1) {
-                            if (LastObjectIndexInStatement < Objects.Count - 1) {
-                                throw new SyntaxErrorException($"Expected end of statement, got {InspectList(Objects.GetRange(LastObjectIndexInStatement, Objects.Count - LastObjectIndexInStatement))}");
-                            }
+                            ExpectEndOfStatement(LastObjectIndexInStatement);
                         }
+                        // Expression
                         else {
                             BlockStackStatements.Peek().Add(new ExpressionStatement(ObjectsToExpression(Expressions[0])));
                         }

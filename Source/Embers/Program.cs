@@ -12,7 +12,11 @@ def b
 end
 
 b
-puts a
+
+p defined? 2 + 3
+p defined? ""hi""
+p defined? a
+p defined? b
 ";
             Benchmark(() => new Interpreter().Evaluate(Code));
 
