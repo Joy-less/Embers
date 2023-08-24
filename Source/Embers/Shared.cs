@@ -15,8 +15,8 @@ namespace Embers
     public class InternalErrorException : EmbersException {
         public InternalErrorException(string Message) : base(Message) { }
     }
-    public class ScriptErrorException : EmbersException {
-        public ScriptErrorException(string Message) : base(Message) { }
+    public class RuntimeException : EmbersException {
+        public RuntimeException(string Message) : base(Message) { }
     }
     public class ApiException : EmbersException {
         public ApiException(string Message) : base(Message) { }

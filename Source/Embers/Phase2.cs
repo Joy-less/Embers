@@ -98,7 +98,7 @@ namespace Embers
         }
 
         public abstract class Expression : Phase2Object { }
-        public class ValueExpression : Expression {
+        /*public class ValueExpression : Expression {
             public List<Phase2Token> Path;
             public ValueExpression(List<Phase2Token> path) {
                 Path = path;
@@ -112,6 +112,24 @@ namespace Embers
             }
             public override string Inspect() {
                 return InspectList(Path, ".");
+            }
+        }*/
+        public class ObjectTokenExpression : Expression {
+            public Phase2Token Token;
+            public ObjectTokenExpression(Phase2Token objectToken) {
+                Token = objectToken;
+            }
+            public override string Inspect() {
+                return Token.Inspect();
+            }
+        }
+        public class PathExpression : ObjectTokenExpression {
+            public Expression RootObject;
+            public PathExpression(Expression rootObject, Phase2Token objectToken) : base(objectToken) {
+                RootObject = rootObject;
+            }
+            public override string Inspect() {
+                return RootObject.Inspect() + "." + RootObject.Inspect();
             }
         }
         /*public class ArithmeticExpression : Expression {
@@ -128,14 +146,14 @@ namespace Embers
             }
         }*/
         public class MethodCallExpression : Expression {
-            public ValueExpression MethodName;
+            public Expression MethodPath;
             public List<Expression> Arguments;
-            public MethodCallExpression(ValueExpression methodName, List<Expression> arguments) {
-                MethodName = methodName;
+            public MethodCallExpression(Expression methodPath, List<Expression> arguments) {
+                MethodPath = methodPath;
                 Arguments = arguments;
             }
             public override string Inspect() {
-                return MethodName.Inspect() + "(" + InspectList(Arguments) + ")";
+                return $"{MethodPath.Inspect()}({InspectList(Arguments)})";
             }
         }
         public class DefinedExpression : Expression {
@@ -181,9 +199,9 @@ namespace Embers
             }
         }*/
         public class DefineMethodStatement : Statement {
-            public ValueExpression MethodName;
+            public Expression MethodName;
             public Method Method;
-            public DefineMethodStatement(ValueExpression methodName, Method method) {
+            public DefineMethodStatement(Expression methodName, Method method) {
                 MethodName = methodName;
                 Method = method;
             }
@@ -192,8 +210,8 @@ namespace Embers
             }
         }
         public class UndefineMethodStatement : Statement {
-            public ValueExpression MethodName;
-            public UndefineMethodStatement(ValueExpression methodName) {
+            public Expression MethodName;
+            public UndefineMethodStatement(Expression methodName) {
                 MethodName = methodName;
             }
             public override string Inspect() {
@@ -271,15 +289,14 @@ namespace Embers
             return SplitObjects;
         }
         public static bool IsObjectToken(Phase2TokenType? Type) {
-            return IsVariableToken(Type)
-                || Type == Phase2TokenType.Nil
+            return Type == Phase2TokenType.Nil
                 || Type == Phase2TokenType.True
                 || Type == Phase2TokenType.False
                 || Type == Phase2TokenType.String
                 || Type == Phase2TokenType.Integer
                 || Type == Phase2TokenType.Float;
         }
-        static bool IsObjectToken(Phase2Token? Token) {
+        public static bool IsObjectToken(Phase2Token? Token) {
             return Token != null && IsObjectToken(Token.Type);
         }
         public static bool IsVariableToken(Phase2TokenType? Type) {
@@ -299,18 +316,11 @@ namespace Embers
             return ListInspection;
         }
 
-        static List<Phase2Object> TokensToPhase2(List<Phase1Token> Tokens) {
+        static List<Phase2Token> TokensToPhase2(List<Phase1Token> Tokens) {
             // Phase 1 tokens to phase 2 tokens
             List<Phase2Token> NewTokens = new();
             for (int i = 0; i < Tokens.Count; i++) {
                 Phase1Token Token = Tokens[i];
-
-                /*Phase1Token? NextToken = i + 1 < Tokens.Count ? Tokens[i + 1] : null;
-                Phase1TokenType? NextTokenType = NextToken?.Type;
-
-                if (NextTokenType == Phase1TokenType.Comma) {
-
-                }*/
 
                 if (Token.Type == Phase1TokenType.Identifier) {
                     NewTokens.Add(IdentifierToPhase2(Token));
@@ -338,33 +348,7 @@ namespace Embers
                     });
                 }
             }
-
-            // Paths
-            List<Phase2Object> NewTokens2 = new();
-            for (int i = 0; i < NewTokens.Count; i++) {
-                Phase2Token Token = NewTokens[i];
-
-                if (IsObjectToken(Token)) {
-                    List<Phase2Token> Path = new() {Token};
-                    for (i++; i < NewTokens.Count; i++) {
-                        if (NewTokens[i].Type != Phase2TokenType.Dot) {
-                            i--;
-                            break;
-                        }
-                        i++;
-                        if (i >= NewTokens.Count || !IsObjectToken(NewTokens[i])) {
-                            throw new SyntaxErrorException("Expected value after .");
-                        }
-                        Path.Add(NewTokens[i]);
-                    }
-                    NewTokens2.Add(new ValueExpression(Path));
-                }
-                else {
-                    NewTokens2.Add(Token);
-                }
-            }
-
-            return NewTokens2;
+            return NewTokens;
         }
         static List<Phase2Object> GetTokensUntil(List<Phase2Object> Objects, ref int Index, Func<Phase2Object, bool> Condition) {
             List<Phase2Object> Tokens = new();
@@ -446,6 +430,35 @@ namespace Embers
             // Brackets
             
 
+            // Paths
+            for (int i = 0; i < ParsedObjects.Count; i++) {
+                Phase2Object? LastObject = i - 1 >= 0 ? ParsedObjects[i - 1] : null;
+                Phase2Object Object = ParsedObjects[i];
+                Phase2Object? NextObject = i + 1 < ParsedObjects.Count ? ParsedObjects[i + 1] : null;
+
+                if (Object is Phase2Token Token) {
+                    if (Token.Type == Phase2TokenType.Dot) {
+                        if (LastObject != null) {
+                            if (LastObject is Expression LastExpression && NextObject is Phase2Token NextToken) {
+                                ParsedObjects.RemoveRange(i - 1, 3);
+                                ParsedObjects.Insert(i - 1, new PathExpression(LastExpression, NextToken));
+                                i -= 2;
+                            }
+                            else {
+                                throw new SyntaxErrorException("Expected expression before and after .");
+                            }
+                        }
+                        else {
+                            throw new SyntaxErrorException("Expected a value before .");
+                        }
+                    }
+                    else {
+                        ParsedObjects.RemoveAt(i);
+                        ParsedObjects.Insert(i, new ObjectTokenExpression(Token));
+                    }
+                }
+            }
+
             // Arithmetic operators
             foreach (string[] Operators in ArithmeticOperatorPrecedence) {
                 for (int i = 0; i < ParsedObjects.Count; i++) {
@@ -458,11 +471,13 @@ namespace Embers
                             if (LastUnknownToken != null && NextUnknownToken != null && LastUnknownToken is Expression LastExpression && NextUnknownToken is Expression NextExpression) {
                                 i--;
                                 ParsedObjects.RemoveRange(i, 3);
-                                ParsedObjects.Insert(i, new MethodCallExpression(LastExpression."+", NextExpression));
-                                // ParsedObjects.Insert(i, new MethodCallExpression(LastExpression, Token.Value!, NextExpression));
+                                ParsedObjects.Insert(i, new MethodCallExpression(
+                                    new PathExpression(LastExpression, new Phase2Token(Phase2TokenType.LocalVariableOrMethod, "+")),
+                                    new List<Expression>() {NextExpression})
+                                );
                             }
                             else {
-                                throw new SyntaxErrorException("Arithmetic operator must be between two expressions");
+                                throw new SyntaxErrorException($"Arithmetic operator must be between two expressions (got {LastUnknownToken?.Inspect()} and {NextUnknownToken?.Inspect()})");
                             }
                         }
                     }
@@ -496,12 +511,12 @@ namespace Embers
             for (int i = 0; i < ParsedObjects.Count; i++) {
                 Phase2Object UnknownToken = ParsedObjects[i];
 
-                if (UnknownToken is ValueExpression Value && (Value.MainType == Phase2TokenType.LocalVariableOrMethod || Value.MainType == Phase2TokenType.Constant)) {
+                if (UnknownToken is ObjectTokenExpression ObjectToken && (ObjectToken.Token.Type == Phase2TokenType.LocalVariableOrMethod || ObjectToken.Token.Type == Phase2TokenType.Constant)) {
                     int EndOfArgumentsIndex = i;
                     List<Expression>? Arguments = ParseArguments(ParsedObjects, ref EndOfArgumentsIndex);
                     if (Arguments != null) {
                         ParsedObjects.RemoveRange(i, EndOfArgumentsIndex - i);
-                        ParsedObjects.Insert(i, new MethodCallExpression(Value, Arguments));
+                        ParsedObjects.Insert(i, new MethodCallExpression(ObjectToken, Arguments));
                     }
                 }
             }
@@ -532,13 +547,13 @@ namespace Embers
             public List<Statement> Statements = new();
         }
         class BuildingMethod : BuildingBlock {
-            public readonly ValueExpression MethodName;
-            public BuildingMethod(ValueExpression methodName) {
+            public readonly Expression MethodName;
+            public BuildingMethod(Expression methodName) {
                 MethodName = methodName;
             }
         }
-        public static List<Statement> GetStatements(List<Phase2Object> Phase2Objects) {
-            // List<Statement> Statements = new();
+        public static List<Statement> GetStatements(List<Phase2Token> Phase2Tokens) {
+            List<Phase2Object> Phase2Objects = new(Phase2Tokens);
 
             // Get statements tokens
             List<List<Phase2Object>> StatementsTokens = SplitObjects(Phase2Objects, Phase2TokenType.EndOfStatement, out _, true);
@@ -591,14 +606,15 @@ namespace Embers
                             }
                         }
 
-                        // Keywords
+                        /*// Keywords
                         int LastObjectIndexInStatement = -1;
                         if (Objects[0] is Phase2Token Token) {
                             // def
                             if (Token.Type == Phase2TokenType.Def) {
-                                if (Objects.Count == 1 || Objects[1] is not ValueExpression MethodName) {
-                                    throw new SyntaxErrorException("Def keyword must be followed by an identifier");
-                                }
+                                if (Objects.Count == 1)
+                                    throw new SyntaxErrorException("Def keyword must be followed by an identifier (got nothing)");
+                                if (Objects[1] is not Phase2Token MethodName)
+                                    throw new SyntaxErrorException($"Def keyword must be followed by an identifier (got {Objects[1].Inspect()})");
                                 BlockStackInfo.Push(new BuildingMethod(MethodName));
                                 BlockStackStatements.Push(new List<Statement>());
                                 LastObjectIndexInStatement = 1;
@@ -627,9 +643,9 @@ namespace Embers
                             ExpectEndOfStatement(LastObjectIndexInStatement);
                         }
                         // Expression
-                        else {
+                        else {*/
                             BlockStackStatements.Peek().Add(new ExpressionStatement(ObjectsToExpression(Expressions[0])));
-                        }
+                        // }
                     }
                     // Empty
                     else if (Expressions.Count == 0) {
@@ -652,8 +668,8 @@ namespace Embers
             return BlockStackInfo.Pop().Statements;
         }
         public static List<Statement> GetStatements(List<Phase1Token> Phase1Tokens) {
-            List<Phase2Object> Phase2Objects = TokensToPhase2(Phase1Tokens);
-            return GetStatements(Phase2Objects);
+            List<Phase2Token> Phase2Tokens = TokensToPhase2(Phase1Tokens);
+            return GetStatements(Phase2Tokens);
         }
     }
 }
