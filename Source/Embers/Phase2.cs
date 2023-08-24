@@ -306,6 +306,9 @@ namespace Embers
                 || Type == Phase2TokenType.InstanceVariable
                 || Type == Phase2TokenType.ClassVariable;
         }
+        public static bool IsVariableToken(Phase2Token? Token) {
+            return Token != null && IsVariableToken(Token.Type);
+        }
         static string InspectList<T>(List<T> List, string Separator = ", ") where T : Phase2Object {
             string ListInspection = "";
             foreach (Phase2Object Object in List) {
@@ -425,7 +428,7 @@ namespace Embers
             return null;
         }
         static List<Expression> ObjectsToExpressions(List<Phase2Object> Phase2Objects) {
-            List<Phase2Object> ParsedObjects = new(Phase2Objects);
+            List<Phase2Object> ParsedObjects = new(Phase2Objects); // Preserve the original list
 
             // Brackets
             
@@ -452,7 +455,7 @@ namespace Embers
                             throw new SyntaxErrorException("Expected a value before .");
                         }
                     }
-                    else {
+                    else if (IsVariableToken(Token) || IsObjectToken(Token)) {
                         ParsedObjects.RemoveAt(i);
                         ParsedObjects.Insert(i, new ObjectTokenExpression(Token));
                     }
@@ -527,7 +530,7 @@ namespace Embers
                 if (ParsedObject is Expression ParsedExpression)
                     Expressions.Add(ParsedExpression);
                 else
-                    throw new InternalErrorException($"Parsed object should be an expression (got {ParsedObject.GetType().Name} ({ParsedObject.Inspect()}))");
+                    throw new InternalErrorException($"Parsed object should be an expression (got {ParsedObject.GetType().Name} {ParsedObject.Inspect()})");
             }
             return Expressions;
         }
@@ -628,7 +631,7 @@ namespace Embers
                                 List<Statement> BlockStatements = BlockStackStatements.Pop();
                                 if (Block is BuildingMethod MethodBlock) {
                                     BlockStackInfo.Peek().Statements.Add(new DefineMethodStatement(MethodBlock.MethodName,
-                                        new Method(async (Interpreter Interpreter, InstanceOrBlock InstanceOrBlock, List<Instance> Arguments) => {
+                                        new Method(async (Interpreter Interpreter, Instance Instance, List<Instance> Arguments) => {
                                             return await Interpreter.InterpretAsync(BlockStatements);
                                         }, 0
                                     )));

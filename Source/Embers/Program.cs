@@ -6,7 +6,10 @@ namespace Embers
     {
         static void Main() {
             string Code = @"
-p defined? 2 + 3
+def a
+    puts ""hi""
+end
+a
 ";
             Benchmark(() => new Interpreter().Evaluate(Code));
 

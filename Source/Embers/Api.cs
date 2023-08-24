@@ -21,25 +21,25 @@ namespace Embers
             return Methods;
         }
 
-        async Task<InstanceOrBlock> Puts(Interpreter Interpreter, InstanceOrBlock InstanceOrBlock, List<Instance> Messages) {
+        async Task<Instance> Puts(Interpreter Interpreter, Instance Instance, List<Instance> Messages) {
             foreach (Instance Message in Messages) {
                 Console.WriteLine(Message.Object);
             }
             return Interpreter.Nil;
         }
-        async Task<InstanceOrBlock> Print(Interpreter Interpreter, InstanceOrBlock InstanceOrBlock, List<Instance> Messages) {
+        async Task<Instance> Print(Interpreter Interpreter, Instance Instance, List<Instance> Messages) {
             foreach (Instance Message in Messages) {
                 Console.Write(Message.Object);
             }
             return Interpreter.Nil;
         }
-        async Task<InstanceOrBlock> P(Interpreter Interpreter, InstanceOrBlock InstanceOrBlock, List<Instance> Messages) {
+        async Task<Instance> P(Interpreter Interpreter, Instance Instance, List<Instance> Messages) {
             foreach (Instance Message in Messages) {
                 Console.WriteLine(Message.Inspect());
             }
             return Interpreter.Nil;
         }
-        async Task<InstanceOrBlock> Sleep(Interpreter Interpreter, InstanceOrBlock InstanceOrBlock, List<Instance> Time) {
+        async Task<Instance> Sleep(Interpreter Interpreter, Instance Instance, List<Instance> Time) {
             if (Time.Count == 1) {
                 await Task.Delay(1);
             }

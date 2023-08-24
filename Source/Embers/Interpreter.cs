@@ -27,8 +27,8 @@ namespace Embers
         public readonly Instance True;
         public readonly Instance False;
 
-        public abstract class InstanceOrBlock { }
-        public class Block : InstanceOrBlock {
+        // public abstract class Instance { }
+        public class Block {
             public readonly Block? Parent;
             public Block(Block? parent) {
                 Parent = parent;
@@ -67,7 +67,7 @@ namespace Embers
                 }
             }
         }
-        public class Instance : InstanceOrBlock {
+        public class Instance {
             /*public bool IsA<T>() {
                 return GetType() == typeof(T);
             }*/
@@ -99,7 +99,7 @@ namespace Embers
             }
             public static async Task<Instance> New(Interpreter Interpreter, Class fromClass, params Instance[] Arguments) {
                 Instance NewInstance = new(fromClass);
-                InstanceOrBlock ConstructorReturn = await NewInstance.Class.Constructor.Call(Interpreter, NewInstance, Arguments.ToList());
+                Instance ConstructorReturn = await NewInstance.Class.Constructor.Call(Interpreter, NewInstance, Arguments.ToList());
                 if (ConstructorReturn is Instance Instance) {
                     return Instance;
                 }
@@ -172,8 +172,24 @@ namespace Embers
                 Value = value;
             }
         }
+        public class VariableReference : Instance {
+            public override Dictionary<string, Instance> InstanceVariables { get { throw new ApiException($"{nameof(VariableReference)} instance does not have instance variables"); } }
+            public Block Block;
+            public Phase2Token Token;
+            public VariableReference(Block block, Phase2Token token) : base(null) {
+                Block = block;
+                Token = token;
+            }
+        }
+        public class ScopeReference : Instance {
+            public override Dictionary<string, Instance> InstanceVariables { get { throw new ApiException($"{nameof(ScopeReference)} instance does not have instance variables"); } }
+            public Scope Scope;
+            public ScopeReference(Scope scope) : base(null) {
+                Scope = scope;
+            }
+        }
         public class ClassReference : Instance {
-            public override Dictionary<string, Instance> InstanceVariables { get { throw new ApiException("Class Reference instance does not have instance variables"); } }
+            public override Dictionary<string, Instance> InstanceVariables { get { throw new ApiException($"{nameof(ClassReference)} instance does not have instance variables"); } }
             public ClassReference(Class _class) : base(_class) { }
         }
         /*public class RubyInteger : Instance {
@@ -346,30 +362,30 @@ namespace Embers
         }*/
         
         public class Method {
-            public Func<Interpreter, InstanceOrBlock, List<Instance>, Task<InstanceOrBlock>> Function;
+            Func<Interpreter, Instance, List<Instance>, Task<Instance>> Function;
             public IntRange ArgumentCountRange;
-            public Method(Func<Interpreter, InstanceOrBlock, List<Instance>, Task<InstanceOrBlock>> function, IntRange? argumentCountRange) {
+            public Method(Func<Interpreter, Instance, List<Instance>, Task<Instance>> function, IntRange? argumentCountRange) {
                 Function = function;
                 ArgumentCountRange = argumentCountRange ?? new IntRange();
             }
-            public Method(Func<Interpreter, InstanceOrBlock, List<Instance>, Task<InstanceOrBlock>> function, Range argumentCountRange) {
+            public Method(Func<Interpreter, Instance, List<Instance>, Task<Instance>> function, Range argumentCountRange) {
                 Function = function;
                 ArgumentCountRange = new IntRange(
                     argumentCountRange.Start.Value >= 0 ? argumentCountRange.Start.Value : null,
                     argumentCountRange.End.Value >= 0 ? argumentCountRange.End.Value : null
                 );
             }
-            public Method(Func<Interpreter, InstanceOrBlock, List<Instance>, Task<InstanceOrBlock>> function, int argumentCount) {
+            public Method(Func<Interpreter, Instance, List<Instance>, Task<Instance>> function, int argumentCount) {
                 Function = function;
                 ArgumentCountRange = new IntRange(argumentCount, argumentCount);
             }
-            public async Task<InstanceOrBlock> Call(Interpreter Interpreter, InstanceOrBlock InstanceOrBlock, List<Instance> Arguments) {
+            public async Task<Instance> Call(Interpreter Interpreter, Instance Instance, List<Instance> Arguments) {
                 if (ArgumentCountRange.IsInRange(Arguments.Count)) {
                     // Create temporary scope
                     Scope PreviousScope = Interpreter.CurrentScope;
                     Interpreter.CurrentScope = new Scope(PreviousScope);
                     // Call method
-                    InstanceOrBlock ReturnValue = await Function(Interpreter, InstanceOrBlock, Arguments);
+                    Instance ReturnValue = await Function(Interpreter, Instance, Arguments);
                     // Step back a scope
                     Interpreter.CurrentScope = PreviousScope;
                     // Return method return value
@@ -379,11 +395,14 @@ namespace Embers
                     throw new RuntimeException($"Too many or too few arguments given for method (expected {ArgumentCountRange}, got {Arguments.Count})");
                 }
             }
-            public async Task<InstanceOrBlock> Call(Interpreter Interpreter, InstanceOrBlock InstanceOrBlock, Instance Argument) {
-                return await Call(Interpreter, InstanceOrBlock, new List<Instance>() {Argument});
+            public async Task<Instance> Call(Interpreter Interpreter, Instance Instance, Instance Argument) {
+                return await Call(Interpreter, Instance, new List<Instance>() {Argument});
             }
-            public async Task<InstanceOrBlock> Call(Interpreter Interpreter, InstanceOrBlock InstanceOrBlock) {
-                return await Call(Interpreter, InstanceOrBlock, new List<Instance>());
+            public async Task<Instance> Call(Interpreter Interpreter, Instance Instance) {
+                return await Call(Interpreter, Instance, new List<Instance>());
+            }
+            public void ChangeFunction(Func<Interpreter, Instance, List<Instance>, Task<Instance>> function) {
+                Function = function;
             }
         }
         public class MethodScope : Scope {
@@ -420,19 +439,8 @@ namespace Embers
                 }
             }
         }
-        public class VariableReference : InstanceOrBlock {
-            public Block Block;
-            public Phase2Token Token;
-            public VariableReference(Block block, Phase2Token token) {
-                Block = block;
-                Token = token;
-            }
-            /*public override string Inspect() {
-                return $"{Block}::{Token.Inspect()}";
-            }*/
-        }
 
-        public async Task<InstanceOrBlock> InterpretAsync(List<Statement> Statements) {
+        public async Task<Instance> InterpretAsync(List<Statement> Statements) {
             for (int Index = 0; Index < Statements.Count; Index++) {
                 Statement Statement = Statements[Index];
 
@@ -553,7 +561,7 @@ namespace Embers
                         return new StringInstance(String, "expression");
                     }
                 }*/
-                async Task<InstanceOrBlock> InterpretExpressionAsync(Expression Expression, bool ReturnVariableReference = false) {
+                async Task<Instance> InterpretExpressionAsync(Expression Expression, bool ReturnVariableReference = false) {
                     // Method call
                     if (Expression is MethodCallExpression MethodCallExpression) {
                         /*// Global method
@@ -568,7 +576,14 @@ namespace Embers
                                 }
                             }
                         }*/
-
+                        Instance MethodPath = await InterpretExpressionAsync(MethodCallExpression.MethodPath, true);
+                        if (MethodPath is VariableReference MethodReference) {
+                            Class MethodClass = MethodReference.Block as Class ?? CurrentClass;
+                            return await MethodClass.Methods[MethodReference.Token.Value!].Call(this, MethodPath, await InterpretExpressionsAsync(MethodCallExpression.Arguments));
+                        }
+                        else {
+                            throw new InternalErrorException($"MethodPath should be VariableReference, not {MethodPath.GetType().Name}");
+                        }
                     }
                     // Object Token / Path
                     else if (Expression is ObjectTokenExpression ObjectTokenExpression) {
@@ -581,7 +596,7 @@ namespace Embers
                         }*/
                         // Path
                         if (ObjectTokenExpression is PathExpression PathExpression) {
-                            InstanceOrBlock RootObject = await InterpretExpressionAsync(PathExpression.RootObject);
+                            Instance RootObject = await InterpretExpressionAsync(PathExpression.RootObject);
                             if (RootObject is Instance RootInstance) {
                                 if (ObjectTokenExpression.Token.Type == Phase2TokenType.LocalVariableOrMethod || ObjectTokenExpression.Token.Type == Phase2TokenType.Constant) {
                                     if (RootInstance.Class.Methods.TryGetValue(ObjectTokenExpression.Token.Value!, out Method? FindMethod)) {
@@ -591,6 +606,9 @@ namespace Embers
                                         else {
                                             return new VariableReference(RootInstance.Class, ObjectTokenExpression.Token);
                                         }
+                                    }
+                                    else if (RootInstance.Class.Classes.TryGetValue(ObjectTokenExpression.Token.Value!, out Class? FindClass)) {
+                                        return new ClassReference(FindClass);
                                     }
                                     else {
                                         throw new RuntimeException($"Undefined method '{ObjectTokenExpression.Token.Value!}' for {RootInstance.Class}");
@@ -620,7 +638,7 @@ namespace Embers
                                         }
                                         // Method
                                         else if (CurrentScope.FindAncestorWhichIsA<Class>()!.Methods.TryGetValue(ObjectTokenExpression.Token.Value!, out Method? Method)) {
-                                            return await Method.Call(this, CurrentScope);
+                                            return await Method.Call(this, new ScopeReference(CurrentScope));
                                         }
                                         // Undefined
                                         else {
@@ -694,7 +712,7 @@ namespace Embers
                                     return new StringInstance(String, "local-variable");
                                 }
                                 else if (CurrentClass.Methods.ContainsKey(ObjectToken.Token.Value!)) {
-                                    return new StringInstance(String, "class-variable");
+                                    return new StringInstance(String, "method");
                                 }
                                 else {
                                     return Nil;
@@ -715,10 +733,15 @@ namespace Embers
                                 throw new NotImplementedException("Defined? not yet implemented for instance variables");
                             }
                             else if (ObjectToken.Token.Type == Phase2TokenType.ClassVariable) {
-                                throw new NotImplementedException("Defined? not yet implemented for class variables");
+                                if (CurrentClass.ClassVariables.ContainsKey(ObjectToken.Token.Value!)) {
+                                    return new StringInstance(String, "class-variable");
+                                }
+                                else {
+                                    return Nil;
+                                }
                             }
                             else {
-                                throw new InternalErrorException($"Not sure how to run defined? for {ObjectToken.Token.Type}");
+                                return new StringInstance(String, "expression");
                             }
                         }
                         else {
@@ -728,8 +751,8 @@ namespace Embers
                     // Unknown
                     throw new InternalErrorException($"Not sure how to interpret expression {Expression.GetType().Name} ({Expression.Inspect()})");
                 }
-                async Task<List<InstanceOrBlock>> InterpretExpressionsAsync(IEnumerable<Expression> Expressions) {
-                    List<InstanceOrBlock> Results = new();
+                async Task<List<Instance>> InterpretExpressionsAsync(List<Expression> Expressions) {
+                    List<Instance> Results = new();
                     foreach (Expression Expression in Expressions) {
                         Results.Add(await InterpretExpressionAsync(Expression));
                     }
@@ -740,15 +763,15 @@ namespace Embers
                     await InterpretExpressionAsync(ExpressionStatement.Expression);
                 }
                 else if (Statement is AssignmentStatement AssignmentStatement) {
-                    InstanceOrBlock Right = await InterpretExpressionAsync(AssignmentStatement.Right);
+                    Instance Right = await InterpretExpressionAsync(AssignmentStatement.Right);
 
-                    InstanceOrBlock Left = await InterpretExpressionAsync(AssignmentStatement.Left, true);
+                    Instance Left = await InterpretExpressionAsync(AssignmentStatement.Left, true);
                     if (Left is VariableReference LeftVariable) {
                         if (Right is Instance RightInstance) {
                             AssignToVariable(LeftVariable, RightInstance);
                         }
                         else {
-                            throw new InternalErrorException($"Assignment value was not an instance, but a {Right.GetType().Name}");
+                            throw new InternalErrorException($"Assignment value should be an instance, but got {Right.GetType().Name}");
                         }
                     }
                     else {
@@ -756,24 +779,14 @@ namespace Embers
                     }
                 }
                 else if (Statement is DefineMethodStatement DefineMethodStatement) {
-                    InstanceOrBlock MethodNameObject = await InterpretExpressionAsync(DefineMethodStatement.MethodName, true);
+                    Instance MethodNameObject = await InterpretExpressionAsync(DefineMethodStatement.MethodName, true);
                     if (MethodNameObject is VariableReference MethodName) {
-                        if (MethodName.Block == CurrentClass) {
-                            CurrentClass.Methods.Add(MethodName.Token.Value!, DefineMethodStatement.Method);
+                        if (MethodName.Block is Class MethodClass) {
+                            MethodClass.Methods.Add(MethodName.Token.Value!, DefineMethodStatement.Method);
                         }
                         else {
-                            throw new SyntaxErrorException("Method name paths not yet supported");
+                            throw new InternalErrorException($"Expected class from VariableReference.Block, got {MethodName.Block.GetType().Name}");
                         }
-
-                        /*Class? MethodNameClass = MethodName.Block.FindAncestorWhichIsA<Class>();
-
-                        if (MethodNameClass != null) {
-                            MethodNameClass.Methods.Add(MethodName.Token.Value!, DefineMethodStatement.Method);
-                        }
-                        else {
-                            RootClass.Methods.Add(MethodName.Token.Value!, DefineMethodStatement.Method);
-                        }*/
-
                     }
                     else {
                         throw new InternalErrorException($"Invalid method name: {MethodNameObject}");
@@ -785,15 +798,15 @@ namespace Embers
             }
             return Nil;
         }
-        public InstanceOrBlock Interpret(List<Statement> Statements) {
+        public Instance Interpret(List<Statement> Statements) {
             return InterpretAsync(Statements).Result;
         }
-        public async Task<InstanceOrBlock> EvaluateAsync(string Code) {
+        public async Task<Instance> EvaluateAsync(string Code) {
             List<Phase1.Phase1Token> Tokens = Phase1.GetPhase1Tokens(Code);
             List<Statement> Statements = GetStatements(Tokens);
             return await InterpretAsync(Statements);
         }
-        public InstanceOrBlock Evaluate(string Code) {
+        public Instance Evaluate(string Code) {
             return EvaluateAsync(Code).Result;
         }
 
