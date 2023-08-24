@@ -21,32 +21,32 @@ namespace Embers
             return Methods;
         }
 
-        async Task<RubyObject> Puts(Interpreter Interpreter, List<RubyObject> Messages) {
-            foreach (RubyObject Message in Messages) {
+        async Task<Instance> Puts(Interpreter Interpreter, InstanceOrBlock InstanceOrBlock, List<Instance> Messages) {
+            foreach (Instance Message in Messages) {
                 Console.WriteLine(Message.Object);
             }
-            return RubyObject.Nil;
+            return Interpreter.Nil;
         }
-        async Task<RubyObject> Print(Interpreter Interpreter, List<RubyObject> Messages) {
-            foreach (RubyObject Message in Messages) {
+        async Task<Instance> Print(Interpreter Interpreter, InstanceOrBlock InstanceOrBlock, List<Instance> Messages) {
+            foreach (Instance Message in Messages) {
                 Console.Write(Message.Object);
             }
-            return RubyObject.Nil;
+            return Interpreter.Nil;
         }
-        async Task<RubyObject> P(Interpreter Interpreter, List<RubyObject> Messages) {
-            foreach (RubyObject Message in Messages) {
+        async Task<Instance> P(Interpreter Interpreter, InstanceOrBlock InstanceOrBlock, List<Instance> Messages) {
+            foreach (Instance Message in Messages) {
                 Console.WriteLine(Message.Inspect());
             }
-            return RubyObject.Nil;
+            return Interpreter.Nil;
         }
-        async Task<RubyObject> Sleep(Interpreter Interpreter, List<RubyObject> Time) {
+        async Task<Instance> Sleep(Interpreter Interpreter, InstanceOrBlock InstanceOrBlock, List<Instance> Time) {
             if (Time.Count == 1) {
                 await Task.Delay(1);
             }
             else {
                 await Task.Delay(Timeout.Infinite);
             }
-            return RubyObject.Nil;
+            return Interpreter.Nil;
         }
     }
 }

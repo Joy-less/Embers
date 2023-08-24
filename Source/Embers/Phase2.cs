@@ -114,7 +114,7 @@ namespace Embers
                 return InspectList(Path, ".");
             }
         }
-        public class ArithmeticExpression : Expression {
+        /*public class ArithmeticExpression : Expression {
             public Expression Left;
             public string Operator;
             public Expression Right;
@@ -126,7 +126,7 @@ namespace Embers
             public override string Inspect() {
                 return "(" + Left.Inspect() + " " + Operator + " " + Right.Inspect() + ")";
             }
-        }
+        }*/
         public class MethodCallExpression : Expression {
             public ValueExpression MethodName;
             public List<Expression> Arguments;
@@ -458,7 +458,8 @@ namespace Embers
                             if (LastUnknownToken != null && NextUnknownToken != null && LastUnknownToken is Expression LastExpression && NextUnknownToken is Expression NextExpression) {
                                 i--;
                                 ParsedObjects.RemoveRange(i, 3);
-                                ParsedObjects.Insert(i, new ArithmeticExpression(LastExpression, Token.Value!, NextExpression));
+                                ParsedObjects.Insert(i, new MethodCallExpression(LastExpression."+", NextExpression));
+                                // ParsedObjects.Insert(i, new MethodCallExpression(LastExpression, Token.Value!, NextExpression));
                             }
                             else {
                                 throw new SyntaxErrorException("Arithmetic operator must be between two expressions");
@@ -611,7 +612,7 @@ namespace Embers
                                 List<Statement> BlockStatements = BlockStackStatements.Pop();
                                 if (Block is BuildingMethod MethodBlock) {
                                     BlockStackInfo.Peek().Statements.Add(new DefineMethodStatement(MethodBlock.MethodName,
-                                        new Method(async (Interpreter Interpreter, List<RubyObject> Arguments) => {
+                                        new Method(async (Interpreter Interpreter, InstanceOrBlock InstanceOrBlock, List<Instance> Arguments) => {
                                             return await Interpreter.InterpretAsync(BlockStatements);
                                         }, 0
                                     )));
