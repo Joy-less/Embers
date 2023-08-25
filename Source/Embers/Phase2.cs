@@ -643,6 +643,11 @@ namespace Embers
                                 if (EndOfDef == -1) EndOfDef = Objects.Count - 1;
                                 List<Phase2Object> DefObjects = Objects.GetIndexRange(1, EndOfDef);
 
+                                if (EndOfDef + 1 > Objects.Count) {
+                                    List<Phase2Object> RemainingArguments = Objects.GetIndexRange(EndOfDef + 1);
+                                    throw new InternalErrorException($"There shouldn't be any remaining arguments after DefObjects (got {InspectList(RemainingArguments)})");
+                                }
+
                                 // Get method name
                                 {
                                     bool NextTokenCanBeVariable = true;
@@ -673,6 +678,9 @@ namespace Embers
                                                     break;
                                                 }
                                             }
+                                            else if (ObjectToken.Type == Phase2TokenType.OpenBracket) {
+                                                break;
+                                            }
                                             else if (IsObjectToken(ObjectToken)) {
                                                 break;
                                             }
@@ -699,6 +707,7 @@ namespace Embers
                                 // Get method arguments
                                 List<MethodArgumentExpression> MethodArguments = new();
                                 {
+                                    bool WrappedInBrackets = false;
                                     bool NextTokenCanBeObject = true;
                                     bool NextTokenCanBeComma = false;
                                     for (int i = 1; i < DefObjects.Count; i++) {
@@ -724,12 +733,28 @@ namespace Embers
                                                     throw new SyntaxErrorException($"Unexpected argument {ObjectToken.Inspect()}");
                                                 }
                                             }
+                                            else if (ObjectToken.Type == Phase2TokenType.OpenBracket) {
+                                                if (i == 1) {
+                                                    WrappedInBrackets = true;
+                                                }
+                                                else {
+                                                    throw new SyntaxErrorException("Unexpected open bracket in method arguments");
+                                                }
+                                            }
+                                            else if (ObjectToken.Type == Phase2TokenType.CloseBracket) {
+                                                if (WrappedInBrackets) {
+                                                    break;
+                                                }
+                                                else {
+                                                    throw new SyntaxErrorException("Unexpected close bracket in method arguments");
+                                                }
+                                            }
                                             else {
                                                 throw new SyntaxErrorException($"Expected {(NextTokenCanBeObject ? "argument" : "comma")}, got {ObjectToken.Inspect()}");
                                             }
                                         }
                                     }
-                                    if (NextTokenCanBeComma && !NextTokenCanBeObject) {
+                                    if (!NextTokenCanBeComma && NextTokenCanBeObject) {
                                         throw new SyntaxErrorException("Expected value after comma, got nothing");
                                     }
                                 }
@@ -737,7 +762,7 @@ namespace Embers
                                 // Open define method block
                                 BlockStackInfo.Push(new BuildingMethod(MethodName, MethodArguments));
                                 BlockStackStatements.Push(new List<Statement>());
-                                LastObjectIndexInStatement = 1;
+                                LastObjectIndexInStatement = EndOfDef;
                             }
                             // end
                             else if (Token.Type == Phase2TokenType.End) {
@@ -750,8 +775,8 @@ namespace Embers
                                     BlockStackInfo.Peek().Statements.Add(new DefineMethodStatement(MethodBlock.MethodName,
                                         new Method(async (Interpreter Interpreter, Instance Instance, List<Instance> Arguments) => {
                                             return await Interpreter.InterpretAsync(BlockStatements);
-                                        }, 0
-                                    )));
+                                        }, MethodBlock.Arguments.Count, MethodBlock.Arguments)
+                                    ));
                                 }
                                 else {
                                     throw new InternalErrorException($"Unrecognised block type: {Block.GetType().Name}");
@@ -794,6 +819,10 @@ namespace Embers
     }
     public static class Extensions {
         public static List<T> GetIndexRange<T>(this List<T> List, int StartIndex, int EndIndex) {
+            return List.GetRange(StartIndex, EndIndex - StartIndex + 1);
+        }
+        public static List<T> GetIndexRange<T>(this List<T> List, int StartIndex) {
+            int EndIndex = List.Count - 1;
             return List.GetRange(StartIndex, EndIndex - StartIndex + 1);
         }
     }

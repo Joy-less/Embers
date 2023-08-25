@@ -75,7 +75,7 @@ namespace Embers
                     }
                     return false;
                 }
-                string EscapeString(string String) {
+                static string EscapeString(string String) {
                     for (int i = 0; i < String.Length; i++) {
                         /*bool NextCharactersAre(string Characters) {
                             int Offset = 0;
@@ -182,6 +182,25 @@ namespace Embers
                         Tokens.RemoveAt(Tokens.Count - 1);
                     }
                 }
+                bool IsDefStatement() {
+                    for (int i2 = Tokens.Count - 1; i2 >= 0; i2--) {
+                        if (Tokens[i2].Type == Phase1TokenType.EndOfStatement) {
+                            break;
+                        }
+                        else if (Tokens[i2].Type == Phase1TokenType.Identifier && Tokens[i2].Value == "def") {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+                static bool IsValidIdentifierCharacter(char Chara) {
+                    if (char.IsAsciiDigit(Chara)) return false;
+                    if (Chara == '.' || Chara == ',' || Chara == '(' || Chara == ')' || Chara == '"' || Chara == '\'' || Chara == '\n' || Chara == ';'
+                        || Chara == '=' || Chara == '+' || Chara == '-' || Chara == '*' || Chara == '/' || Chara == '%' || Chara == '#' || Chara == '?')
+                        return false;
+                    if (char.IsWhiteSpace(Chara)) return false;
+                    return true;
+                }
 
                 // Process current character
                 char Chara = Code[i];
@@ -214,6 +233,8 @@ namespace Embers
                             Tokens.Add(new(Phase1TokenType.CloseBracket, null, FollowsWhitespace));
                             if (Brackets.TryPop(out char Opener) == false || Opener != '(')
                                 throw new SyntaxErrorException("Unexpected close bracket: )");
+                            if (IsDefStatement())
+                                Tokens.Add(new(Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
                             break;
                         case '"':
                         case '\'':
@@ -238,8 +259,6 @@ namespace Embers
                         case ';':
                             if (!LastTokenWas(Phase1TokenType.EndOfStatement))
                                 Tokens.Add(new(Phase1TokenType.EndOfStatement, Chara.ToString(), FollowsWhitespace));
-                            break;
-                        case ' ':
                             break;
                         case '=':
                             RemoveEndOfStatement();
@@ -282,9 +301,18 @@ namespace Embers
                                 throw new SyntaxErrorException("'?' is only valid at the end of a method name identifier");
                             }
                         default:
-                            string Identifier = BuildWhile(c => char.IsAsciiLetter(c) || c == '$' || c == '@');
+                            // Skip whitespace
+                            if (char.IsWhiteSpace(Chara))
+                                break;
+                            // Build identifier
+                            string Identifier = BuildWhile(IsValidIdentifierCharacter);
+                            // Double check identifier
                             if (Identifier.Length == 0)
-                                throw new SyntaxErrorException($"Invalid character '{Chara}'");
+                                throw new InternalErrorException($"Character not handled correctly: '{Chara}'");
+                            // Add EndOfStatement before end keyword
+                            if (Identifier == Phase2.Phase2TokenType.End.ToString().ToLower())
+                                Tokens.Add(new(Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
+                            // Add identifier
                             Tokens.Add(new(Phase1TokenType.Identifier, Identifier, FollowsWhitespace));
                             i--;
                             break;
