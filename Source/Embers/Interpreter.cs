@@ -52,11 +52,13 @@ namespace Embers
             public Scope(Block? parent) : base(parent) { }
         }
         public class Class : Block {
+            public readonly string Name;
             public readonly Dictionary<string, Method> Methods = new();
             public readonly Dictionary<string, Class> Classes = new();
             public readonly Dictionary<string, Instance> ClassVariables = new();
             public Method Constructor;
-            public Class(Class? parent, Method? constructor = null) : base(parent) {
+            public Class(string name, Class? parent, Method? constructor = null) : base(parent) {
+                Name = name;
                 if (constructor != null) {
                     Constructor = constructor;
                 }
@@ -148,6 +150,7 @@ namespace Embers
             long Value;
             public override object? Object { get { return Value; } }
             public override long Integer { get { return Value; } }
+            public override double Float { get { return Value; } }
             public override string Inspect() {
                 return Value.ToString();
             }
@@ -162,6 +165,7 @@ namespace Embers
             double Value;
             public override object? Object { get { return Value; } }
             public override double Float { get { return Value; } }
+            public override long Integer { get { return (long)Value; } }
             public override string Inspect() {
                 return Value.ToString("0.0");
             }
@@ -176,6 +180,9 @@ namespace Embers
             public override Dictionary<string, Instance> InstanceVariables { get { throw new ApiException($"{nameof(VariableReference)} instance does not have instance variables"); } }
             public Block Block;
             public Phase2Token Token;
+            public override string Inspect() {
+                return $"{Block.GetType().Name}::{Token.Inspect()}";
+            }
             public VariableReference(Block block, Phase2Token token) : base(null) {
                 Block = block;
                 Token = token;
@@ -184,12 +191,18 @@ namespace Embers
         public class ScopeReference : Instance {
             public override Dictionary<string, Instance> InstanceVariables { get { throw new ApiException($"{nameof(ScopeReference)} instance does not have instance variables"); } }
             public Scope Scope;
+            public override string Inspect() {
+                return $"{Scope.GetType().Name}";
+            }
             public ScopeReference(Scope scope) : base(null) {
                 Scope = scope;
             }
         }
         public class ClassReference : Instance {
             public override Dictionary<string, Instance> InstanceVariables { get { throw new ApiException($"{nameof(ClassReference)} instance does not have instance variables"); } }
+            public override string Inspect() {
+                return $"{Class.GetType().Name}";
+            }
             public ClassReference(Class _class) : base(_class) { }
         }
         /*public class RubyInteger : Instance {
@@ -579,7 +592,14 @@ namespace Embers
                         Instance MethodPath = await InterpretExpressionAsync(MethodCallExpression.MethodPath, true);
                         if (MethodPath is VariableReference MethodReference) {
                             Class MethodClass = MethodReference.Block as Class ?? CurrentClass;
-                            return await MethodClass.Methods[MethodReference.Token.Value!].Call(this, MethodPath, await InterpretExpressionsAsync(MethodCallExpression.Arguments));
+                            Instance MethodOwner;
+                            if (MethodCallExpression.MethodPath is PathExpression MethodCallPathExpression) {
+                                MethodOwner = await InterpretExpressionAsync(((PathExpression)MethodCallExpression.MethodPath).RootObject);
+                            }
+                            else {
+                                MethodOwner = new ClassReference(MethodClass);
+                            }
+                            return await MethodClass.Methods[MethodReference.Token.Value!].Call(this, MethodOwner, await InterpretExpressionsAsync(MethodCallExpression.Arguments));
                         }
                         else {
                             throw new InternalErrorException($"MethodPath should be VariableReference, not {MethodPath.GetType().Name}");
@@ -611,7 +631,7 @@ namespace Embers
                                         return new ClassReference(FindClass);
                                     }
                                     else {
-                                        throw new RuntimeException($"Undefined method '{ObjectTokenExpression.Token.Value!}' for {RootInstance.Class}");
+                                        throw new RuntimeException($"Undefined method '{ObjectTokenExpression.Token.Value!}' for {RootInstance.Class.Name}");
                                     }
                                 }
                                 else {
@@ -781,12 +801,13 @@ namespace Embers
                 else if (Statement is DefineMethodStatement DefineMethodStatement) {
                     Instance MethodNameObject = await InterpretExpressionAsync(DefineMethodStatement.MethodName, true);
                     if (MethodNameObject is VariableReference MethodName) {
-                        if (MethodName.Block is Class MethodClass) {
+                        /*if (MethodName.Block is Class MethodClass) {
                             MethodClass.Methods.Add(MethodName.Token.Value!, DefineMethodStatement.Method);
                         }
                         else {
-                            throw new InternalErrorException($"Expected class from VariableReference.Block, got {MethodName.Block.GetType().Name}");
-                        }
+                            throw new InternalErrorException($"Expected class from VariableReference.Block, got {MethodName.Block.GetType().Name} ({MethodName.Inspect()})");
+                        }*/
+                        CurrentClass.Methods.Add(MethodName.Token.Value!, DefineMethodStatement.Method);
                     }
                     else {
                         throw new InternalErrorException($"Invalid method name: {MethodNameObject}");
@@ -811,22 +832,25 @@ namespace Embers
         }
 
         public Interpreter() {
-            RootClass = new Class(null);
+            RootClass = new Class("RootClass", null);
             RootScope = new Scope(RootClass);
             CurrentClass = RootClass;
             CurrentScope = RootScope;
 
-            NilClass = new Class(RootClass); RootClass.Classes.Add("NilClass", NilClass); Nil = new NilInstance(NilClass);
-            TrueClass = new Class(RootClass); RootClass.Classes.Add("TrueClass", TrueClass); True = new TrueInstance(TrueClass);
-            FalseClass = new Class(RootClass); RootClass.Classes.Add("FalseClass", FalseClass); False = new FalseInstance(FalseClass);
-            String = new Class(RootClass, new Method(async (Interpreter, Instance, Arguments) => {
+            NilClass = new Class("NilClass", RootClass); RootClass.Classes.Add("NilClass", NilClass); Nil = new NilInstance(NilClass);
+            TrueClass = new Class("TrueClass", RootClass); RootClass.Classes.Add("TrueClass", TrueClass); True = new TrueInstance(TrueClass);
+            FalseClass = new Class("FalseClass", RootClass); RootClass.Classes.Add("FalseClass", FalseClass); False = new FalseInstance(FalseClass);
+            String = new Class("String", RootClass, new Method(async (Interpreter, Instance, Arguments) => {
                 if (Arguments.Count == 1) {
                     ((StringInstance)Instance).SetValue(Arguments[0].String); // Change to implicit conversion
                 }
                 return Nil;
             }, 0..1)); RootClass.Classes.Add("String", String);
-            Integer = new Class(RootClass, null); RootClass.Classes.Add("Integer", Integer);
-            Float = new Class(RootClass, null); RootClass.Classes.Add("Float", Float);
+            Integer = new Class("Integer", RootClass, null); RootClass.Classes.Add("Integer", Integer);
+            Integer.Methods.Add("+", new Method(async (Interpreter, Instance, Arguments) => {
+                return new IntegerInstance(Integer, Instance.Integer + Arguments[0].Integer);
+            }, 1));
+            Float = new Class("Float", RootClass, null); RootClass.Classes.Add("Float", Float);
 
             foreach (KeyValuePair<string, Method> Method in Api.GetBuiltInMethods()) {
                 RootClass.Methods.Add(Method.Key, Method.Value);

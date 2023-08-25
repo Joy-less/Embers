@@ -146,9 +146,9 @@ namespace Embers
             }
         }*/
         public class MethodCallExpression : Expression {
-            public Expression MethodPath;
+            public ObjectTokenExpression MethodPath;
             public List<Expression> Arguments;
-            public MethodCallExpression(Expression methodPath, List<Expression> arguments) {
+            public MethodCallExpression(ObjectTokenExpression methodPath, List<Expression> arguments) {
                 MethodPath = methodPath;
                 Arguments = arguments;
             }
@@ -163,6 +163,25 @@ namespace Embers
             }
             public override string Inspect() {
                 return "defined? (" + Expression.Inspect() + ")";
+            }
+        }
+        public class MethodArgumentExpression : Expression {
+            public Phase2Token ArgumentName;
+            public Expression? DefaultValue;
+            public MethodArgumentExpression(Phase2Token argumentName, Expression defaultValue) {
+                ArgumentName = argumentName;
+                DefaultValue = defaultValue;
+            }
+            public MethodArgumentExpression(Phase2Token argumentName) {
+                ArgumentName = argumentName;
+            }
+            public override string Inspect() {
+                if (DefaultValue == null) {
+                    return ArgumentName.Inspect();
+                }
+                else {
+                    return $"{ArgumentName.Inspect()} = {DefaultValue.Inspect()}";
+                }
             }
         }
 
@@ -530,7 +549,7 @@ namespace Embers
                 if (ParsedObject is Expression ParsedExpression)
                     Expressions.Add(ParsedExpression);
                 else
-                    throw new InternalErrorException($"Parsed object should be an expression (got {ParsedObject.GetType().Name} {ParsedObject.Inspect()})");
+                    throw new InternalErrorException($"Parsed objects should all be expressions (got a {ParsedObject.GetType().Name} {ParsedObject.Inspect()})");
             }
             return Expressions;
         }
@@ -550,9 +569,11 @@ namespace Embers
             public List<Statement> Statements = new();
         }
         class BuildingMethod : BuildingBlock {
-            public readonly Expression MethodName;
-            public BuildingMethod(Expression methodName) {
+            public readonly ObjectTokenExpression MethodName;
+            public readonly List<MethodArgumentExpression> Arguments;
+            public BuildingMethod(ObjectTokenExpression methodName, List<MethodArgumentExpression> arguments) {
                 MethodName = methodName;
+                Arguments = arguments;
             }
         }
         public static List<Statement> GetStatements(List<Phase2Token> Phase2Tokens) {
@@ -609,16 +630,112 @@ namespace Embers
                             }
                         }
 
-                        /*// Keywords
+                        // Keywords
                         int LastObjectIndexInStatement = -1;
                         if (Objects[0] is Phase2Token Token) {
                             // def
                             if (Token.Type == Phase2TokenType.Def) {
                                 if (Objects.Count == 1)
                                     throw new SyntaxErrorException("Def keyword must be followed by an identifier (got nothing)");
-                                if (Objects[1] is not Phase2Token MethodName)
-                                    throw new SyntaxErrorException($"Def keyword must be followed by an identifier (got {Objects[1].Inspect()})");
-                                BlockStackInfo.Push(new BuildingMethod(MethodName));
+                                
+                                // Get def statement (e.g my_method(arg1, arg2))
+                                int EndOfDef = Objects.FindIndex(o => o is Phase2Token tok && tok.Type == Phase2TokenType.CloseBracket);
+                                if (EndOfDef == -1) EndOfDef = Objects.Count - 1;
+                                List<Phase2Object> DefObjects = Objects.GetIndexRange(1, EndOfDef);
+
+                                // Get method name
+                                {
+                                    bool NextTokenCanBeVariable = true;
+                                    bool NextTokenCanBeDot = false;
+                                    List<Phase2Token> MethodNamePath = new();
+                                    for (int i = 0; i < DefObjects.Count; i++) {
+                                        Phase2Object? LastObject = i - 1 >= 0 ? DefObjects[i - 1] : null;
+                                        Phase2Object Object = DefObjects[i];
+                                        Phase2Object? NextObject = i + 1 < DefObjects.Count ? DefObjects[i + 1] : null;
+
+                                        if (Object is Phase2Token ObjectToken) {
+                                            if (ObjectToken.Type == Phase2TokenType.Dot) {
+                                                if (NextTokenCanBeDot) {
+                                                    NextTokenCanBeVariable = true;
+                                                    NextTokenCanBeDot = false;
+                                                }
+                                                else {
+                                                    throw new SyntaxErrorException("Expected expression before and after .");
+                                                }
+                                            }
+                                            else if (IsVariableToken(ObjectToken)) {
+                                                if (NextTokenCanBeVariable) {
+                                                    MethodNamePath.Add(ObjectToken);
+                                                    NextTokenCanBeVariable = false;
+                                                    NextTokenCanBeDot = true;
+                                                }
+                                                else {
+                                                    break;
+                                                }
+                                            }
+                                            else if (IsObjectToken(ObjectToken)) {
+                                                break;
+                                            }
+                                            else {
+                                                throw new SyntaxErrorException($"Unexpected token when parsing method path: {ObjectToken.Inspect()}");
+                                            }
+                                        }
+                                    }
+                                    // Remove method name path tokens and replace with a path expression
+                                    DefObjects.RemoveRange(0, MethodNamePath.Count + MethodNamePath.Count - 1);
+                                    ObjectTokenExpression? MethodNamePathExpression = null;
+                                    if (MethodNamePath.Count == 1) {
+                                        MethodNamePathExpression = new ObjectTokenExpression(MethodNamePath[0]);
+                                    }
+                                    else {
+                                        for (int i = 0; i < MethodNamePath.Count; i++) {
+                                            MethodNamePathExpression = new PathExpression(new ObjectTokenExpression(MethodNamePath[i]), MethodNamePath[i + 1]);
+                                        }
+                                    }
+                                    DefObjects.Insert(0, MethodNamePathExpression!);
+                                }
+                                ObjectTokenExpression MethodName = DefObjects[0] as ObjectTokenExpression ?? throw new SyntaxErrorException($"Def keyword must be followed by an identifier (got {DefObjects[0].Inspect()})");
+
+                                // Get method arguments
+                                List<MethodArgumentExpression> MethodArguments = new();
+                                {
+                                    bool NextTokenCanBeObject = true;
+                                    bool NextTokenCanBeComma = false;
+                                    for (int i = 1; i < DefObjects.Count; i++) {
+                                        Phase2Object Object = DefObjects[i];
+
+                                        if (Object is Phase2Token ObjectToken) {
+                                            if (ObjectToken.Type == Phase2TokenType.Comma) {
+                                                if (NextTokenCanBeComma) {
+                                                    NextTokenCanBeObject = true;
+                                                    NextTokenCanBeComma = false;
+                                                }
+                                                else {
+                                                    throw new SyntaxErrorException($"Expected comma");
+                                                }
+                                            }
+                                            else if (IsVariableToken(ObjectToken)) {
+                                                if (NextTokenCanBeObject) {
+                                                    MethodArguments.Add(new MethodArgumentExpression(ObjectToken));
+                                                    NextTokenCanBeObject = false;
+                                                    NextTokenCanBeComma = true;
+                                                }
+                                                else {
+                                                    throw new SyntaxErrorException($"Unexpected argument {ObjectToken.Inspect()}");
+                                                }
+                                            }
+                                            else {
+                                                throw new SyntaxErrorException($"Expected {(NextTokenCanBeObject ? "argument" : "comma")}, got {ObjectToken.Inspect()}");
+                                            }
+                                        }
+                                    }
+                                    if (NextTokenCanBeComma && !NextTokenCanBeObject) {
+                                        throw new SyntaxErrorException("Expected value after comma, got nothing");
+                                    }
+                                }
+
+                                // Open define method block
+                                BlockStackInfo.Push(new BuildingMethod(MethodName, MethodArguments));
                                 BlockStackStatements.Push(new List<Statement>());
                                 LastObjectIndexInStatement = 1;
                             }
@@ -646,9 +763,9 @@ namespace Embers
                             ExpectEndOfStatement(LastObjectIndexInStatement);
                         }
                         // Expression
-                        else {*/
+                        else {
                             BlockStackStatements.Peek().Add(new ExpressionStatement(ObjectsToExpression(Expressions[0])));
-                        // }
+                        }
                     }
                     // Empty
                     else if (Expressions.Count == 0) {
@@ -673,6 +790,11 @@ namespace Embers
         public static List<Statement> GetStatements(List<Phase1Token> Phase1Tokens) {
             List<Phase2Token> Phase2Tokens = TokensToPhase2(Phase1Tokens);
             return GetStatements(Phase2Tokens);
+        }
+    }
+    public static class Extensions {
+        public static List<T> GetIndexRange<T>(this List<T> List, int StartIndex, int EndIndex) {
+            return List.GetRange(StartIndex, EndIndex - StartIndex + 1);
         }
     }
 }
