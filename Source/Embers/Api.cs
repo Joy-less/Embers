@@ -22,40 +22,40 @@ namespace Embers
             return Methods;
         }
 
-        async Task<Instance> Puts(Interpreter Interpreter, Instance Instance, List<Instance> Messages) {
-            foreach (Instance Message in Messages) {
+        async Task<Instance> Puts(MethodInput Input) {
+            foreach (Instance Message in Input.Arguments) {
                 Console.WriteLine(Message.Object);
             }
-            return Interpreter.Nil;
+            return Input.Interpreter.Nil;
         }
-        async Task<Instance> Print(Interpreter Interpreter, Instance Instance, List<Instance> Messages) {
-            foreach (Instance Message in Messages) {
+        async Task<Instance> Print(MethodInput Input) {
+            foreach (Instance Message in Input.Arguments) {
                 Console.Write(Message.Object);
             }
-            return Interpreter.Nil;
+            return Input.Interpreter.Nil;
         }
-        async Task<Instance> P(Interpreter Interpreter, Instance Instance, List<Instance> Messages) {
-            foreach (Instance Message in Messages) {
+        async Task<Instance> P(MethodInput Input) {
+            foreach (Instance Message in Input.Arguments) {
                 Console.WriteLine(Message.Inspect());
             }
-            return Interpreter.Nil;
+            return Input.Interpreter.Nil;
         }
-        async Task<Instance> Warn(Interpreter Interpreter, Instance Instance, List<Instance> Messages) {
+        async Task<Instance> Warn(MethodInput Input) {
             Console.ForegroundColor = ConsoleColor.DarkYellow;
-            foreach (Instance Message in Messages) {
+            foreach (Instance Message in Input.Arguments) {
                 Console.WriteLine(Message.Object);
             }
             Console.ResetColor();
-            return Interpreter.Nil;
+            return Input.Interpreter.Nil;
         }
-        async Task<Instance> Sleep(Interpreter Interpreter, Instance Instance, List<Instance> Time) {
-            if (Time.Count == 1) {
+        async Task<Instance> Sleep(MethodInput Input) {
+            if (Input.Arguments.Count == 1) {
                 await Task.Delay(1);
             }
             else {
                 await Task.Delay(Timeout.Infinite);
             }
-            return Interpreter.Nil;
+            return Input.Interpreter.Nil;
         }
     }
 }

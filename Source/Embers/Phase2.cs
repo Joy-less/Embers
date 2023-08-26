@@ -124,12 +124,12 @@ namespace Embers
             }
         }
         public class PathExpression : ObjectTokenExpression {
-            public Expression RootObject;
-            public PathExpression(Expression rootObject, Phase2Token objectToken) : base(objectToken) {
-                RootObject = rootObject;
+            public Expression ParentObject;
+            public PathExpression(Expression parentObject, Phase2Token objectToken) : base(objectToken) {
+                ParentObject = parentObject;
             }
             public override string Inspect() {
-                return RootObject.Inspect() + "." + RootObject.Inspect();
+                return ParentObject.Inspect() + "." + Token.Inspect();
             }
         }
         public class ConstantPathExpression : ObjectTokenExpression {
@@ -223,6 +223,7 @@ namespace Embers
                 return $"Set scope to {Scope}";
             }
         }*/
+        
         public class DefineMethodStatement : Statement {
             public ObjectTokenExpression MethodName;
             public Method Method;
@@ -245,8 +246,10 @@ namespace Embers
         }
         public class DefineClassStatement : Statement {
             public ObjectTokenExpression ClassName;
-            public DefineClassStatement(ObjectTokenExpression className) {
+            public List<Statement> BlockStatements;
+            public DefineClassStatement(ObjectTokenExpression className, List<Statement> blockStatements) {
                 ClassName = className;
+                BlockStatements = blockStatements;
             }
             public override string Inspect() {
                 return "class " + ClassName.Inspect();
@@ -766,20 +769,7 @@ namespace Embers
         static BuildingClass ParseStartDefineClass(List<Phase2Object> StatementTokens) {
             if (StatementTokens.Count == 1)
                 throw new SyntaxErrorException("Class keyword must be followed by an identifier (got nothing)");
-                                
-            /*// Get def statement (e.g my_method(arg1, arg2))
-            int EndOfDef = StatementTokens.FindIndex(o => o is Phase2Token tok && tok.Type == Phase2TokenType.CloseBracket);
-            if (EndOfDef == -1) EndOfDef = StatementTokens.Count - 1;
-            List<Phase2Object> DefObjects = StatementTokens.GetIndexRange(1, EndOfDef);
-
-            // Check for remaining arguments (internal error)
-            if (EndOfDef + 1 > StatementTokens.Count) {
-                List<Phase2Object> RemainingArguments = StatementTokens.GetIndexRange(EndOfDef + 1);
-                throw new InternalErrorException($"There shouldn't be any remaining arguments after DefObjects (got {InspectList(RemainingArguments)})");
-            }*/
-
-
-
+            
             // Get class name
             {
                 bool NextTokenCanBeVariable = true;
@@ -839,22 +829,21 @@ namespace Embers
                 throw new SyntaxErrorException("Class name must be Constant");
             }
 
-            // Open define method block
+            // Open define class block
             return new BuildingClass(ClassName);
         }
-        static Statement ParseEndStatement(Stack<BuildingBlock> BlockStackInfo, Stack<List<Statement>> BlockStackStatements) {
+        static Statement ParseEndStatement(Stack<BuildingBlock> BlockStackInfo) {
             BuildingBlock Block = BlockStackInfo.Pop();
-            List<Statement> BlockStatements = BlockStackStatements.Pop();
 
             if (Block is BuildingMethod MethodBlock) {
                 return new DefineMethodStatement(MethodBlock.MethodName,
-                    new Method(async (Interpreter Interpreter, Instance Instance, List<Instance> Arguments) => {
-                        return await Interpreter.InterpretAsync(BlockStatements);
+                    new Method(async (Input) => {
+                        return await Input.Interpreter.InterpretAsync(Block.Statements);
                     }, MethodBlock.RequiredArgumentsCount..MethodBlock.Arguments.Count, MethodBlock.Arguments)
                 );
             }
             else if (Block is BuildingClass ClassBlock) {
-                return new DefineClassStatement(ClassBlock.ClassName);
+                return new DefineClassStatement(ClassBlock.ClassName, Block.Statements);
             }
             else {
                 throw new InternalErrorException($"Unrecognised block type: {Block.GetType().Name}");
@@ -894,13 +883,9 @@ namespace Embers
             // Get statements tokens
             List<List<Phase2Object>> StatementsTokens = SplitObjects(Phase2Objects, Phase2TokenType.EndOfStatement, out _, true);
 
-            // Stack<Block> BlockStack = new();
             Stack<BuildingBlock> BlockStackInfo = new();
-            Stack<List<Statement>> BlockStackStatements = new();
 
-            // BlockStack.Push(new Scope(null));
             BlockStackInfo.Push(new BuildingBlock());
-            BlockStackStatements.Push(new List<Statement>());
 
             // Evaluate statements
             foreach (List<Phase2Object> StatementTokens in StatementsTokens) {
@@ -910,32 +895,30 @@ namespace Embers
                         BuildingMethod BuildingMethod = ParseStartDefineMethod(StatementTokens);
                         // Open define method block
                         BlockStackInfo.Push(BuildingMethod);
-                        BlockStackStatements.Push(new List<Statement>());
                     }
                     else if (Token.Type == Phase2TokenType.Class) {
                         BuildingClass BuildingClass = ParseStartDefineClass(StatementTokens);
                         // Open define class block
                         BlockStackInfo.Push(BuildingClass);
-                        BlockStackStatements.Push(new List<Statement>());
                     }
                     else if (Token.Type == Phase2TokenType.End) {
                         if (BlockStackInfo.Count == 1) {
                             throw new SyntaxErrorException("Unexpected end statement");
                         }
-                        Statement FinishedStatement = ParseEndStatement(BlockStackInfo, BlockStackStatements);
+                        Statement FinishedStatement = ParseEndStatement(BlockStackInfo);
                         BlockStackInfo.Peek().Statements.Add(FinishedStatement);
                     }
                     else {
-                        BlockStackStatements.Peek().Add(new ExpressionStatement(ObjectsToExpression(StatementTokens)));
+                        BlockStackInfo.Peek().Statements.Add(new ExpressionStatement(ObjectsToExpression(StatementTokens)));
                     }
                 }
                 else {
                     AssignmentStatement? Assignment = ParseAssignmentStatement(StatementTokens);
                     if (Assignment != null) {
-                        BlockStackStatements.Peek().Add(Assignment);
+                        BlockStackInfo.Peek().Statements.Add(Assignment);
                     }
                     else {
-                        BlockStackStatements.Peek().Add(new ExpressionStatement(ObjectsToExpression(StatementTokens)));
+                        BlockStackInfo.Peek().Statements.Add(new ExpressionStatement(ObjectsToExpression(StatementTokens)));
                     }
                 }
 
@@ -985,10 +968,7 @@ namespace Embers
                 }
             }*/
             }
-            if (BlockStackStatements.Count == 1) {
-                BlockStackInfo.Peek().Statements.AddRange(BlockStackStatements.Pop());
-            }
-            else if (BlockStackStatements.Count != 0) {
+            if (BlockStackInfo.Count != 1) {
                 throw new SyntaxErrorException("Block was never closed with an end statement");
             }
             return BlockStackInfo.Pop().Statements;

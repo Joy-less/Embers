@@ -15,7 +15,9 @@ namespace Embers
         readonly Dictionary<string, Instance> GlobalVariables = new();
         Class CurrentClass;
         Scope CurrentScope;
-        Scope CurrentBlock;
+        Block CurrentBlock;
+        void SetCurrentClass(Class NewCurrentClass) { CurrentClass = NewCurrentClass; CurrentBlock = NewCurrentClass; }
+        void SetCurrentScope(Scope NewCurrentScope) { CurrentScope = NewCurrentScope; CurrentBlock = NewCurrentScope; }
 
         readonly Class NilClass;
         readonly Class TrueClass;
@@ -56,26 +58,26 @@ namespace Embers
                 return FindFirstAncestorWhichIsA<T>()!;
             }
             public bool TryGetLocalVariable(string Name, out Instance? LocalVariable) {
-                Block CurrentBlock = this;
-                while (CurrentBlock.Parent != null) {
+                Block? CurrentBlock = this;
+                do {
                     if (CurrentBlock.LocalVariables.TryGetValue(Name, out Instance? FindLocalVariable)) {
                         LocalVariable = FindLocalVariable;
                         return true;
                     }
                     CurrentBlock = CurrentBlock.Parent;
-                }
+                } while (CurrentBlock != null);
                 LocalVariable = null;
                 return false;
             }
             public bool TryGetConstant(string Name, out Instance? Constant) {
-                Block CurrentBlock = this;
-                while (CurrentBlock.Parent != null) {
+                Block? CurrentBlock = this;
+                do {
                     if (CurrentBlock.Constants.TryGetValue(Name, out Instance? FindConstant)) {
                         Constant = FindConstant;
                         return true;
                     }
                     CurrentBlock = CurrentBlock.Parent;
-                }
+                } while (CurrentBlock != null);
                 Constant = null;
                 return false;
             }
@@ -94,20 +96,20 @@ namespace Embers
                     Constructor = constructor;
                 }
                 else {
-                    Constructor = new Method(async (Interpreter, Instance, Arguments) => {
-                        return Interpreter.Nil;
+                    Constructor = new Method(async (Input) => {
+                        return Input.Interpreter.Nil;
                     }, 0);
                 }
             }
             public bool TryGetMethod(string Name, out Method? Method) {
-                Block CurrentBlock = this;
-                while (CurrentBlock.Parent != null) {
+                Block? CurrentBlock = this;
+                do {
                     if (CurrentBlock is Class CurrentClass && CurrentClass.Methods.TryGetValue(Name, out Method? FindMethod)) {
                         Method = FindMethod;
                         return true;
                     }
                     CurrentBlock = CurrentBlock.Parent;
-                }
+                } while (CurrentBlock != null);
                 Method = null;
                 return false;
             }
@@ -122,9 +124,10 @@ namespace Embers
             public virtual bool Boolean { get { throw new ApiException("Instance is not a boolean"); } }
             public virtual string String { get { throw new ApiException("Instance is not a string"); } }
             public virtual long Integer { get { throw new ApiException("Instance is not an integer"); } }
-            public virtual double Float { get { throw new ApiException("Instance is not a Float"); } }
-            // public virtual Method Method { get { throw new Exception("Ruby object is not a method"); } }
-            // public virtual Class Class { get { throw new Exception("Ruby object is not a class"); } }
+            public virtual double Float { get { throw new ApiException("Instance is not a float"); } }
+            // public virtual Method Method { get { throw new ApiException("Instance is not a method"); } }
+            public virtual Class ClassRef { get { throw new ApiException("Instance is not a class reference"); } }
+            public virtual Method MethodRef { get { throw new ApiException("Instance is not a method reference"); } }
             public virtual string Inspect() {
                 return ToString()!;
             }
@@ -235,7 +238,7 @@ namespace Embers
             public override Dictionary<string, Instance> InstanceVariables { get { throw new ApiException($"{nameof(ScopeReference)} instance does not have instance variables"); } }
             public Scope Scope;
             public override string Inspect() {
-                return $"{Scope.GetType().Name}";
+                return Scope.GetType().Name;
             }
             public ScopeReference(Scope scope) : base(null) {
                 Scope = scope;
@@ -243,10 +246,24 @@ namespace Embers
         }
         public class ClassReference : Instance {
             public override Dictionary<string, Instance> InstanceVariables { get { throw new ApiException($"{nameof(ClassReference)} instance does not have instance variables"); } }
+            public override object? Object { get { return Class; } }
+            public override Class ClassRef { get { return Class; } }
             public override string Inspect() {
-                return $"{Class.GetType().Name}";
+                return Class.Name;
             }
             public ClassReference(Class _class) : base(_class) { }
+        }
+        public class MethodReference : Instance {
+            readonly Method Method;
+            public override Dictionary<string, Instance> InstanceVariables { get { throw new ApiException($"{nameof(MethodReference)} instance does not have instance variables"); } }
+            public override object? Object { get { return Method; } }
+            public override Method MethodRef { get { return Method; } }
+            public override string Inspect() {
+                return Method.ToString()!;
+            }
+            public MethodReference(Method method) : base(null) {
+                Method = method;
+            }
         }
         /*public class RubyInteger : Instance {
             readonly long Value;
@@ -418,15 +435,15 @@ namespace Embers
         }*/
         
         public class Method {
-            Func<Interpreter, Instance, List<Instance>, Task<Instance>> Function;
+            Func<MethodInput, Task<Instance>> Function;
             public IntRange ArgumentCountRange;
             public List<MethodArgumentExpression> ArgumentNames;
-            public Method(Func<Interpreter, Instance, List<Instance>, Task<Instance>> function, IntRange? argumentCountRange, List<MethodArgumentExpression>? argumentNames = null) {
+            public Method(Func<MethodInput, Task<Instance>> function, IntRange? argumentCountRange, List<MethodArgumentExpression>? argumentNames = null) {
                 Function = function;
                 ArgumentCountRange = argumentCountRange ?? new IntRange();
                 ArgumentNames = argumentNames ?? new();
             }
-            public Method(Func<Interpreter, Instance, List<Instance>, Task<Instance>> function, Range argumentCountRange, List<MethodArgumentExpression>? argumentNames = null) {
+            public Method(Func<MethodInput, Task<Instance>> function, Range argumentCountRange, List<MethodArgumentExpression>? argumentNames = null) {
                 Function = function;
                 ArgumentCountRange = new IntRange(
                     argumentCountRange.Start.Value >= 0 ? argumentCountRange.Start.Value : null,
@@ -434,7 +451,7 @@ namespace Embers
                 );
                 ArgumentNames = argumentNames ?? new();
             }
-            public Method(Func<Interpreter, Instance, List<Instance>, Task<Instance>> function, int argumentCount, List<MethodArgumentExpression>? argumentNames = null) {
+            public Method(Func<MethodInput, Task<Instance>> function, int argumentCount, List<MethodArgumentExpression>? argumentNames = null) {
                 Function = function;
                 ArgumentCountRange = new IntRange(argumentCount, argumentCount);
                 ArgumentNames = argumentNames ?? new();
@@ -443,7 +460,7 @@ namespace Embers
                 if (ArgumentCountRange.IsInRange(Arguments.Count)) {
                     // Create temporary scope
                     Scope PreviousScope = Interpreter.CurrentScope;
-                    Interpreter.CurrentScope = new Scope(PreviousScope);
+                    Interpreter.SetCurrentScope(new Scope(PreviousScope));
                     // Set argument variables
                     for (int i = 0; i < ArgumentNames.Count; i++) {
                         MethodArgumentExpression Argument = ArgumentNames[i];
@@ -457,9 +474,9 @@ namespace Embers
                         Interpreter.CurrentScope.LocalVariables.Add(Argument.ArgumentName.Value!, GivenArgument);
                     }
                     // Call method
-                    Instance ReturnValue = await Function(Interpreter, Instance, Arguments);
+                    Instance ReturnValue = await Function(new MethodInput(Interpreter, Instance, Arguments));
                     // Step back a scope
-                    Interpreter.CurrentScope = PreviousScope;
+                    Interpreter.SetCurrentScope(PreviousScope);
                     // Return method return value
                     return ReturnValue;
                 }
@@ -473,7 +490,7 @@ namespace Embers
             public async Task<Instance> Call(Interpreter Interpreter, Instance Instance) {
                 return await Call(Interpreter, Instance, new List<Instance>());
             }
-            public void ChangeFunction(Func<Interpreter, Instance, List<Instance>, Task<Instance>> function) {
+            public void ChangeFunction(Func<MethodInput, Task<Instance>> function) {
                 Function = function;
             }
         }
@@ -481,6 +498,16 @@ namespace Embers
             public readonly Method? Method;
             public MethodScope(Block? parent, Method method) : base(parent) {
                 Method = method;
+            }
+        }
+        public class MethodInput {
+            public Interpreter Interpreter;
+            public Instance Instance;
+            public List<Instance> Arguments;
+            public MethodInput(Interpreter interpreter, Instance instance, List<Instance> arguments) {
+                Interpreter = interpreter;
+                Instance = instance;
+                Arguments = arguments;
             }
         }
         public class IntRange {
@@ -511,6 +538,7 @@ namespace Embers
                 }
             }
         }
+
         async Task Warn(string Message) {
             await InterpretExpressionAsync(new MethodCallExpression(
                 new ObjectTokenExpression(new Phase2Token(Phase2TokenType.LocalVariableOrMethod, "warn")),
@@ -526,7 +554,7 @@ namespace Embers
                     Class MethodClass = MethodReference.Block as Class ?? CurrentClass;
                     Instance MethodOwner;
                     if (MethodCallExpression.MethodPath is PathExpression MethodCallPathExpression) {
-                        MethodOwner = await InterpretExpressionAsync(MethodCallPathExpression.RootObject);
+                        MethodOwner = await InterpretExpressionAsync(MethodCallPathExpression.ParentObject);
                     }
                     else {
                         MethodOwner = new ClassReference(MethodClass);
@@ -537,34 +565,29 @@ namespace Embers
                     throw new InternalErrorException($"MethodPath should be VariableReference, not {MethodPath.GetType().Name}");
                 }
             }
-            // Object Token / Path
+            // Path or Object Token
             else if (Expression is ObjectTokenExpression ObjectTokenExpression) {
                 // Path
                 if (ObjectTokenExpression is PathExpression PathExpression) {
-                    Instance RootObject = await InterpretExpressionAsync(PathExpression.RootObject);
-                    if (RootObject is Instance RootInstance) {
-                        if (ObjectTokenExpression.Token.Type == Phase2TokenType.LocalVariableOrMethod || ObjectTokenExpression.Token.Type == Phase2TokenType.Constant) {
-                            if (RootInstance.Class.Methods.TryGetValue(ObjectTokenExpression.Token.Value!, out Method? FindMethod)) {
-                                if (!ReturnVariableReference) {
-                                    return await FindMethod.Call(this, RootInstance);
-                                }
-                                else {
-                                    return new VariableReference(RootInstance.Class, ObjectTokenExpression.Token);
-                                }
-                            }
-                            else if (RootInstance.Class.Constants.TryGetValue(ObjectTokenExpression.Token.Value!, out Instance? FindInstance)) {
-                                return FindInstance;
+                    Instance ParentInstance = await InterpretExpressionAsync(PathExpression.ParentObject);
+                    if (ObjectTokenExpression.Token.Type == Phase2TokenType.LocalVariableOrMethod || ObjectTokenExpression.Token.Type == Phase2TokenType.Constant) {
+                        if (ParentInstance.Class.Methods.TryGetValue(ObjectTokenExpression.Token.Value!, out Method? FindMethod)) {
+                            if (!ReturnVariableReference) {
+                                return await FindMethod.Call(this, ParentInstance);
                             }
                             else {
-                                throw new RuntimeException($"Undefined method '{ObjectTokenExpression.Token.Value!}' for {RootInstance.Class.Name}");
+                                return new VariableReference(ParentInstance.Class, ObjectTokenExpression.Token);
                             }
                         }
+                        else if (ParentInstance.Class.Constants.TryGetValue(ObjectTokenExpression.Token.Value!, out Instance? FindInstance)) {
+                            return FindInstance;
+                        }
                         else {
-                            throw new SyntaxErrorException($"Expected identifier after ., got {ObjectTokenExpression.Token.Type}");
+                            throw new RuntimeException($"Undefined method '{ObjectTokenExpression.Token.Value!}' for {ParentInstance.Class.Name}");
                         }
                     }
                     else {
-                        throw new InternalErrorException($"Expected instance, got block ({RootObject})");
+                        throw new SyntaxErrorException($"Expected identifier after ., got {ObjectTokenExpression.Token.Type}");
                     }
                 }
                 // Local
@@ -626,8 +649,9 @@ namespace Embers
                                 throw new InternalErrorException($"Unknown variable type {ObjectTokenExpression.Token.Type}");
                             }
                         }
+                        // Variable
                         else {
-                            return new VariableReference(CurrentScope, ObjectTokenExpression.Token);
+                            return new VariableReference(CurrentBlock, ObjectTokenExpression.Token);
                         }
                     }
                 }
@@ -716,16 +740,19 @@ namespace Embers
             for (int Index = 0; Index < Statements.Count; Index++) {
                 Statement Statement = Statements[Index];
 
-                void AssignToVariable(VariableReference Variable, Instance Value) {
+                async Task AssignToVariable(VariableReference Variable, Instance Value) {
                     switch (Variable.Token.Type) {
                         case Phase2TokenType.LocalVariableOrMethod:
-                            CurrentScope.LocalVariables[Variable.Token.Value!] = Value;
+                            CurrentBlock.LocalVariables[Variable.Token.Value!] = Value;
                             break;
                         case Phase2TokenType.GlobalVariable:
                             GlobalVariables[Variable.Token.Value!] = Value;
                             break;
                         case Phase2TokenType.Constant:
-                            throw new NotImplementedException();
+                            if (CurrentBlock.Constants.ContainsKey(Variable.Token.Value!))
+                                await Warn($"Already initialized constant '{Variable.Token.Value!}'");
+                            CurrentBlock.Constants[Variable.Token.Value!] = Value;
+                            break;
                         case Phase2TokenType.InstanceVariable:
                             throw new NotImplementedException();
                         case Phase2TokenType.ClassVariable:
@@ -844,7 +871,7 @@ namespace Embers
                     Instance Left = await InterpretExpressionAsync(AssignmentStatement.Left, true);
                     if (Left is VariableReference LeftVariable) {
                         if (Right is Instance RightInstance) {
-                            AssignToVariable(LeftVariable, RightInstance);
+                            await AssignToVariable(LeftVariable, RightInstance);
                         }
                         else {
                             throw new InternalErrorException($"Assignment value should be an instance, but got {Right.GetType().Name}");
@@ -866,10 +893,21 @@ namespace Embers
                 else if (Statement is DefineClassStatement DefineClassStatement) {
                     Instance ClassNameObject = await InterpretExpressionAsync(DefineClassStatement.ClassName, true);
                     if (ClassNameObject is VariableReference ClassName) {
+                        /*// Replace this with monkey patching.
                         if (CurrentClass.Constants.ContainsKey(ClassName.Token.Value!)) {
                             await Warn($"Already initialized constant '{ClassName.Token.Value!}'");
-                        }
-                        ClassName.Block.Constants[ClassName.Token.Value!] = new ClassReference(new Class(ClassName.Token.Value!, ClassName.Class));
+                        }*/
+                        // Create class
+                        Class NewClass = new(ClassName.Token.Value!, ClassName.Class);
+                        // Create temporary class scope
+                        Class PreviousClass = CurrentClass;
+                        SetCurrentClass(NewClass);
+                        // Interpret the statements inside the class definition
+                        await InterpretAsync(DefineClassStatement.BlockStatements);
+                        // Step back a class scope
+                        SetCurrentClass(PreviousClass);
+                        // Store class constant
+                        ClassName.Block.Parent!.Constants[ClassName.Token.Value!] = new ClassReference(NewClass);
                     }
                     else {
                         throw new InternalErrorException($"Invalid class name: {ClassNameObject}");
@@ -903,15 +941,15 @@ namespace Embers
             NilClass = new Class("NilClass", RootClass); RootClass.Constants.Add("NilClass", new ClassReference(NilClass)); Nil = new NilInstance(NilClass);
             TrueClass = new Class("TrueClass", RootClass); RootClass.Constants.Add("TrueClass", new ClassReference(TrueClass)); True = new TrueInstance(TrueClass);
             FalseClass = new Class("FalseClass", RootClass); RootClass.Constants.Add("FalseClass", new ClassReference(FalseClass)); False = new FalseInstance(FalseClass);
-            String = new Class("String", RootClass, new Method(async (Interpreter, Instance, Arguments) => {
-                if (Arguments.Count == 1) {
-                    ((StringInstance)Instance).SetValue(Arguments[0].String); // Change to implicit conversion
+            String = new Class("String", RootClass, new Method(async (Input) => {
+                if (Input.Arguments.Count == 1) {
+                    ((StringInstance)Input.Instance).SetValue(Input.Arguments[0].String); // Change to implicit conversion
                 }
                 return Nil;
             }, 0..1)); RootClass.Constants.Add("String", new ClassReference(String));
             Integer = new Class("Integer", RootClass, null); RootClass.Constants.Add("Integer", new ClassReference(Integer));
-            Integer.Methods.Add("+", new Method(async (Interpreter, Instance, Arguments) => {
-                return new IntegerInstance(Integer, Instance.Integer + Arguments[0].Integer);
+            Integer.Methods.Add("+", new Method(async (Input) => {
+                return new IntegerInstance(Integer, Input.Instance.Integer + Input.Arguments[0].Integer);
             }, 1));
             Float = new Class("Float", RootClass, null); RootClass.Constants.Add("Float", new ClassReference(Float));
 
