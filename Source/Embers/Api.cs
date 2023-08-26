@@ -16,6 +16,7 @@ namespace Embers
                 {"puts", new Method(Puts, null)},
                 {"print", new Method(Print, null)},
                 {"p", new Method(P, null)},
+                {"warn", new Method(Warn, null)},
                 {"sleep", new Method(Sleep, 0..1)}
             };
             return Methods;
@@ -37,6 +38,14 @@ namespace Embers
             foreach (Instance Message in Messages) {
                 Console.WriteLine(Message.Inspect());
             }
+            return Interpreter.Nil;
+        }
+        async Task<Instance> Warn(Interpreter Interpreter, Instance Instance, List<Instance> Messages) {
+            Console.ForegroundColor = ConsoleColor.DarkYellow;
+            foreach (Instance Message in Messages) {
+                Console.WriteLine(Message.Object);
+            }
+            Console.ResetColor();
             return Interpreter.Nil;
         }
         async Task<Instance> Sleep(Interpreter Interpreter, Instance Instance, List<Instance> Time) {

@@ -8,6 +8,10 @@ namespace Embers
 {
     public static class Phase1
     {
+        static readonly string EndKeyword = Phase2.Phase2TokenType.End.ToString().ToLower();
+        static readonly string DefKeyword = Phase2.Phase2TokenType.Def.ToString().ToLower();
+        static readonly string ClassKeyword = Phase2.Phase2TokenType.Class.ToString().ToLower();
+
         public enum Phase1TokenType {
             Identifier,
             Integer,
@@ -18,6 +22,7 @@ namespace Embers
             AssignmentOperator,
             ArithmeticOperator,
             Dot,
+            DoubleColon,
             Comma,
         }
         public class Phase1Token {
@@ -184,10 +189,21 @@ namespace Embers
                 }
                 bool IsDefStatement() {
                     for (int i2 = Tokens.Count - 1; i2 >= 0; i2--) {
-                        if (Tokens[i2].Type == Phase1TokenType.EndOfStatement) {
+                        if (Tokens[i2].Type == Phase1TokenType.Identifier && Tokens[i2].Value == DefKeyword) {
+                            return true;
+                        }
+                        else if (Tokens[i2].Type != Phase1TokenType.Identifier && Tokens[i2].Type != Phase1TokenType.Dot) {
                             break;
                         }
-                        else if (Tokens[i2].Type == Phase1TokenType.Identifier && Tokens[i2].Value == "def") {
+                    }
+                    return false;
+                }
+                bool IsClassStatement() {
+                    for (int i2 = Tokens.Count - 1; i2 >= 0; i2--) {
+                        if (Tokens[i2].Type != Phase1TokenType.Identifier && Tokens[i2].Type != Phase1TokenType.DoubleColon) {
+                            break;
+                        }
+                        else if (Tokens[i2].Type == Phase1TokenType.Identifier && Tokens[i2].Value == ClassKeyword) {
                             return true;
                         }
                     }
@@ -233,6 +249,7 @@ namespace Embers
                             Tokens.Add(new(Phase1TokenType.CloseBracket, null, FollowsWhitespace));
                             if (Brackets.TryPop(out char Opener) == false || Opener != '(')
                                 throw new SyntaxErrorException("Unexpected close bracket: )");
+                            // Add EndOfStatement after def statement
                             if (IsDefStatement())
                                 Tokens.Add(new(Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
                             break;
@@ -256,6 +273,15 @@ namespace Embers
                                 break;
                             }
                             goto case ';';
+                        case ':':
+                            if (NextChara == ':') {
+                                i++;
+                                Tokens.Add(new(Phase1TokenType.DoubleColon, null, FollowsWhitespace));
+                            }
+                            else {
+                                throw new NotImplementedException();
+                            }
+                            break;
                         case ';':
                             if (!LastTokenWas(Phase1TokenType.EndOfStatement))
                                 Tokens.Add(new(Phase1TokenType.EndOfStatement, Chara.ToString(), FollowsWhitespace));
@@ -302,15 +328,19 @@ namespace Embers
                             }
                         default:
                             // Skip whitespace
-                            if (char.IsWhiteSpace(Chara))
+                            if (char.IsWhiteSpace(Chara)) {
+                                // Add EndOfStatement after class statement
+                                if (!(LastTokenWas(Phase1TokenType.Identifier) && Tokens[^1].Value == ClassKeyword) && IsClassStatement())
+                                    Tokens.Add(new(Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
                                 break;
+                            }
                             // Build identifier
                             string Identifier = BuildWhile(IsValidIdentifierCharacter);
                             // Double check identifier
                             if (Identifier.Length == 0)
                                 throw new InternalErrorException($"Character not handled correctly: '{Chara}'");
                             // Add EndOfStatement before end keyword
-                            if (Identifier == Phase2.Phase2TokenType.End.ToString().ToLower())
+                            if (Identifier == EndKeyword && !LastTokenWas(Phase1TokenType.EndOfStatement))
                                 Tokens.Add(new(Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
                             // Add identifier
                             Tokens.Add(new(Phase1TokenType.Identifier, Identifier, FollowsWhitespace));
@@ -319,32 +349,6 @@ namespace Embers
                     }
                 }
             }
-
-            /*// Remove EndOfStatement after statements that contain "def" keyword
-            bool InBlock = false;
-            for (int i = 0; i < Tokens.Count; i++) {
-                Phase1Token Token = Tokens[i];
-
-                if (Token.Type == Phase1TokenType.EndOfStatement) {
-                    if (InBlock) {
-                        // Tokens.RemoveAt(i);
-                        // i--;
-                    }
-                    else {
-                        InBlock = false;
-                    }
-                }
-                else if (Token.Type == Phase1TokenType.Identifier && Token.Value == "end") {
-                    InBlock = false;
-                }
-                else if (Token.Type == Phase1TokenType.Identifier && Token.Value == "def") {
-                    InBlock = true;
-                }
-            }
-
-            for (int i = 0; i < Tokens.Count; i++) {
-                Console.WriteLine(Tokens[i].Inspect());
-            }*/
 
             return Tokens;
         }

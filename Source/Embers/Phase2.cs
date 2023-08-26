@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using static Embers.Interpreter;
@@ -34,6 +33,7 @@ namespace Embers
 
             // Temporary
             Dot,
+            DoubleColon,
             Comma,
             OpenBracket,
             CloseBracket,
@@ -132,6 +132,15 @@ namespace Embers
                 return RootObject.Inspect() + "." + RootObject.Inspect();
             }
         }
+        public class ConstantPathExpression : ObjectTokenExpression {
+            public Expression RootObject;
+            public ConstantPathExpression(Expression rootObject, Phase2Token objectToken) : base(objectToken) {
+                RootObject = rootObject;
+            }
+            public override string Inspect() {
+                return RootObject.Inspect() + "." + RootObject.Inspect();
+            }
+        }
         /*public class ArithmeticExpression : Expression {
             public Expression Left;
             public string Operator;
@@ -215,9 +224,9 @@ namespace Embers
             }
         }*/
         public class DefineMethodStatement : Statement {
-            public Expression MethodName;
+            public ObjectTokenExpression MethodName;
             public Method Method;
-            public DefineMethodStatement(Expression methodName, Method method) {
+            public DefineMethodStatement(ObjectTokenExpression methodName, Method method) {
                 MethodName = methodName;
                 Method = method;
             }
@@ -226,12 +235,21 @@ namespace Embers
             }
         }
         public class UndefineMethodStatement : Statement {
-            public Expression MethodName;
-            public UndefineMethodStatement(Expression methodName) {
+            public ObjectTokenExpression MethodName;
+            public UndefineMethodStatement(ObjectTokenExpression methodName) {
                 MethodName = methodName;
             }
             public override string Inspect() {
                 return "undef " + MethodName.Inspect();
+            }
+        }
+        public class DefineClassStatement : Statement {
+            public ObjectTokenExpression ClassName;
+            public DefineClassStatement(ObjectTokenExpression className) {
+                ClassName = className;
+            }
+            public override string Inspect() {
+                return "class " + ClassName.Inspect();
             }
         }
 
@@ -359,6 +377,7 @@ namespace Embers
                         Phase1TokenType.AssignmentOperator => new Phase2Token(Phase2TokenType.AssignmentOperator, Token.Value, Token.FollowsWhitespace),
                         Phase1TokenType.ArithmeticOperator => new Phase2Token(Phase2TokenType.ArithmeticOperator, Token.Value, Token.FollowsWhitespace),
                         Phase1TokenType.Dot => new Phase2Token(Phase2TokenType.Dot, Token.Value, Token.FollowsWhitespace),
+                        Phase1TokenType.DoubleColon => new Phase2Token(Phase2TokenType.DoubleColon, Token.Value, Token.FollowsWhitespace),
                         Phase1TokenType.Comma => new Phase2Token(Phase2TokenType.Comma, Token.Value, Token.FollowsWhitespace),
                         Phase1TokenType.OpenBracket => new Phase2Token(Phase2TokenType.OpenBracket, Token.Value, Token.FollowsWhitespace),
                         Phase1TokenType.CloseBracket => new Phase2Token(Phase2TokenType.CloseBracket, Token.Value, Token.FollowsWhitespace),
@@ -736,13 +755,92 @@ namespace Embers
                         }
                     }
                 }
-                if (!NextTokenCanBeComma && NextTokenCanBeObject) {
+                if (!NextTokenCanBeComma && NextTokenCanBeObject && DefObjects.Count != 1) {
                     throw new SyntaxErrorException("Expected value after comma, got nothing");
                 }
             }
 
             // Open define method block
             return new BuildingMethod(MethodName, MethodArguments);
+        }
+        static BuildingClass ParseStartDefineClass(List<Phase2Object> StatementTokens) {
+            if (StatementTokens.Count == 1)
+                throw new SyntaxErrorException("Class keyword must be followed by an identifier (got nothing)");
+                                
+            /*// Get def statement (e.g my_method(arg1, arg2))
+            int EndOfDef = StatementTokens.FindIndex(o => o is Phase2Token tok && tok.Type == Phase2TokenType.CloseBracket);
+            if (EndOfDef == -1) EndOfDef = StatementTokens.Count - 1;
+            List<Phase2Object> DefObjects = StatementTokens.GetIndexRange(1, EndOfDef);
+
+            // Check for remaining arguments (internal error)
+            if (EndOfDef + 1 > StatementTokens.Count) {
+                List<Phase2Object> RemainingArguments = StatementTokens.GetIndexRange(EndOfDef + 1);
+                throw new InternalErrorException($"There shouldn't be any remaining arguments after DefObjects (got {InspectList(RemainingArguments)})");
+            }*/
+
+
+
+            // Get class name
+            {
+                bool NextTokenCanBeVariable = true;
+                bool NextTokenCanBeDoubleColon = false;
+                List<Phase2Token> ClassNamePath = new();
+                for (int i = 1; i < StatementTokens.Count; i++) {
+                    // Phase2Object? LastObject = i - 1 >= 1 ? StatementTokens[i - 1] : null;
+                    Phase2Object Object = StatementTokens[i];
+                    // Phase2Object? NextObject = i + 1 < StatementTokens.Count ? StatementTokens[i + 1] : null;
+
+                    if (Object is Phase2Token ObjectToken) {
+                        if (ObjectToken.Type == Phase2TokenType.DoubleColon) {
+                            if (NextTokenCanBeDoubleColon) {
+                                NextTokenCanBeVariable = true;
+                                NextTokenCanBeDoubleColon = false;
+                            }
+                            else {
+                                throw new SyntaxErrorException("Expected expression before and after .");
+                            }
+                        }
+                        else if (IsVariableToken(ObjectToken)) {
+                            if (NextTokenCanBeVariable) {
+                                ClassNamePath.Add(ObjectToken);
+                                NextTokenCanBeVariable = false;
+                                NextTokenCanBeDoubleColon = true;
+                            }
+                            else {
+                                break;
+                            }
+                        }
+                        else if (ObjectToken.Type == Phase2TokenType.OpenBracket) {
+                            break;
+                        }
+                        else if (IsObjectToken(ObjectToken)) {
+                            break;
+                        }
+                        else {
+                            throw new SyntaxErrorException($"Unexpected token when parsing method path: {ObjectToken.Inspect()}");
+                        }
+                    }
+                }
+                // Remove method name path tokens and replace with a path expression
+                StatementTokens.RemoveRange(0, ClassNamePath.Count + ClassNamePath.Count - 1);
+                ObjectTokenExpression? ClassNamePathExpression = null;
+                if (ClassNamePath.Count == 1) {
+                    ClassNamePathExpression = new ObjectTokenExpression(ClassNamePath[0]);
+                }
+                else {
+                    for (int i = 0; i < ClassNamePath.Count; i++) {
+                        ClassNamePathExpression = new PathExpression(new ObjectTokenExpression(ClassNamePath[i]), ClassNamePath[i + 1]);
+                    }
+                }
+                StatementTokens.Insert(0, ClassNamePathExpression!);
+            }
+            ObjectTokenExpression ClassName = StatementTokens[0] as ObjectTokenExpression ?? throw new SyntaxErrorException($"Class keyword must be followed by an identifier (got {StatementTokens[0].Inspect()})");
+            if (ClassName.Token.Type != Phase2TokenType.Constant) {
+                throw new SyntaxErrorException("Class name must be Constant");
+            }
+
+            // Open define method block
+            return new BuildingClass(ClassName);
         }
         static Statement ParseEndStatement(Stack<BuildingBlock> BlockStackInfo, Stack<List<Statement>> BlockStackStatements) {
             BuildingBlock Block = BlockStackInfo.Pop();
@@ -754,6 +852,9 @@ namespace Embers
                         return await Interpreter.InterpretAsync(BlockStatements);
                     }, MethodBlock.RequiredArgumentsCount..MethodBlock.Arguments.Count, MethodBlock.Arguments)
                 );
+            }
+            else if (Block is BuildingClass ClassBlock) {
+                return new DefineClassStatement(ClassBlock.ClassName);
             }
             else {
                 throw new InternalErrorException($"Unrecognised block type: {Block.GetType().Name}");
@@ -781,6 +882,12 @@ namespace Embers
                 }
             }
         }
+        class BuildingClass : BuildingBlock {
+            public readonly ObjectTokenExpression ClassName;
+            public BuildingClass(ObjectTokenExpression className) {
+                ClassName = className;
+            }
+        }
         public static List<Statement> GetStatements(List<Phase2Token> Phase2Tokens) {
             List<Phase2Object> Phase2Objects = new(Phase2Tokens);
 
@@ -803,6 +910,12 @@ namespace Embers
                         BuildingMethod BuildingMethod = ParseStartDefineMethod(StatementTokens);
                         // Open define method block
                         BlockStackInfo.Push(BuildingMethod);
+                        BlockStackStatements.Push(new List<Statement>());
+                    }
+                    else if (Token.Type == Phase2TokenType.Class) {
+                        BuildingClass BuildingClass = ParseStartDefineClass(StatementTokens);
+                        // Open define class block
+                        BlockStackInfo.Push(BuildingClass);
                         BlockStackStatements.Push(new List<Statement>());
                     }
                     else if (Token.Type == Phase2TokenType.End) {
