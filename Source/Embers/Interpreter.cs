@@ -570,7 +570,8 @@ namespace Embers
                 // Path
                 if (ObjectTokenExpression is PathExpression PathExpression) {
                     Instance ParentInstance = await InterpretExpressionAsync(PathExpression.ParentObject);
-                    if (ObjectTokenExpression.Token.Type == Phase2TokenType.LocalVariableOrMethod || ObjectTokenExpression.Token.Type == Phase2TokenType.Constant) {
+                    if (ObjectTokenExpression.Token.Type == Phase2TokenType.LocalVariableOrMethod || ObjectTokenExpression.Token.Type == Phase2TokenType.ConstantOrMethod) {
+                        // Method
                         if (ParentInstance.Class.Methods.TryGetValue(ObjectTokenExpression.Token.Value!, out Method? FindMethod)) {
                             if (!ReturnVariableReference) {
                                 return await FindMethod.Call(this, ParentInstance);
@@ -579,9 +580,11 @@ namespace Embers
                                 return new VariableReference(ParentInstance.Class, ObjectTokenExpression.Token);
                             }
                         }
+                        // Constant
                         else if (ParentInstance.Class.Constants.TryGetValue(ObjectTokenExpression.Token.Value!, out Instance? FindInstance)) {
                             return FindInstance;
                         }
+                        // Error
                         else {
                             throw new RuntimeException($"Undefined method '{ObjectTokenExpression.Token.Value!}' for {ParentInstance.Class.Name}");
                         }
@@ -623,10 +626,16 @@ namespace Embers
                                 }
                             }
                             // Constant
-                            else if (ObjectTokenExpression.Token.Type == Phase2TokenType.Constant) {
+                            else if (ObjectTokenExpression.Token.Type == Phase2TokenType.ConstantOrMethod) {
+                                // Constant (priority)
                                 if (CurrentBlock.TryGetConstant(ObjectTokenExpression.Token.Value!, out Instance? ConstantValue)) {
                                     return ConstantValue!;
                                 }
+                                // Method
+                                else if (CurrentClass.TryGetMethod(ObjectTokenExpression.Token.Value!, out Method? Method)) {
+                                    return await Method!.Call(this, new ScopeReference(CurrentScope));
+                                }
+                                // Uninitialized
                                 else {
                                     throw new RuntimeException($"Uninitialized constant '{ObjectTokenExpression.Token.Value!}' for {CurrentBlock}");
                                 }
@@ -704,7 +713,7 @@ namespace Embers
                             return Nil;
                         }
                     }
-                    else if (ObjectToken.Token.Type == Phase2TokenType.Constant) {
+                    else if (ObjectToken.Token.Type == Phase2TokenType.ConstantOrMethod) {
                         throw new NotImplementedException("Defined? not yet implemented for constants");
                     }
                     else if (ObjectToken.Token.Type == Phase2TokenType.InstanceVariable) {
@@ -748,7 +757,7 @@ namespace Embers
                         case Phase2TokenType.GlobalVariable:
                             GlobalVariables[Variable.Token.Value!] = Value;
                             break;
-                        case Phase2TokenType.Constant:
+                        case Phase2TokenType.ConstantOrMethod:
                             if (CurrentBlock.Constants.ContainsKey(Variable.Token.Value!))
                                 await Warn($"Already initialized constant '{Variable.Token.Value!}'");
                             CurrentBlock.Constants[Variable.Token.Value!] = Value;

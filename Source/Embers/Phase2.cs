@@ -17,7 +17,7 @@ namespace Embers
         public enum Phase2TokenType {
             LocalVariableOrMethod,
             GlobalVariable,
-            Constant,
+            ConstantOrMethod,
             InstanceVariable,
             ClassVariable,
 
@@ -157,9 +157,11 @@ namespace Embers
         public class MethodCallExpression : Expression {
             public ObjectTokenExpression MethodPath;
             public List<Expression> Arguments;
-            public MethodCallExpression(ObjectTokenExpression methodPath, List<Expression> arguments) {
+            public List<Statement>? OnYield; // do ... end
+            public MethodCallExpression(ObjectTokenExpression methodPath, List<Expression>? arguments, List<Statement>? onYield = null) {
                 MethodPath = methodPath;
-                Arguments = arguments;
+                Arguments = arguments ?? new List<Expression>();
+                OnYield = onYield;
             }
             public override string Inspect() {
                 return $"{MethodPath.Inspect()}({InspectList(Arguments)})";
@@ -285,7 +287,7 @@ namespace Embers
                 Identifier = Token.NonNullValue[1..];
             }
             else if (char.IsAsciiLetterUpper(Token.NonNullValue[0])) {
-                IdentifierType = Phase2TokenType.Constant;
+                IdentifierType = Phase2TokenType.ConstantOrMethod;
                 Identifier = Token.NonNullValue;
             }
             else {
@@ -339,19 +341,21 @@ namespace Embers
         public static bool IsVariableToken(Phase2TokenType? Type) {
             return Type == Phase2TokenType.LocalVariableOrMethod
                 || Type == Phase2TokenType.GlobalVariable
-                || Type == Phase2TokenType.Constant
+                || Type == Phase2TokenType.ConstantOrMethod
                 || Type == Phase2TokenType.InstanceVariable
                 || Type == Phase2TokenType.ClassVariable;
         }
         public static bool IsVariableToken(Phase2Token? Token) {
             return Token != null && IsVariableToken(Token.Type);
         }
-        static string InspectList<T>(List<T> List, string Separator = ", ") where T : Phase2Object {
+        static string InspectList<T>(List<T>? List, string Separator = ", ") where T : Phase2Object {
             string ListInspection = "";
-            foreach (Phase2Object Object in List) {
-                if (ListInspection.Length != 0)
-                    ListInspection += Separator;
-                ListInspection += Object.Inspect();
+            if (List != null) {
+                foreach (Phase2Object Object in List) {
+                    if (ListInspection.Length != 0)
+                        ListInspection += Separator;
+                    ListInspection += Object.Inspect();
+                }
             }
             return ListInspection;
         }
@@ -403,20 +407,24 @@ namespace Embers
             }
             return Tokens;
         }
-        static List<Expression> BuildArguments(List<Phase2Object> Objects, ref int IndexBeforeArguments, bool WrappedInBrackets) {
+        static List<Expression> BuildArguments(List<Phase2Object> Objects, ref int Index, bool WrappedInBrackets) {
             List<Expression> Arguments = new();
 
             bool AcceptArgument = true;
-            while (IndexBeforeArguments < Objects.Count) {
+            while (Index < Objects.Count) {
                 int AddArgument(int Index) {
                     List<Phase2Object> Argument = GetTokensUntil(Objects, ref Index, obj =>
-                        obj is Phase2Token tok && (tok.Type == Phase2TokenType.Comma || tok.Type == Phase2TokenType.CloseBracket));
+                        obj is Phase2Token tok && (
+                            tok.Type == Phase2TokenType.Comma
+                            || tok.Type == Phase2TokenType.CloseBracket
+                            || tok.Type == Phase2TokenType.Do
+                        ));
                     Arguments.Add(ObjectsToExpression(Argument));
                     Index--;
                     AcceptArgument = false;
                     return Index;
                 }
-                if (Objects[IndexBeforeArguments] is Phase2Token Token) {
+                if (Objects[Index] is Phase2Token Token) {
                     if (Token.Type == Phase2TokenType.Comma) {
                         if (AcceptArgument)
                             throw new SyntaxErrorException("Expected argument before ','");
@@ -424,43 +432,52 @@ namespace Embers
                     }
                     else if (Token.Type == Phase2TokenType.CloseBracket) {
                         if (WrappedInBrackets)
-                            IndexBeforeArguments++;
+                            Index++;
+                        break;
+                    }
+                    else if (Token.Type == Phase2TokenType.Do) {
                         break;
                     }
                     else {
-                        IndexBeforeArguments = AddArgument(IndexBeforeArguments);
+                        Index = AddArgument(Index);
                     }
                 }
                 else {
-                    IndexBeforeArguments = AddArgument(IndexBeforeArguments);
+                    Index = AddArgument(Index);
                 }
-                IndexBeforeArguments++;
+                Index++;
             }
             return Arguments;
         }
-        static List<Expression> ParseArgumentsWithBrackets(List<Phase2Object> Objects, ref int IndexBeforeArguments) {
-            IndexBeforeArguments += 2;
-            List<Expression> Arguments = BuildArguments(Objects, ref IndexBeforeArguments, true);
+        static List<Expression> ParseArgumentsWithBrackets(List<Phase2Object> Objects, ref int Index) {
+            Index += 2;
+            List<Expression> Arguments = BuildArguments(Objects, ref Index, true);
             return Arguments;
         }
-        static List<Expression> ParseArgumentsWithoutBrackets(List<Phase2Object> Objects, ref int IndexBeforeArguments) {
-            IndexBeforeArguments++;
-            List<Expression> Arguments = BuildArguments(Objects, ref IndexBeforeArguments, false);
+        static List<Expression> ParseArgumentsWithoutBrackets(List<Phase2Object> Objects, ref int Index) {
+            Index++;
+            List<Expression> Arguments = BuildArguments(Objects, ref Index, false);
             return Arguments;
         }
-        static List<Expression>? ParseArguments(List<Phase2Object> Objects, ref int IndexBeforeArguments) {
-            if (IndexBeforeArguments + 1 < Objects.Count) {
-                Phase2Object NextObject = Objects[IndexBeforeArguments + 1];
-                if (NextObject is Phase2Token NextToken && NextToken.Type == Phase2TokenType.OpenBracket) {
-                    if (!NextToken.FollowsWhitespace) {
-                        return ParseArgumentsWithBrackets(Objects, ref IndexBeforeArguments);
+        static List<Expression>? ParseArguments(List<Phase2Object> Objects, ref int Index) {
+            if (Index + 1 < Objects.Count) {
+                Phase2Object NextObject = Objects[Index + 1];
+                if (NextObject is Phase2Token NextToken) {
+                    if (NextToken.Type == Phase2TokenType.OpenBracket) {
+                        if (!NextToken.FollowsWhitespace) {
+                            return ParseArgumentsWithBrackets(Objects, ref Index);
+                        }
+                        else {
+                            return ParseArgumentsWithoutBrackets(Objects, ref Index);
+                        }
                     }
                     else {
-                        return ParseArgumentsWithoutBrackets(Objects, ref IndexBeforeArguments);
+                        // Might be redundant.
+                        return ParseArgumentsWithoutBrackets(Objects, ref Index);
                     }
                 }
-                else if (NextObject is not Phase2Token && NextObject != null) {
-                    return ParseArgumentsWithoutBrackets(Objects, ref IndexBeforeArguments);
+                else {
+                    return ParseArgumentsWithoutBrackets(Objects, ref Index);
                 }
             }
             return null;
@@ -552,9 +569,12 @@ namespace Embers
             for (int i = 0; i < ParsedObjects.Count; i++) {
                 Phase2Object UnknownToken = ParsedObjects[i];
 
-                if (UnknownToken is ObjectTokenExpression ObjectToken && (ObjectToken.Token.Type == Phase2TokenType.LocalVariableOrMethod || ObjectToken.Token.Type == Phase2TokenType.Constant)) {
+                if (UnknownToken is ObjectTokenExpression ObjectToken && (ObjectToken.Token.Type == Phase2TokenType.LocalVariableOrMethod || ObjectToken.Token.Type == Phase2TokenType.ConstantOrMethod)) {
+                    // Parse arguments
                     int EndOfArgumentsIndex = i;
                     List<Expression>? Arguments = ParseArguments(ParsedObjects, ref EndOfArgumentsIndex);
+
+                    // Add method call
                     if (Arguments != null) {
                         ParsedObjects.RemoveRange(i, EndOfArgumentsIndex - i);
                         ParsedObjects.Insert(i, new MethodCallExpression(ObjectToken, Arguments));
@@ -568,7 +588,7 @@ namespace Embers
                 if (ParsedObject is Expression ParsedExpression)
                     Expressions.Add(ParsedExpression);
                 else
-                    throw new InternalErrorException($"Parsed objects should all be expressions (got a {ParsedObject.GetType().Name} {ParsedObject.Inspect()})");
+                    throw new InternalErrorException($"Parsed objects should all be expressions (one was {ParsedObject.GetType().Name} {ParsedObject.Inspect()})");
             }
             return Expressions;
         }
@@ -825,28 +845,81 @@ namespace Embers
                 StatementTokens.Insert(0, ClassNamePathExpression!);
             }
             ObjectTokenExpression ClassName = StatementTokens[0] as ObjectTokenExpression ?? throw new SyntaxErrorException($"Class keyword must be followed by an identifier (got {StatementTokens[0].Inspect()})");
-            if (ClassName.Token.Type != Phase2TokenType.Constant) {
+            if (ClassName.Token.Type != Phase2TokenType.ConstantOrMethod) {
                 throw new SyntaxErrorException("Class name must be Constant");
             }
 
             // Open define class block
             return new BuildingClass(ClassName);
         }
-        static Statement ParseEndStatement(Stack<BuildingBlock> BlockStackInfo) {
+        static Statement? ParseEndStatement(Stack<BuildingBlock> BlockStackInfo) {
             BuildingBlock Block = BlockStackInfo.Pop();
 
+            // End Method Block
             if (Block is BuildingMethod MethodBlock) {
                 return new DefineMethodStatement(MethodBlock.MethodName,
                     new Method(async (Input) => {
-                        return await Input.Interpreter.InterpretAsync(Block.Statements);
+                        return await Input.Interpreter.InterpretAsync(MethodBlock.Statements);
                     }, MethodBlock.RequiredArgumentsCount..MethodBlock.Arguments.Count, MethodBlock.Arguments)
                 );
             }
+            // End Class Block
             else if (Block is BuildingClass ClassBlock) {
-                return new DefineClassStatement(ClassBlock.ClassName, Block.Statements);
+                return new DefineClassStatement(ClassBlock.ClassName, ClassBlock.Statements);
             }
+            // End Do Block
+            else if (Block is BuildingDo DoBlock) {
+                // Get last block
+                BuildingBlock LastBlock = BlockStackInfo.Peek();
+                if (LastBlock != null && LastBlock.Statements.Count != 0) {
+                    // Get last expression in last statement
+                    Statement LastStatement = LastBlock.Statements[^1];
+                    Expression LastExpression;
+                    {
+                        if (LastStatement is AssignmentStatement LastAssignmentStatement) {
+                            LastExpression = LastAssignmentStatement.Right;
+                        }
+                        else if (LastStatement is ExpressionStatement LastExpressionStatement) {
+                            LastExpression = LastExpressionStatement.Expression;
+                        }
+                        else {
+                            throw new SyntaxErrorException($"Do block must follow method call, not {LastStatement.GetType().Name}");
+                        }
+                    }
+
+                    // Set on yield for already known method call
+                    if (LastExpression is MethodCallExpression LastMethodCallExpression) {
+                        LastMethodCallExpression.OnYield = DoBlock.Statements;
+                        return null;
+                    }
+                    // Set on yield for LocalVariableOrMethod/ConstantOrMethod which we now know is definitely a method call
+                    else if (LastExpression is ObjectTokenExpression LastObjectTokenExpression) {
+                        if (LastObjectTokenExpression.Token.Type == Phase2TokenType.LocalVariableOrMethod || LastObjectTokenExpression.Token.Type == Phase2TokenType.ConstantOrMethod) {
+                            // Create method call from LocalVariableOrMethod/ConstantOrMethod
+                            MethodCallExpression DeducedMethodCallExpression = new(LastObjectTokenExpression, null, DoBlock.Statements);
+                            if (LastStatement is AssignmentStatement LastAssignmentStatement) {
+                                LastAssignmentStatement.Right = DeducedMethodCallExpression;
+                            }
+                            else if (LastStatement is ExpressionStatement LastExpressionStatement) {
+                                LastExpressionStatement.Expression = DeducedMethodCallExpression;
+                            }
+                            return null;
+                        }
+                        else {
+                            throw new SyntaxErrorException($"Do block must follow method call, not {LastObjectTokenExpression.Token.Type}");
+                        }
+                    }
+                    else {
+                        throw new SyntaxErrorException($"Do block must follow method call, not {LastExpression.GetType().Name}");
+                    }
+                }
+                else {
+                    throw new SyntaxErrorException("Do block must follow method call");
+                }
+            }
+            // End Unknown Block (internal error)
             else {
-                throw new InternalErrorException($"Unrecognised block type: {Block.GetType().Name}");
+                throw new InternalErrorException($"End block not handled for type: {Block.GetType().Name}");
             }
         }
 
@@ -877,19 +950,19 @@ namespace Embers
                 ClassName = className;
             }
         }
-        public static List<Statement> GetStatements(List<Phase2Token> Phase2Tokens) {
-            List<Phase2Object> Phase2Objects = new(Phase2Tokens);
+        class BuildingDo : BuildingBlock {
 
+        }
+        public static List<Statement> GetStatements(List<Phase2Object> Phase2Objects) {
             // Get statements tokens
             List<List<Phase2Object>> StatementsTokens = SplitObjects(Phase2Objects, Phase2TokenType.EndOfStatement, out _, true);
 
             Stack<BuildingBlock> BlockStackInfo = new();
-
             BlockStackInfo.Push(new BuildingBlock());
 
             // Evaluate statements
             foreach (List<Phase2Object> StatementTokens in StatementsTokens) {
-
+                bool NoBlockBuilt = false;
                 if (StatementTokens[0] is Phase2Token Token) {
                     if (Token.Type == Phase2TokenType.Def) {
                         BuildingMethod BuildingMethod = ParseStartDefineMethod(StatementTokens);
@@ -905,68 +978,40 @@ namespace Embers
                         if (BlockStackInfo.Count == 1) {
                             throw new SyntaxErrorException("Unexpected end statement");
                         }
-                        Statement FinishedStatement = ParseEndStatement(BlockStackInfo);
-                        BlockStackInfo.Peek().Statements.Add(FinishedStatement);
+                        Statement? FinishedStatement = ParseEndStatement(BlockStackInfo);
+                        if (FinishedStatement != null)
+                            BlockStackInfo.Peek().Statements.Add(FinishedStatement);
                     }
                     else {
-                        BlockStackInfo.Peek().Statements.Add(new ExpressionStatement(ObjectsToExpression(StatementTokens)));
+                        // BlockStackInfo.Peek().Statements.Add(new ExpressionStatement(ObjectsToExpression(StatementTokens)));
+                        NoBlockBuilt = true;
                     }
                 }
                 else {
-                    AssignmentStatement? Assignment = ParseAssignmentStatement(StatementTokens);
+                    NoBlockBuilt = true;
+                }
+
+                if (NoBlockBuilt) {
+                    // Find do statement
+                    List<Phase2Object> UnlockedStatementTokens = StatementTokens;
+                    int FindDoStatement = StatementTokens.FindIndex(Obj => Obj is Phase2Token Tok && Tok.Type == Phase2TokenType.Do);
+                    if (FindDoStatement != -1) {
+                        UnlockedStatementTokens = StatementTokens.GetRange(0, FindDoStatement);
+                    }
+                    // Parse assignment or expression
+                    AssignmentStatement? Assignment = ParseAssignmentStatement(UnlockedStatementTokens);
                     if (Assignment != null) {
                         BlockStackInfo.Peek().Statements.Add(Assignment);
                     }
                     else {
-                        BlockStackInfo.Peek().Statements.Add(new ExpressionStatement(ObjectsToExpression(StatementTokens)));
+                        BlockStackInfo.Peek().Statements.Add(new ExpressionStatement(ObjectsToExpression(UnlockedStatementTokens)));
+                    }
+                    // Parse do statement
+                    if (FindDoStatement != -1) {
+                        BuildingDo BuildingDo = new();
+                        BlockStackInfo.Push(BuildingDo);
                     }
                 }
-
-                /*// Assignment
-                if (AssignmentOperators.Count != 0) {
-                    
-                }
-                else {
-                    // Expression
-                    if (Expressions.Count == 1) {
-                        List<Phase2Object> Objects = Expressions[0];
-
-                        void ExpectEndOfStatement(int CurrentIndex) {
-                            if (CurrentIndex < Objects.Count - 1) {
-                                throw new SyntaxErrorException($"Expected end of statement, got {InspectList(Objects.GetRange(CurrentIndex, Objects.Count - CurrentIndex))}");
-                            }
-                        }
-
-                        // Keywords
-                        int LastObjectIndexInStatement = -1;
-                        if (Objects[0] is Phase2Token Token) {
-                            // def
-                            if (Token.Type == Phase2TokenType.Def) {
-                                
-                            }
-                            // end
-                            else if (Token.Type == Phase2TokenType.End) {
-                                
-                            }
-                        }
-                        if (LastObjectIndexInStatement != -1) {
-                            ExpectEndOfStatement(LastObjectIndexInStatement);
-                        }
-                        // Expression
-                        else {
-                            
-                        }
-                    }
-                    // Empty
-                    else if (Expressions.Count == 0) {
-                        // Pass
-                    }
-                    // Error
-                    else {
-                        throw new InternalErrorException($"Invalid statement ({Expressions.Count} expressions, {AssignmentOperators.Count} assignment operators)");
-                    }
-                }
-            }*/
             }
             if (BlockStackInfo.Count != 1) {
                 throw new SyntaxErrorException("Block was never closed with an end statement");
@@ -977,13 +1022,21 @@ namespace Embers
             List<Phase2Token> Phase2Tokens = TokensToPhase2(Phase1Tokens);
             return GetStatements(Phase2Tokens);
         }
+        public static List<Statement> GetStatements(List<Phase2Token> Phase2Tokens) {
+            List<Phase2Object> Phase2Objects = new(Phase2Tokens);
+            return GetStatements(Phase2Objects);
+        }
     }
     public static class Extensions {
         public static List<T> GetIndexRange<T>(this List<T> List, int StartIndex, int EndIndex) {
+            if (StartIndex > EndIndex)
+                return new List<T>();
             return List.GetRange(StartIndex, EndIndex - StartIndex + 1);
         }
         public static List<T> GetIndexRange<T>(this List<T> List, int StartIndex) {
             int EndIndex = List.Count - 1;
+            if (StartIndex > EndIndex)
+                return new List<T>();
             return List.GetRange(StartIndex, EndIndex - StartIndex + 1);
         }
     }

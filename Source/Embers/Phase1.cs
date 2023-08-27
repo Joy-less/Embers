@@ -247,6 +247,7 @@ namespace Embers
                         case ')':
                             RemoveEndOfStatement();
                             Tokens.Add(new(Phase1TokenType.CloseBracket, null, FollowsWhitespace));
+                            // Handle unexpected close bracket
                             if (Brackets.TryPop(out char Opener) == false || Opener != '(')
                                 throw new SyntaxErrorException("Unexpected close bracket: )");
                             // Add EndOfStatement after def statement

@@ -12,7 +12,9 @@ class A
     end
 end
 
-A.a
+A.a do
+
+end
 ";
             Benchmark(() => new Interpreter().Evaluate(Code));
 
