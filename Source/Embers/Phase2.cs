@@ -157,8 +157,8 @@ namespace Embers
         public class MethodCallExpression : Expression {
             public ObjectTokenExpression MethodPath;
             public List<Expression> Arguments;
-            public List<Statement>? OnYield; // do ... end
-            public MethodCallExpression(ObjectTokenExpression methodPath, List<Expression>? arguments, List<Statement>? onYield = null) {
+            public Method? OnYield; // do ... end
+            public MethodCallExpression(ObjectTokenExpression methodPath, List<Expression>? arguments, Method? onYield = null) {
                 MethodPath = methodPath;
                 Arguments = arguments ?? new List<Expression>();
                 OnYield = onYield;
@@ -255,6 +255,16 @@ namespace Embers
             }
             public override string Inspect() {
                 return "class " + ClassName.Inspect();
+            }
+        }
+        public class YieldStatement : Statement {
+            public List<Expression>? YieldValues;
+            public YieldStatement(List<Expression>? yieldValues = null) {
+                YieldValues = yieldValues;
+            }
+            public override string Inspect() {
+                if (YieldValues != null) return "yield " + InspectList(YieldValues);
+                else return "yield";
             }
         }
 
@@ -859,7 +869,14 @@ namespace Embers
             if (Block is BuildingMethod MethodBlock) {
                 return new DefineMethodStatement(MethodBlock.MethodName,
                     new Method(async (Input) => {
-                        return await Input.Interpreter.InterpretAsync(MethodBlock.Statements);
+                        // Set OnYield function
+                        Func<List<Instance>, Task>? OnYield = null;
+                        if (Input.OnYield != null)
+                            OnYield = (YieldArgs) => {
+                                return Input.OnYield.Call(Input.Interpreter, Input.Instance, YieldArgs);
+                            };
+                        // Interpret method call
+                        return await Input.Interpreter.InterpretAsync(MethodBlock.Statements, OnYield);
                     }, MethodBlock.RequiredArgumentsCount..MethodBlock.Arguments.Count, MethodBlock.Arguments)
                 );
             }
@@ -887,16 +904,21 @@ namespace Embers
                         }
                     }
 
+                    // Get on yield method
+                    Method? OnYield = new(async (Input) => {
+                        return await Input.Interpreter.InterpretAsync(DoBlock.Statements);
+                    }, null, DoBlock.Arguments);
+
                     // Set on yield for already known method call
                     if (LastExpression is MethodCallExpression LastMethodCallExpression) {
-                        LastMethodCallExpression.OnYield = DoBlock.Statements;
+                        LastMethodCallExpression.OnYield = OnYield;
                         return null;
                     }
                     // Set on yield for LocalVariableOrMethod/ConstantOrMethod which we now know is definitely a method call
                     else if (LastExpression is ObjectTokenExpression LastObjectTokenExpression) {
                         if (LastObjectTokenExpression.Token.Type == Phase2TokenType.LocalVariableOrMethod || LastObjectTokenExpression.Token.Type == Phase2TokenType.ConstantOrMethod) {
                             // Create method call from LocalVariableOrMethod/ConstantOrMethod
-                            MethodCallExpression DeducedMethodCallExpression = new(LastObjectTokenExpression, null, DoBlock.Statements);
+                            MethodCallExpression DeducedMethodCallExpression = new(LastObjectTokenExpression, null, OnYield);
                             if (LastStatement is AssignmentStatement LastAssignmentStatement) {
                                 LastAssignmentStatement.Right = DeducedMethodCallExpression;
                             }
@@ -921,6 +943,13 @@ namespace Embers
             else {
                 throw new InternalErrorException($"End block not handled for type: {Block.GetType().Name}");
             }
+        }
+        static YieldStatement ParseYield(List<Phase2Object> StatementTokens) {
+            // Get yield values
+            int EndOfYieldValuesIndex = 0;
+            List<Expression>? YieldValues = ParseArguments(StatementTokens, ref EndOfYieldValuesIndex);
+            // Create yield statement
+            return new YieldStatement(YieldValues);
         }
 
         class BuildingBlock {
@@ -951,7 +980,10 @@ namespace Embers
             }
         }
         class BuildingDo : BuildingBlock {
-
+            public readonly List<MethodArgumentExpression> Arguments;
+            public BuildingDo(List<MethodArgumentExpression> arguments) {
+                Arguments = arguments;
+            }
         }
         public static List<Statement> GetStatements(List<Phase2Object> Phase2Objects) {
             // Get statements tokens
@@ -963,6 +995,7 @@ namespace Embers
             // Evaluate statements
             foreach (List<Phase2Object> StatementTokens in StatementsTokens) {
                 bool NoBlockBuilt = false;
+                // Special token
                 if (StatementTokens[0] is Phase2Token Token) {
                     if (Token.Type == Phase2TokenType.Def) {
                         BuildingMethod BuildingMethod = ParseStartDefineMethod(StatementTokens);
@@ -981,6 +1014,9 @@ namespace Embers
                         Statement? FinishedStatement = ParseEndStatement(BlockStackInfo);
                         if (FinishedStatement != null)
                             BlockStackInfo.Peek().Statements.Add(FinishedStatement);
+                    }
+                    else if (Token.Type == Phase2TokenType.Yield) {
+                        BlockStackInfo.Peek().Statements.Add(ParseYield(StatementTokens));
                     }
                     else {
                         // BlockStackInfo.Peek().Statements.Add(new ExpressionStatement(ObjectsToExpression(StatementTokens)));
@@ -1008,7 +1044,7 @@ namespace Embers
                     }
                     // Parse do statement
                     if (FindDoStatement != -1) {
-                        BuildingDo BuildingDo = new();
+                        BuildingDo BuildingDo = new(new()); // TODO: Change nested new() to the actual |arguments|
                         BlockStackInfo.Push(BuildingDo);
                     }
                 }

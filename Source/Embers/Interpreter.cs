@@ -456,7 +456,7 @@ namespace Embers
                 ArgumentCountRange = new IntRange(argumentCount, argumentCount);
                 ArgumentNames = argumentNames ?? new();
             }
-            public async Task<Instance> Call(Interpreter Interpreter, Instance Instance, List<Instance> Arguments) {
+            public async Task<Instance> Call(Interpreter Interpreter, Instance Instance, List<Instance> Arguments, Method? OnYield = null) {
                 if (ArgumentCountRange.IsInRange(Arguments.Count)) {
                     // Create temporary scope
                     Scope PreviousScope = Interpreter.CurrentScope;
@@ -474,7 +474,7 @@ namespace Embers
                         Interpreter.CurrentScope.LocalVariables.Add(Argument.ArgumentName.Value!, GivenArgument);
                     }
                     // Call method
-                    Instance ReturnValue = await Function(new MethodInput(Interpreter, Instance, Arguments));
+                    Instance ReturnValue = await Function(new MethodInput(Interpreter, Instance, Arguments, OnYield));
                     // Step back a scope
                     Interpreter.SetCurrentScope(PreviousScope);
                     // Return method return value
@@ -484,11 +484,11 @@ namespace Embers
                     throw new RuntimeException($"Wrong number of arguments (given {Arguments.Count}, expected {ArgumentCountRange})");
                 }
             }
-            public async Task<Instance> Call(Interpreter Interpreter, Instance Instance, Instance Argument) {
-                return await Call(Interpreter, Instance, new List<Instance>() {Argument});
+            public async Task<Instance> Call(Interpreter Interpreter, Instance Instance, Instance Argument, Method? OnYield = null) {
+                return await Call(Interpreter, Instance, new List<Instance>() {Argument}, OnYield);
             }
-            public async Task<Instance> Call(Interpreter Interpreter, Instance Instance) {
-                return await Call(Interpreter, Instance, new List<Instance>());
+            public async Task<Instance> Call(Interpreter Interpreter, Instance Instance, Method? OnYield = null) {
+                return await Call(Interpreter, Instance, new List<Instance>(), OnYield);
             }
             public void ChangeFunction(Func<MethodInput, Task<Instance>> function) {
                 Function = function;
@@ -504,10 +504,12 @@ namespace Embers
             public Interpreter Interpreter;
             public Instance Instance;
             public List<Instance> Arguments;
-            public MethodInput(Interpreter interpreter, Instance instance, List<Instance> arguments) {
+            public Method? OnYield;
+            public MethodInput(Interpreter interpreter, Instance instance, List<Instance> arguments, Method? onYield = null) {
                 Interpreter = interpreter;
                 Instance = instance;
                 Arguments = arguments;
+                OnYield = onYield;
             }
         }
         public class IntRange {
@@ -559,7 +561,9 @@ namespace Embers
                     else {
                         MethodOwner = new ClassReference(MethodClass);
                     }
-                    return await MethodClass.Methods[MethodReference.Token.Value!].Call(this, MethodOwner, await InterpretExpressionsAsync(MethodCallExpression.Arguments));
+                    return await MethodClass.Methods[MethodReference.Token.Value!].Call(
+                        this, MethodOwner, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield
+                    );
                 }
                 else {
                     throw new InternalErrorException($"MethodPath should be VariableReference, not {MethodPath.GetType().Name}");
@@ -745,7 +749,7 @@ namespace Embers
             }
             return Results;
         }
-        public async Task<Instance> InterpretAsync(List<Statement> Statements) {
+        public async Task<Instance> InterpretAsync(List<Statement> Statements, Func<List<Instance>, Task>? OnYield = null) {
             for (int Index = 0; Index < Statements.Count; Index++) {
                 Statement Statement = Statements[Index];
 
@@ -922,14 +926,25 @@ namespace Embers
                         throw new InternalErrorException($"Invalid class name: {ClassNameObject}");
                     }
                 }
+                else if (Statement is YieldStatement YieldStatement) {
+                    if (OnYield != null) {
+                        List<Instance> YieldArgs = YieldStatement.YieldValues != null
+                            ? await InterpretExpressionsAsync(YieldStatement.YieldValues)
+                            : new();
+                        await OnYield(YieldArgs);
+                    }
+                    else {
+                        throw new RuntimeException("No block given to yield to");
+                    }
+                }
                 else {
                     throw new InternalErrorException($"Not sure how to interpret statement {Statement.GetType().Name}");
                 }
             }
             return Nil;
         }
-        public Instance Interpret(List<Statement> Statements) {
-            return InterpretAsync(Statements).Result;
+        public Instance Interpret(List<Statement> Statements, Func<List<Instance>, Task>? OnYield = null) {
+            return InterpretAsync(Statements, OnYield).Result;
         }
         public async Task<Instance> EvaluateAsync(string Code) {
             List<Phase1.Phase1Token> Tokens = Phase1.GetPhase1Tokens(Code);
@@ -961,6 +976,16 @@ namespace Embers
                 return new IntegerInstance(Integer, Input.Instance.Integer + Input.Arguments[0].Integer);
             }, 1));
             Float = new Class("Float", RootClass, null); RootClass.Constants.Add("Float", new ClassReference(Float));
+
+            Integer.Methods.Add("times", new Method(async (Input) => {
+                if (Input.OnYield != null) {
+                    long Max = Input.Instance.Integer;
+                    for (long i = 0; i < Max; i++) {
+                        await Input.OnYield.Call(Input.Interpreter, Input.Instance);
+                    }
+                }
+                return Nil;
+            }, null));
 
             foreach (KeyValuePair<string, Method> Method in Api.GetBuiltInMethods()) {
                 RootClass.Methods.Add(Method.Key, Method.Value);

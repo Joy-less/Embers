@@ -6,14 +6,28 @@ namespace Embers
     {
         static void Main() {
             string Code = @"
-class A
-    def a
-        puts 'hi'
-    end
-end
+#class A
+#    def a
+#        puts 'hi'
+#    end
+#end
+#
+#A.a do
+#    
+#end
 
-A.a do
+#def my_yielding_method
+#    yield ""lol""
+#    yield
+#    yield 2, 3
+#end
+#
+#my_yielding_method do
+#    puts ""Yield!""
+#end
 
+5.times do
+    puts 'hi'
 end
 ";
             Benchmark(() => new Interpreter().Evaluate(Code));
@@ -22,8 +36,12 @@ end
 
             Interpreter Interpreter = new();
             Benchmark(() => {
-                Interpreter.Evaluate("2 + 3");
-            }, 1_000_000);
+                Interpreter.Evaluate(@"
+250000000.times do
+    
+end
+");
+            });
             Console.ReadLine();
         }
         static void Benchmark(Action Code, int Times = 1) {
