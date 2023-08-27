@@ -43,7 +43,7 @@ namespace Embers
         }
 
         public static List<Phase1Token> GetPhase1Tokens(string Code) {
-            Code = Code.Replace("\r", "") + "\n";
+            Code += "\n";
 
             List<Phase1Token> Tokens = new();
             Stack<char> Brackets = new();
@@ -117,16 +117,16 @@ namespace Embers
                         string ConvertOctalToChar(string? OctalDigits) {
                             return ((char)Convert.ToInt32(OctalDigits, 8)).ToString();
                         }
-                        string ConvertHexaFloatToChar(string? HexaFloatDigits) {
-                            return ((char)Convert.ToInt32(HexaFloatDigits, 16)).ToString();
+                        string ConvertHexadecimalToChar(string? HexadecimalDigits) {
+                            return ((char)Convert.ToInt32(HexadecimalDigits, 16)).ToString();
                         }
-                        bool NextThreeCharactersAreHexaFloat(out string? Characters) {
-                            int HexaFloatDigitCounter = 0;
+                        bool NextThreeCharactersAreHexadecimal(out string? Characters) {
+                            int HexadecimalDigitCounter = 0;
                             for (int i2 = i + 1; i2 < String.Length; i2++) {
                                 char CurrentChara = String[i2];
-                                if (HexaFloatDigitCounter == 0) {
+                                if (HexadecimalDigitCounter == 0) {
                                     if (CurrentChara == 'x') {
-                                        HexaFloatDigitCounter++;
+                                        HexadecimalDigitCounter++;
                                     }
                                     else {
                                         break;
@@ -134,13 +134,13 @@ namespace Embers
                                 }
                                 else {
                                     if ((CurrentChara >= '0' && CurrentChara <= '9') || (CurrentChara >= 'A' && CurrentChara <= 'F') || (CurrentChara >= 'a' && CurrentChara <= 'f')) {
-                                        HexaFloatDigitCounter++;
+                                        HexadecimalDigitCounter++;
                                     }
                                     else {
                                         break;
                                     }
                                 }
-                                if (HexaFloatDigitCounter == 3) {
+                                if (HexadecimalDigitCounter == 3) {
                                     Characters = String.Substring(i + 2, 2);
                                     return true;
                                 }
@@ -174,8 +174,8 @@ namespace Embers
                             else if (NextThreeCharactersAreOctal(out string? OctDigits)) {
                                 RemoveAndInsert(4, ConvertOctalToChar(OctDigits));
                             }
-                            else if (NextThreeCharactersAreHexaFloat(out string? HexDigits)) {
-                                RemoveAndInsert(4, ConvertHexaFloatToChar(HexDigits));
+                            else if (NextThreeCharactersAreHexadecimal(out string? HexDigits)) {
+                                RemoveAndInsert(4, ConvertHexadecimalToChar(HexDigits));
                             }
                             else Remove(1);
                         }
@@ -268,6 +268,7 @@ namespace Embers
                             Tokens.Add(new(Phase1TokenType.String, String, FollowsWhitespace));
                             break;
                         case '\n':
+                        case '\r':
                             if (LastTokenWasAny(Phase1TokenType.ArithmeticOperator, Phase1TokenType.AssignmentOperator, Phase1TokenType.Comma, Phase1TokenType.Dot)
                                 || Brackets.Count != 0)
                             {
