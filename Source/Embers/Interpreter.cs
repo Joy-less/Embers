@@ -145,14 +145,14 @@ namespace Embers
             protected Instance(Class fromClass) {
                 Class = fromClass;
             }
-            public static async Task<Instance> New(Interpreter Interpreter, Class fromClass, params Instance[] Arguments) {
+            public static async Task<Instance> New(Interpreter Interpreter, Class fromClass, Instances Arguments) {
                 Instance NewInstance = new(fromClass);
-                Instance ConstructorReturn = await NewInstance.Class.Constructor.Call(Interpreter, NewInstance, Arguments.ToList());
-                if (ConstructorReturn is Instance Instance) {
-                    return Instance;
+                Instances ConstructorReturn = await NewInstance.Class.Constructor.Call(Interpreter, NewInstance, Arguments);
+                if (ConstructorReturn.Instance != null) {
+                    return ConstructorReturn.Instance;
                 }
                 else {
-                    throw new InternalErrorException("Constructor did not return instance");
+                    throw new InternalErrorException("Constructor did not return a single instance");
                 }
             }
         }
@@ -435,15 +435,15 @@ namespace Embers
         }*/
         
         public class Method {
-            Func<MethodInput, Task<Instance>> Function;
+            Func<MethodInput, Task<Instances>> Function;
             public IntRange ArgumentCountRange;
             public List<MethodArgumentExpression> ArgumentNames;
-            public Method(Func<MethodInput, Task<Instance>> function, IntRange? argumentCountRange, List<MethodArgumentExpression>? argumentNames = null) {
+            public Method(Func<MethodInput, Task<Instances>> function, IntRange? argumentCountRange, List<MethodArgumentExpression>? argumentNames = null) {
                 Function = function;
                 ArgumentCountRange = argumentCountRange ?? new IntRange();
                 ArgumentNames = argumentNames ?? new();
             }
-            public Method(Func<MethodInput, Task<Instance>> function, Range argumentCountRange, List<MethodArgumentExpression>? argumentNames = null) {
+            public Method(Func<MethodInput, Task<Instances>> function, Range argumentCountRange, List<MethodArgumentExpression>? argumentNames = null) {
                 Function = function;
                 ArgumentCountRange = new IntRange(
                     argumentCountRange.Start.Value >= 0 ? argumentCountRange.Start.Value : null,
@@ -451,12 +451,12 @@ namespace Embers
                 );
                 ArgumentNames = argumentNames ?? new();
             }
-            public Method(Func<MethodInput, Task<Instance>> function, int argumentCount, List<MethodArgumentExpression>? argumentNames = null) {
+            public Method(Func<MethodInput, Task<Instances>> function, int argumentCount, List<MethodArgumentExpression>? argumentNames = null) {
                 Function = function;
                 ArgumentCountRange = new IntRange(argumentCount, argumentCount);
                 ArgumentNames = argumentNames ?? new();
             }
-            public async Task<Instance> Call(Interpreter Interpreter, Instance Instance, List<Instance> Arguments, Method? OnYield = null) {
+            public async Task<Instances> Call(Interpreter Interpreter, Instance OnInstance, Instances Arguments, Method? OnYield = null) {
                 if (ArgumentCountRange.IsInRange(Arguments.Count)) {
                     // Create temporary scope
                     Scope PreviousScope = Interpreter.CurrentScope;
@@ -474,23 +474,20 @@ namespace Embers
                         Interpreter.CurrentScope.LocalVariables.Add(Argument.ArgumentName.Value!, GivenArgument);
                     }
                     // Call method
-                    Instance ReturnValue = await Function(new MethodInput(Interpreter, Instance, Arguments, OnYield));
+                    Instances ReturnValues = await Function(new MethodInput(Interpreter, OnInstance, Arguments, OnYield));
                     // Step back a scope
                     Interpreter.SetCurrentScope(PreviousScope);
                     // Return method return value
-                    return ReturnValue;
+                    return ReturnValues;
                 }
                 else {
                     throw new RuntimeException($"Wrong number of arguments (given {Arguments.Count}, expected {ArgumentCountRange})");
                 }
             }
-            public async Task<Instance> Call(Interpreter Interpreter, Instance Instance, Instance Argument, Method? OnYield = null) {
-                return await Call(Interpreter, Instance, new List<Instance>() {Argument}, OnYield);
+            public async Task<Instances> Call(Interpreter Interpreter, Instance OnInstance) {
+                return await Call(Interpreter, OnInstance, new Instances());
             }
-            public async Task<Instance> Call(Interpreter Interpreter, Instance Instance, Method? OnYield = null) {
-                return await Call(Interpreter, Instance, new List<Instance>(), OnYield);
-            }
-            public void ChangeFunction(Func<MethodInput, Task<Instance>> function) {
+            public void ChangeFunction(Func<MethodInput, Task<Instances>> function) {
                 Function = function;
             }
         }
@@ -503,9 +500,9 @@ namespace Embers
         public class MethodInput {
             public Interpreter Interpreter;
             public Instance Instance;
-            public List<Instance> Arguments;
+            public Instances Arguments;
             public Method? OnYield;
-            public MethodInput(Interpreter interpreter, Instance instance, List<Instance> arguments, Method? onYield = null) {
+            public MethodInput(Interpreter interpreter, Instance instance, Instances arguments, Method? onYield = null) {
                 Interpreter = interpreter;
                 Instance = instance;
                 Arguments = arguments;
@@ -540,6 +537,40 @@ namespace Embers
                 }
             }
         }
+        public class Instances {
+            // At least one of Instance or InstanceList will be null
+            public readonly Instance? Instance;
+            public readonly List<Instance>? InstanceList;
+            public Instances(Instance? instance = null) {
+                Instance = instance;
+            }
+            public Instances(List<Instance> instanceList) {
+                InstanceList = instanceList;
+            }
+            public static implicit operator Instances(Instance Instance) {
+                return new Instances(Instance);
+            }
+            public static implicit operator Instances(List<Instance> InstanceList) {
+                return new Instances(InstanceList);
+            }
+            public static implicit operator Instance(Instances Instances) {
+                return Instances[0];
+            }
+            public int Count { get {
+                return InstanceList != null ? InstanceList.Count : (Instance != null ? 1 : 0);
+            } }
+            public Instance this[int i] => InstanceList != null ? InstanceList[i] : (i == 0 && Instance != null ? Instance : throw new ApiException("Index was outside the range of the instances"));
+            public IEnumerator<Instance> GetEnumerator() {
+                if (InstanceList != null) {
+                    for (int i = 0; i < InstanceList.Count; i++) {
+                        yield return InstanceList[i];
+                    }
+                }
+                else if (Instance != null) {
+                    yield return Instance;
+                }
+            }
+        }
 
         async Task Warn(string Message) {
             await InterpretExpressionAsync(new MethodCallExpression(
@@ -548,7 +579,7 @@ namespace Embers
             ));
         }
 
-        async Task<Instance> InterpretExpressionAsync(Expression Expression, bool ReturnVariableReference = false) {
+        async Task<Instances> InterpretExpressionAsync(Expression Expression, bool ReturnVariableReference = false) {
             // Method call
             if (Expression is MethodCallExpression MethodCallExpression) {
                 Instance MethodPath = await InterpretExpressionAsync(MethodCallExpression.MethodPath, true);
@@ -749,7 +780,7 @@ namespace Embers
             }
             return Results;
         }
-        public async Task<Instance> InterpretAsync(List<Statement> Statements, Func<List<Instance>, Task>? OnYield = null) {
+        public async Task<Instances> InterpretAsync(List<Statement> Statements, Func<Instances, Task>? OnYield = null) {
             for (int Index = 0; Index < Statements.Count; Index++) {
                 Statement Statement = Statements[Index];
 
@@ -926,6 +957,11 @@ namespace Embers
                         throw new InternalErrorException($"Invalid class name: {ClassNameObject}");
                     }
                 }
+                else if (Statement is ReturnStatement ReturnStatement) {
+                    return ReturnStatement.ReturnValues != null
+                        ? await InterpretExpressionsAsync(ReturnStatement.ReturnValues)
+                        : Nil;
+                }
                 else if (Statement is YieldStatement YieldStatement) {
                     if (OnYield != null) {
                         List<Instance> YieldArgs = YieldStatement.YieldValues != null
@@ -943,15 +979,15 @@ namespace Embers
             }
             return Nil;
         }
-        public Instance Interpret(List<Statement> Statements, Func<List<Instance>, Task>? OnYield = null) {
+        public Instances Interpret(List<Statement> Statements, Func<Instances, Task>? OnYield = null) {
             return InterpretAsync(Statements, OnYield).Result;
         }
-        public async Task<Instance> EvaluateAsync(string Code) {
+        public async Task<Instances> EvaluateAsync(string Code) {
             List<Phase1.Phase1Token> Tokens = Phase1.GetPhase1Tokens(Code);
             List<Statement> Statements = GetStatements(Tokens);
             return await InterpretAsync(Statements);
         }
-        public Instance Evaluate(string Code) {
+        public Instances Evaluate(string Code) {
             return EvaluateAsync(Code).Result;
         }
 

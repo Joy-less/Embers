@@ -26,9 +26,14 @@ namespace Embers
 #    puts ""Yield!""
 #end
 
-5.times do
+3.times do
     puts 'hi'
 end
+
+def my_method
+    return ""Ok""
+end
+puts my_method
 ";
             Benchmark(() => new Interpreter().Evaluate(Code));
 

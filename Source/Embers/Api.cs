@@ -22,25 +22,25 @@ namespace Embers
             return Methods;
         }
 
-        async Task<Instance> Puts(MethodInput Input) {
+        async Task<Instances> Puts(MethodInput Input) {
             foreach (Instance Message in Input.Arguments) {
                 Console.WriteLine(Message.Object);
             }
             return Input.Interpreter.Nil;
         }
-        async Task<Instance> Print(MethodInput Input) {
+        async Task<Instances> Print(MethodInput Input) {
             foreach (Instance Message in Input.Arguments) {
                 Console.Write(Message.Object);
             }
             return Input.Interpreter.Nil;
         }
-        async Task<Instance> P(MethodInput Input) {
+        async Task<Instances> P(MethodInput Input) {
             foreach (Instance Message in Input.Arguments) {
                 Console.WriteLine(Message.Inspect());
             }
             return Input.Interpreter.Nil;
         }
-        async Task<Instance> Warn(MethodInput Input) {
+        async Task<Instances> Warn(MethodInput Input) {
             Console.ForegroundColor = ConsoleColor.DarkYellow;
             foreach (Instance Message in Input.Arguments) {
                 Console.WriteLine(Message.Object);
@@ -48,7 +48,7 @@ namespace Embers
             Console.ResetColor();
             return Input.Interpreter.Nil;
         }
-        async Task<Instance> Sleep(MethodInput Input) {
+        async Task<Instances> Sleep(MethodInput Input) {
             if (Input.Arguments.Count == 1) {
                 await Task.Delay(1);
             }

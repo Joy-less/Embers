@@ -267,6 +267,16 @@ namespace Embers
                 else return "yield";
             }
         }
+        public class ReturnStatement : Statement {
+            public List<Expression>? ReturnValues;
+            public ReturnStatement(List<Expression>? returnValues = null) {
+                ReturnValues = returnValues;
+            }
+            public override string Inspect() {
+                if (ReturnValues != null) return "return " + InspectList(ReturnValues);
+                else return "return";
+            }
+        }
 
         static Phase2Token IdentifierToPhase2(Phase1Token Token) {
             if (Token.Type != Phase1TokenType.Identifier)
@@ -870,7 +880,7 @@ namespace Embers
                 return new DefineMethodStatement(MethodBlock.MethodName,
                     new Method(async (Input) => {
                         // Set OnYield function
-                        Func<List<Instance>, Task>? OnYield = null;
+                        Func<Instances, Task>? OnYield = null;
                         if (Input.OnYield != null)
                             OnYield = (YieldArgs) => {
                                 return Input.OnYield.Call(Input.Interpreter, Input.Instance, YieldArgs);
@@ -944,12 +954,12 @@ namespace Embers
                 throw new InternalErrorException($"End block not handled for type: {Block.GetType().Name}");
             }
         }
-        static YieldStatement ParseYield(List<Phase2Object> StatementTokens) {
-            // Get yield values
-            int EndOfYieldValuesIndex = 0;
-            List<Expression>? YieldValues = ParseArguments(StatementTokens, ref EndOfYieldValuesIndex);
-            // Create yield statement
-            return new YieldStatement(YieldValues);
+        static Statement ParseReturnOrYield(List<Phase2Object> StatementTokens, bool IsReturn) {
+            // Get return/yield values
+            int EndOfValuesIndex = 0;
+            List<Expression>? ReturnOrYieldValues = ParseArguments(StatementTokens, ref EndOfValuesIndex);
+            // Create yield/return statement
+            return IsReturn ? new ReturnStatement(ReturnOrYieldValues) : new YieldStatement(ReturnOrYieldValues);
         }
 
         class BuildingBlock {
@@ -1015,8 +1025,11 @@ namespace Embers
                         if (FinishedStatement != null)
                             BlockStackInfo.Peek().Statements.Add(FinishedStatement);
                     }
+                    else if (Token.Type == Phase2TokenType.Return) {
+                        BlockStackInfo.Peek().Statements.Add(ParseReturnOrYield(StatementTokens, true));
+                    }
                     else if (Token.Type == Phase2TokenType.Yield) {
-                        BlockStackInfo.Peek().Statements.Add(ParseYield(StatementTokens));
+                        BlockStackInfo.Peek().Statements.Add(ParseReturnOrYield(StatementTokens, false));
                     }
                     else {
                         // BlockStackInfo.Peek().Statements.Add(new ExpressionStatement(ObjectsToExpression(StatementTokens)));
