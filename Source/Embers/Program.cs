@@ -34,6 +34,13 @@ def my_method
     return ""Ok""
 end
 puts my_method
+
+class A
+    def a
+        
+    end
+end
+A.a
 ";
             Benchmark(() => new Interpreter().Evaluate(Code));
 

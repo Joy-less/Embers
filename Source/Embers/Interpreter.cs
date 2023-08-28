@@ -9,9 +9,8 @@ namespace Embers
 {
     public class Interpreter
     {
-        readonly Api Api = new();
-        readonly Class RootClass;
-        readonly Scope RootScope;
+        public readonly Class RootClass;
+        public readonly Scope RootScope;
         readonly Dictionary<string, Instance> GlobalVariables = new();
         Class CurrentClass;
         Scope CurrentScope;
@@ -19,12 +18,12 @@ namespace Embers
         void SetCurrentClass(Class NewCurrentClass) { CurrentClass = NewCurrentClass; CurrentBlock = NewCurrentClass; }
         void SetCurrentScope(Scope NewCurrentScope) { CurrentScope = NewCurrentScope; CurrentBlock = NewCurrentScope; }
 
-        readonly Class NilClass;
-        readonly Class TrueClass;
-        readonly Class FalseClass;
-        readonly Class String;
-        readonly Class Integer;
-        readonly Class Float;
+        public readonly Class NilClass;
+        public readonly Class TrueClass;
+        public readonly Class FalseClass;
+        public readonly Class String;
+        public readonly Class Integer;
+        public readonly Class Float;
 
         public readonly Instance Nil;
         public readonly Instance True;
@@ -265,175 +264,6 @@ namespace Embers
                 Method = method;
             }
         }
-        /*public class RubyInteger : Instance {
-            readonly long Value;
-            public override object? Object { get { return Value; } }*/
-           
-        /*public class RubyBoolean : Instance {
-            readonly bool Value;
-            public override object Object { get { return Value; } }
-            public override bool Boolean { get { return Value; } }
-            public override string Inspect() {
-                return Value ? "true" : "false";
-            }
-            public RubyBoolean(bool value) {
-                Value = value;
-            }
-        }*/
-        /*public class NilClass : Instance {
-            public override object? Object { get { return null; } }
-            public override string Inspect() {
-                return "nil";
-            }
-            public NilClass() {
-            }
-        }
-        public class RubyTrue : Instance {
-            public override object? Object { get { return true; } }
-            public override bool Boolean { get { return true; } }
-            public override string Inspect() {
-                return "true";
-            }
-            public RubyTrue() {
-            }
-        }
-        public class RubyFalse : Instance {
-            public override object? Object { get { return false; } }
-            public override bool Boolean { get { return false; } }
-            public override string Inspect() {
-                return "false";
-            }
-            public RubyFalse() {
-            }
-        }
-        public class RubyString : Instance {
-            readonly string Value;
-            public override object? Object { get { return Value; } }
-            public override string String { get { return Value; } }
-            public override string Inspect() {
-                return "\"" + Value + "\"";
-            }
-            public RubyString(string value) {
-                Value = value;
-
-                Methods.Add("+", new Method(async (Interpreter Interpreter, List<Instance> Arguments) => {
-                    return new RubyString(Value + Arguments[0].String);
-                }, 1));
-                Methods.Add("*", new Method(async (Interpreter Interpreter, List<Instance> Arguments) => {
-                    StringBuilder JoinedString = new();
-                    long DuplicateCount = Arguments[0].Integer;
-                    for (long i = 0; i < DuplicateCount; i++) {
-                        JoinedString.Append(Value);
-                    }
-                    return new RubyString(JoinedString.ToString());
-                }, 1));
-            }
-        }
-        public class RubyInteger : Instance {
-            readonly long Value;
-            public override object? Object { get { return Value; } }
-            public override long Integer { get { return Value; } }
-            public override double Float { get { return Value; } }
-            public override string Inspect() {
-                return Value.ToString();
-            }
-            public RubyInteger(long value) {
-                Value = value;
-
-                static Instance GetResult(double Result, bool RightIsInteger) {
-                    if (RightIsInteger) {
-                        return new RubyInteger((long)Result);
-                    }
-                    else {
-                        return new RubyFloat(Result);
-                    }
-                }
-                Methods.Add("+", new Method(async (Interpreter Interpreter, List<Instance> Arguments) => {
-                    Instance Right = Arguments[0];
-                    return GetResult(Value + Right.Float, Right is RubyInteger);
-                }, 1));
-                Methods.Add("-", new Method(async (Interpreter Interpreter, List<Instance> Arguments) => {
-                    Instance Right = Arguments[0];
-                    return GetResult(Value - Right.Float, Right is RubyInteger);
-                }, 1));
-                Methods.Add("*", new Method(async (Interpreter Interpreter, List<Instance> Arguments) => {
-                    Instance Right = Arguments[0];
-                    return GetResult(Value * Right.Float, Right is RubyInteger);
-                }, 1));
-                Methods.Add("/", new Method(async (Interpreter Interpreter, List<Instance> Arguments) => {
-                    Instance Right = Arguments[0];
-                    return GetResult(Value / Right.Float, Right is RubyInteger);
-                }, 1));
-                Methods.Add("%", new Method(async (Interpreter Interpreter, List<Instance> Arguments) => {
-                    Instance Right = Arguments[0];
-                    return GetResult(Value % Right.Float, Right is RubyInteger);
-                }, 1));
-                Methods.Add("**", new Method(async (Interpreter Interpreter, List<Instance> Arguments) => {
-                    Instance Right = Arguments[0];
-                    return GetResult(Math.Pow(Value, Right.Float), Right is RubyInteger);
-                }, 1));
-            }
-        }
-        public class RubyFloat : Instance {
-            readonly double Value;
-            public override object? Object { get { return Value; } }
-            public override double Float { get { return Value; } }
-            public override long Integer { get { return (long)Value; } }
-            public override string Inspect() {
-                return Value.ToString("0.0");
-            }
-            public RubyFloat(double value) {
-                Value = value;
-
-                Methods.Add("+", new Method(async (Interpreter Interpreter, List<Instance> Arguments) => {
-                    Instance Right = Arguments[0];
-                    return new RubyFloat(Value + Right.Float);
-                }, 1));
-                Methods.Add("-", new Method(async (Interpreter Interpreter, List<Instance> Arguments) => {
-                    Instance Right = Arguments[0];
-                    return new RubyFloat(Value - Right.Float);
-                }, 1));
-                Methods.Add("*", new Method(async (Interpreter Interpreter, List<Instance> Arguments) => {
-                    Instance Right = Arguments[0];
-                    return new RubyFloat(Value * Right.Float);
-                }, 1));
-                Methods.Add("/", new Method(async (Interpreter Interpreter, List<Instance> Arguments) => {
-                    Instance Right = Arguments[0];
-                    return new RubyFloat(Value / Right.Float);
-                }, 1));
-                Methods.Add("%", new Method(async (Interpreter Interpreter, List<Instance> Arguments) => {
-                    Instance Right = Arguments[0];
-                    return new RubyFloat(Value % Right.Float);
-                }, 1));
-                Methods.Add("**", new Method(async (Interpreter Interpreter, List<Instance> Arguments) => {
-                    Instance Right = Arguments[0];
-                    return new RubyFloat(Math.Pow(Value, Right.Float));
-                }, 1));
-            }
-        }
-        public class RubyMethod : Instance {
-            readonly Method Value;
-            public override object? Object { get { return Value; } }
-            public override Method Method { get { return Value; } }
-            public override string Inspect() {
-                return Value.ToString()!;
-            }
-            public RubyMethod(Method value) {
-                Value = value;
-            }
-        }
-        public class RubyClass : Instance {
-            readonly Class Value;
-            public override object? Object { get { return Value; } }
-            public override Class Class { get { return Value; } }
-            public override string Inspect() {
-                return Value.ToString()!;
-            }
-            public RubyClass(Class value) {
-                Value = value;
-            }
-        }*/
-        
         public class Method {
             Func<MethodInput, Task<Instances>> Function;
             public IntRange ArgumentCountRange;
@@ -573,10 +403,7 @@ namespace Embers
         }
 
         async Task Warn(string Message) {
-            await InterpretExpressionAsync(new MethodCallExpression(
-                new ObjectTokenExpression(new Phase2Token(Phase2TokenType.LocalVariableOrMethod, "warn")),
-                new List<Expression>() { new ObjectTokenExpression(new Phase2Token(Phase2TokenType.String, Message)) }
-            ));
+            await RootClass.Methods["warn"].Call(this, new ClassReference(RootClass), new StringInstance(String, Message));
         }
 
         async Task<Instances> InterpretExpressionAsync(Expression Expression, bool ReturnVariableReference = false) {
@@ -928,7 +755,7 @@ namespace Embers
                 else if (Statement is DefineMethodStatement DefineMethodStatement) {
                     Instance MethodNameObject = await InterpretExpressionAsync(DefineMethodStatement.MethodName, true);
                     if (MethodNameObject is VariableReference MethodName) {
-                        MethodName.Block.FindFirstAncestorOrSelfWhichIsA<Class>().Methods.Add(MethodName.Token.Value!, DefineMethodStatement.Method);
+                        MethodName.Block.FindFirstAncestorOrSelfWhichIsA<Class>().Methods[MethodName.Token.Value!] = DefineMethodStatement.Method;
                     }
                     else {
                         throw new InternalErrorException($"Invalid method name: {MethodNameObject}");
@@ -1001,31 +828,11 @@ namespace Embers
             NilClass = new Class("NilClass", RootClass); RootClass.Constants.Add("NilClass", new ClassReference(NilClass)); Nil = new NilInstance(NilClass);
             TrueClass = new Class("TrueClass", RootClass); RootClass.Constants.Add("TrueClass", new ClassReference(TrueClass)); True = new TrueInstance(TrueClass);
             FalseClass = new Class("FalseClass", RootClass); RootClass.Constants.Add("FalseClass", new ClassReference(FalseClass)); False = new FalseInstance(FalseClass);
-            String = new Class("String", RootClass, new Method(async (Input) => {
-                if (Input.Arguments.Count == 1) {
-                    ((StringInstance)Input.Instance).SetValue(Input.Arguments[0].String); // Change to implicit conversion
-                }
-                return Nil;
-            }, 0..1)); RootClass.Constants.Add("String", new ClassReference(String));
+            String = new Class("String", RootClass, null); RootClass.Constants.Add("String", new ClassReference(String));
             Integer = new Class("Integer", RootClass, null); RootClass.Constants.Add("Integer", new ClassReference(Integer));
-            Integer.Methods.Add("+", new Method(async (Input) => {
-                return new IntegerInstance(Integer, Input.Instance.Integer + Input.Arguments[0].Integer);
-            }, 1));
             Float = new Class("Float", RootClass, null); RootClass.Constants.Add("Float", new ClassReference(Float));
 
-            Integer.Methods.Add("times", new Method(async (Input) => {
-                if (Input.OnYield != null) {
-                    long Max = Input.Instance.Integer;
-                    for (long i = 0; i < Max; i++) {
-                        await Input.OnYield.Call(Input.Interpreter, Input.Instance);
-                    }
-                }
-                return Nil;
-            }, null));
-
-            foreach (KeyValuePair<string, Method> Method in Api.GetBuiltInMethods()) {
-                RootClass.Methods.Add(Method.Key, Method.Value);
-            }
+            Api.Setup(this);
         }
     }
 }
