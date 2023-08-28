@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using static Embers.Interpreter;
+﻿using static Embers.Interpreter;
 using static Embers.Phase1;
 
 namespace Embers
@@ -12,6 +7,7 @@ namespace Embers
     {
         public abstract class Phase2Object {
             public abstract string Inspect();
+            public abstract string Serialise();
         }
 
         public enum Phase2TokenType {
@@ -95,6 +91,9 @@ namespace Embers
             public override string Inspect() {
                 return $"{Type}{(Value != null ? ":" : "")}{Value?.Replace("\n", "\\n")}";
             }
+            public override string Serialise() {
+                return $"new Phase2Token(Phase2TokenType.{Type}, \"{Value}\", {(FollowsWhitespace ? "true" : "false")})";
+            }
         }
 
         public abstract class Expression : Phase2Object { }
@@ -115,30 +114,39 @@ namespace Embers
             }
         }*/
         public class ObjectTokenExpression : Expression {
-            public Phase2Token Token;
+            public readonly Phase2Token Token;
             public ObjectTokenExpression(Phase2Token objectToken) {
                 Token = objectToken;
             }
             public override string Inspect() {
                 return Token.Inspect();
             }
+            public override string Serialise() {
+                return $"new ObjectTokenExpression({Token.Serialise()})";
+            }
         }
         public class PathExpression : ObjectTokenExpression {
-            public Expression ParentObject;
+            public readonly Expression ParentObject;
             public PathExpression(Expression parentObject, Phase2Token objectToken) : base(objectToken) {
                 ParentObject = parentObject;
             }
             public override string Inspect() {
                 return ParentObject.Inspect() + "." + Token.Inspect();
             }
+            public override string Serialise() {
+                return $"new PathExpression({ParentObject.Serialise()}, {Token.Serialise()})";
+            }
         }
         public class ConstantPathExpression : ObjectTokenExpression {
-            public Expression RootObject;
+            public readonly Expression RootObject;
             public ConstantPathExpression(Expression rootObject, Phase2Token objectToken) : base(objectToken) {
                 RootObject = rootObject;
             }
             public override string Inspect() {
                 return RootObject.Inspect() + "." + RootObject.Inspect();
+            }
+            public override string Serialise() {
+                return $"new ConstantPathExpression({RootObject.Serialise()}, {Token.Serialise()})";
             }
         }
         /*public class ArithmeticExpression : Expression {
@@ -155,10 +163,10 @@ namespace Embers
             }
         }*/
         public class MethodCallExpression : Expression {
-            public ObjectTokenExpression MethodPath;
-            public List<Expression> Arguments;
-            public Method? OnYield; // do ... end
-            public MethodCallExpression(ObjectTokenExpression methodPath, List<Expression>? arguments, Method? onYield = null) {
+            public readonly ObjectTokenExpression MethodPath;
+            public readonly List<Expression> Arguments;
+            public MethodExpression? OnYield; // do ... end
+            public MethodCallExpression(ObjectTokenExpression methodPath, List<Expression>? arguments, MethodExpression? onYield = null) {
                 MethodPath = methodPath;
                 Arguments = arguments ?? new List<Expression>();
                 OnYield = onYield;
@@ -166,18 +174,24 @@ namespace Embers
             public override string Inspect() {
                 return $"{MethodPath.Inspect()}({InspectList(Arguments)})";
             }
+            public override string Serialise() {
+                return $"new MethodCallExpression({MethodPath.Serialise()}, {Arguments.Serialise()}, {(OnYield != null ? OnYield.Serialise() : "null")})";
+            }
         }
         public class DefinedExpression : Expression {
-            public Expression Expression;
+            public readonly Expression Expression;
             public DefinedExpression(Expression expression) {
                 Expression = expression;
             }
             public override string Inspect() {
                 return "defined? (" + Expression.Inspect() + ")";
             }
+            public override string Serialise() {
+                return $"new DefinedExpression({Expression.Serialise()})";
+            }
         }
         public class MethodArgumentExpression : Expression {
-            public Phase2Token ArgumentName;
+            public readonly Phase2Token ArgumentName;
             public Expression? DefaultValue;
             public MethodArgumentExpression(Phase2Token argumentName, Expression? defaultValue = null) {
                 ArgumentName = argumentName;
@@ -191,6 +205,35 @@ namespace Embers
                     return $"{ArgumentName.Inspect()} = {DefaultValue.Inspect()}";
                 }
             }
+            public override string Serialise() {
+                return $"new MethodArgumentExpression({ArgumentName.Serialise()}, {(DefaultValue != null ? DefaultValue.Serialise() : "null")})";
+            }
+        }
+        public class MethodExpression : Expression {
+            public readonly List<Statement> Statements;
+            public readonly IntRange ArgumentCount;
+            public readonly List<MethodArgumentExpression> Arguments;
+            public MethodExpression(List<Statement> statements, IntRange? argumentCount, List<MethodArgumentExpression> arguments) {
+                Statements = statements;
+                ArgumentCount = argumentCount ?? new IntRange();
+                Arguments = arguments;
+            }
+            public MethodExpression(List<Statement> statements, Range argumentCount, List<MethodArgumentExpression> arguments) {
+                Statements = statements;
+                ArgumentCount = new IntRange(argumentCount);
+                Arguments = arguments;
+            }
+            public override string Inspect() {
+                return $"method with {ArgumentCount} arguments";
+            }
+            public override string Serialise() {
+                return $"new MethodExpression({Statements.Serialise()}, {ArgumentCount.Serialise()}, {Arguments.Serialise()})";
+            }
+            public Method ToMethod() {
+                return new Method(async Input => {
+                    return await Input.Interpreter.InterpretAsync(Statements);
+                }, ArgumentCount, Arguments);
+            }
         }
 
         public abstract class Statement : Expression { }
@@ -202,10 +245,13 @@ namespace Embers
             public override string Inspect() {
                 return Expression.Inspect();
             }
+            public override string Serialise() {
+                return $"new ExpressionStatement({Expression.Serialise()})";
+            }
         }
         public class AssignmentStatement : Statement {
             public Expression Left;
-            public string Operator;
+            public readonly string Operator;
             public Expression Right;
             public AssignmentStatement(Expression left, string op, Expression right) {
                 Left = left;
@@ -215,40 +261,39 @@ namespace Embers
             public override string Inspect() {
                 return Left.Inspect() + " " + Operator + " " + Right.Inspect();
             }
+            public override string Serialise() {
+                return $"new AssignmentStatement({Left.Serialise()}, \"{Operator}\", {Right.Serialise()})";
+            }
         }
-        /*public class SetScopeStatement : Statement {
-            public Scope Scope;
-            public SetScopeStatement(Scope scope) {
-                Scope = scope;
-            }
-            public override string Inspect() {
-                return $"Set scope to {Scope}";
-            }
-        }*/
-        
         public class DefineMethodStatement : Statement {
-            public ObjectTokenExpression MethodName;
-            public Method Method;
-            public DefineMethodStatement(ObjectTokenExpression methodName, Method method) {
+            public readonly ObjectTokenExpression MethodName;
+            public readonly MethodExpression Method;
+            public DefineMethodStatement(ObjectTokenExpression methodName, MethodExpression method) {
                 MethodName = methodName;
                 Method = method;
             }
             public override string Inspect() {
                 return "def " + MethodName.Inspect();
             }
+            public override string Serialise() {
+                return $"new DefineMethodStatement({MethodName.Serialise()}, {Method.Serialise()})";
+            }
         }
         public class UndefineMethodStatement : Statement {
-            public ObjectTokenExpression MethodName;
+            public readonly ObjectTokenExpression MethodName;
             public UndefineMethodStatement(ObjectTokenExpression methodName) {
                 MethodName = methodName;
             }
             public override string Inspect() {
                 return "undef " + MethodName.Inspect();
             }
+            public override string Serialise() {
+                return $"new UndefineMethodStatement({MethodName.Serialise()})";
+            }
         }
         public class DefineClassStatement : Statement {
-            public ObjectTokenExpression ClassName;
-            public List<Statement> BlockStatements;
+            public readonly ObjectTokenExpression ClassName;
+            public readonly List<Statement> BlockStatements;
             public DefineClassStatement(ObjectTokenExpression className, List<Statement> blockStatements) {
                 ClassName = className;
                 BlockStatements = blockStatements;
@@ -256,9 +301,12 @@ namespace Embers
             public override string Inspect() {
                 return "class " + ClassName.Inspect();
             }
+            public override string Serialise() {
+                return $"new DefineClassStatement({ClassName.Serialise()}, {BlockStatements.Serialise()})";
+            }
         }
         public class YieldStatement : Statement {
-            public List<Expression>? YieldValues;
+            public readonly List<Expression>? YieldValues;
             public YieldStatement(List<Expression>? yieldValues = null) {
                 YieldValues = yieldValues;
             }
@@ -266,15 +314,21 @@ namespace Embers
                 if (YieldValues != null) return "yield " + InspectList(YieldValues);
                 else return "yield";
             }
+            public override string Serialise() {
+                return $"new YieldStatement({(YieldValues != null ? YieldValues.Serialise() : "null")})";
+            }
         }
         public class ReturnStatement : Statement {
-            public List<Expression>? ReturnValues;
+            public readonly List<Expression>? ReturnValues;
             public ReturnStatement(List<Expression>? returnValues = null) {
                 ReturnValues = returnValues;
             }
             public override string Inspect() {
                 if (ReturnValues != null) return "return " + InspectList(ReturnValues);
                 else return "return";
+            }
+            public override string Serialise() {
+                return $"new ReturnStatement({(ReturnValues != null ? ReturnValues.Serialise() : "null")})";
             }
         }
 
@@ -877,8 +931,8 @@ namespace Embers
 
             // End Method Block
             if (Block is BuildingMethod MethodBlock) {
-                return new DefineMethodStatement(MethodBlock.MethodName,
-                    new Method(async (Input) => {
+                /*return new DefineMethodStatement(MethodBlock.MethodName,
+                    new Method(async Input => {
                         // Set OnYield function
                         Func<Instances, Task>? OnYield = null;
                         if (Input.OnYield != null)
@@ -888,6 +942,9 @@ namespace Embers
                         // Interpret method call
                         return await Input.Interpreter.InterpretAsync(MethodBlock.Statements, OnYield);
                     }, MethodBlock.RequiredArgumentsCount..MethodBlock.Arguments.Count, MethodBlock.Arguments)
+                );*/
+                return new DefineMethodStatement(MethodBlock.MethodName,
+                    new MethodExpression(MethodBlock.Statements, MethodBlock.RequiredArgumentsCount..MethodBlock.Arguments.Count, MethodBlock.Arguments)
                 );
             }
             // End Class Block
@@ -915,9 +972,10 @@ namespace Embers
                     }
 
                     // Get on yield method
-                    Method? OnYield = new(async (Input) => {
+                    /*Method? OnYield = new(async Input => {
                         return await Input.Interpreter.InterpretAsync(DoBlock.Statements);
-                    }, null, DoBlock.Arguments);
+                    }, null, DoBlock.Arguments);*/
+                    MethodExpression OnYield = new(DoBlock.Statements, null, DoBlock.Arguments);
 
                     // Set on yield for already known method call
                     if (LastExpression is MethodCallExpression LastMethodCallExpression) {
@@ -1087,6 +1145,16 @@ namespace Embers
             if (StartIndex > EndIndex)
                 return new List<T>();
             return List.GetRange(StartIndex, EndIndex - StartIndex + 1);
+        }
+        public static string Serialise<T>(this List<T> List) where T : Phase2.Phase2Object {
+            string Serialised = $"new List<{typeof(T).Name}>() {{";
+            bool IsFirst = true;
+            foreach (T Item in List) {
+                if (IsFirst) IsFirst = false;
+                else Serialised += ", ";
+                Serialised += Item.Serialise();
+            }
+            return Serialised + "}";
         }
     }
 }

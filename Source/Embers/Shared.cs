@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Embers
+﻿namespace Embers
 {
     public abstract class EmbersException : Exception {
         public EmbersException(string Message) : base(Message) { }

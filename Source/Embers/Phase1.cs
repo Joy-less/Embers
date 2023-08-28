@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Embers
+﻿namespace Embers
 {
     public static class Phase1
     {
@@ -302,8 +296,10 @@ namespace Embers
                             break;
                         case '*':
                             RemoveEndOfStatement();
-                            if (NextChara == '*')
+                            if (NextChara == '*') {
                                 Tokens.Add(new(Phase1TokenType.ArithmeticOperator, "**", FollowsWhitespace));
+                                i++;
+                            }
                             else
                                 Tokens.Add(new(Phase1TokenType.ArithmeticOperator, "*", FollowsWhitespace));
                             break;

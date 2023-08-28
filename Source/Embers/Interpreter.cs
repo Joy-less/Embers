@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using static Embers.Phase2;
+﻿using static Embers.Phase2;
 
 namespace Embers
 {
@@ -95,7 +90,7 @@ namespace Embers
                     Constructor = constructor;
                 }
                 else {
-                    Constructor = new Method(async (Input) => {
+                    Constructor = new Method(async Input => {
                         return Input.Interpreter.Nil;
                     }, 0);
                 }
@@ -266,8 +261,8 @@ namespace Embers
         }
         public class Method {
             Func<MethodInput, Task<Instances>> Function;
-            public IntRange ArgumentCountRange;
-            public List<MethodArgumentExpression> ArgumentNames;
+            public readonly IntRange ArgumentCountRange;
+            public readonly List<MethodArgumentExpression> ArgumentNames;
             public Method(Func<MethodInput, Task<Instances>> function, IntRange? argumentCountRange, List<MethodArgumentExpression>? argumentNames = null) {
                 Function = function;
                 ArgumentCountRange = argumentCountRange ?? new IntRange();
@@ -275,10 +270,7 @@ namespace Embers
             }
             public Method(Func<MethodInput, Task<Instances>> function, Range argumentCountRange, List<MethodArgumentExpression>? argumentNames = null) {
                 Function = function;
-                ArgumentCountRange = new IntRange(
-                    argumentCountRange.Start.Value >= 0 ? argumentCountRange.Start.Value : null,
-                    argumentCountRange.End.Value >= 0 ? argumentCountRange.End.Value : null
-                );
+                ArgumentCountRange = new IntRange(argumentCountRange);
                 ArgumentNames = argumentNames ?? new();
             }
             public Method(Func<MethodInput, Task<Instances>> function, int argumentCount, List<MethodArgumentExpression>? argumentNames = null) {
@@ -346,6 +338,10 @@ namespace Embers
                 Min = min;
                 Max = max;
             }
+            public IntRange(Range range) {
+                Min = range.Start.Value >= 0 ? range.Start.Value : null;
+                Max = range.End.Value >= 0 ? range.End.Value : null;
+            }
             public bool IsInRange(int Number) {
                 if (Min != null && Number < Min) return false;
                 if (Max != null && Number > Max) return false;
@@ -365,6 +361,9 @@ namespace Embers
                     string MaxString = Max != null ? Max.ToString()! : "";
                     return MinString + ".." + MaxString;
                 }
+            }
+            public string Serialise() {
+                return $"new IntRange({(Min != null ? Min : "null")}, {(Max != null ? Max : "null")})";
             }
         }
         public class Instances {
@@ -420,7 +419,7 @@ namespace Embers
                         MethodOwner = new ClassReference(MethodClass);
                     }
                     return await MethodClass.Methods[MethodReference.Token.Value!].Call(
-                        this, MethodOwner, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield
+                        this, MethodOwner, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToMethod()
                     );
                 }
                 else {
@@ -755,7 +754,7 @@ namespace Embers
                 else if (Statement is DefineMethodStatement DefineMethodStatement) {
                     Instance MethodNameObject = await InterpretExpressionAsync(DefineMethodStatement.MethodName, true);
                     if (MethodNameObject is VariableReference MethodName) {
-                        MethodName.Block.FindFirstAncestorOrSelfWhichIsA<Class>().Methods[MethodName.Token.Value!] = DefineMethodStatement.Method;
+                        MethodName.Block.FindFirstAncestorOrSelfWhichIsA<Class>().Methods[MethodName.Token.Value!] = DefineMethodStatement.Method.ToMethod();
                     }
                     else {
                         throw new InternalErrorException($"Invalid method name: {MethodNameObject}");
@@ -812,10 +811,17 @@ namespace Embers
         public async Task<Instances> EvaluateAsync(string Code) {
             List<Phase1.Phase1Token> Tokens = Phase1.GetPhase1Tokens(Code);
             List<Statement> Statements = GetStatements(Tokens);
+
             return await InterpretAsync(Statements);
         }
         public Instances Evaluate(string Code) {
             return EvaluateAsync(Code).Result;
+        }
+        public static string Serialise(string Code) {
+            List<Phase1.Phase1Token> Tokens = Phase1.GetPhase1Tokens(Code);
+            List<Statement> Statements = GetStatements(Tokens);
+
+            return Statements.Serialise();
         }
 
         public Interpreter() {
