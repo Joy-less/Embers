@@ -19,8 +19,7 @@ puts 'Hello, world!'
             {
                 Interpreter Interpret = new();
                 Benchmark(() => {
-                    // Interpret.Evaluate("250000000.times do \n end");
-                    Interpret.Evaluate("100000.times do \n a = 3 + 2 / 4 ** 2 \n end");
+                    Interpret.Evaluate("250000000.times do \n end");
                 });
                 Console.ReadLine();
             }

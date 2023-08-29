@@ -460,7 +460,7 @@ namespace Embers
                     // Instance method
                     else {
                         return await MethodReference.Instance!.InstanceMethods[MethodReference.Token.Value!].Call(
-                            this, MethodReference.Instance, await InterpretExpressionsAsync(MethodCallExpression.Arguments)
+                            this, MethodReference.Instance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
                         );
                     }
                 }

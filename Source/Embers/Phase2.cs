@@ -109,22 +109,6 @@ namespace Embers
         }
 
         public abstract class Expression : Phase2Object { }
-        /*public class ValueExpression : Expression {
-            public List<Phase2Token> Path;
-            public ValueExpression(List<Phase2Token> path) {
-                Path = path;
-            }
-            public ValueExpression(Phase2Token path) {
-                Path = new List<Phase2Token>() {path};
-            }
-            public Phase2TokenType? MainType {
-                // get { return Path[^1] is Phase2Token Token ? Token.Type : null; }
-                get { return Path[^1].Type; }
-            }
-            public override string Inspect() {
-                return InspectList(Path, ".");
-            }
-        }*/
         public class ObjectTokenExpression : Expression {
             public readonly Phase2Token Token;
             public ObjectTokenExpression(Phase2Token objectToken) {
