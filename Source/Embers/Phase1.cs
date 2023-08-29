@@ -18,6 +18,7 @@
             Dot,
             DoubleColon,
             Comma,
+            SplatOperator,
         }
         public class Phase1Token {
             public DebugLocation Location;
@@ -45,7 +46,7 @@
             Stack<char> Brackets = new();
 
             int CurrentLine = 1;
-            int CurrentColumn = 1;
+            int IndexOfLastNewline = 0;
             
             for (int i = 0; i < Code.Length; i++) {
                 // Functions
@@ -186,7 +187,7 @@
                         Tokens.RemoveAt(Tokens.Count - 1);
                     }
                 }
-                bool IsDefStatement() {
+                bool IsDefMethodName() {
                     for (int i2 = Tokens.Count - 1; i2 >= 0; i2--) {
                         if (Tokens[i2].Type == Phase1TokenType.Identifier && Tokens[i2].Value == DefKeyword) {
                             return true;
@@ -197,7 +198,7 @@
                     }
                     return false;
                 }
-                bool IsClassStatement() {
+                bool IsClassName() {
                     for (int i2 = Tokens.Count - 1; i2 >= 0; i2--) {
                         if (Tokens[i2].Type != Phase1TokenType.Identifier && Tokens[i2].Type != Phase1TokenType.DoubleColon) {
                             break;
@@ -208,8 +209,18 @@
                     }
                     return false;
                 }
+                bool IsDefStatement() {
+                    for (int i2 = Tokens.Count - 1; i2 >= 0; i2--) {
+                        if (Tokens[i2].Type == Phase1TokenType.EndOfStatement) {
+                            break;
+                        }
+                        else if (Tokens[i2].Type == Phase1TokenType.Identifier && Tokens[i2].Value == DefKeyword) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
                 static bool IsValidIdentifierCharacter(char Chara) {
-                    if (char.IsAsciiDigit(Chara)) return false;
                     if (Chara == '.' || Chara == ',' || Chara == '(' || Chara == ')' || Chara == '"' || Chara == '\'' || Chara == '\n' || Chara == ';'
                         || Chara == '=' || Chara == '+' || Chara == '-' || Chara == '*' || Chara == '/' || Chara == '%' || Chara == '#' || Chara == '?')
                         return false;
@@ -223,7 +234,7 @@
                 bool FollowsWhitespace = i - 1 >= 0 && IsWhitespace(Code[i - 1]);
 
                 // Get debug location
-                CurrentColumn++;
+                int CurrentColumn = i - IndexOfLastNewline;
                 DebugLocation Location = new(CurrentLine, CurrentColumn);
 
                 // Integer
@@ -252,9 +263,9 @@
                             Tokens.Add(new(Location, Phase1TokenType.CloseBracket, null, FollowsWhitespace));
                             // Handle unexpected close bracket
                             if (Brackets.TryPop(out char Opener) == false || Opener != '(')
-                                throw new SyntaxErrorException("Unexpected close bracket: )");
-                            // Add EndOfStatement after def statement
-                            if (IsDefStatement())
+                                throw new SyntaxErrorException($"{Location}: Unexpected close bracket: )");
+                            // Add EndOfStatement after def method name
+                            if (IsDefMethodName())
                                 Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
                             break;
                         case '"':
@@ -292,7 +303,7 @@
                                 Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, Chara.ToString(), FollowsWhitespace));
                             if (Chara == '\n') {
                                 CurrentLine++;
-                                CurrentColumn = 0;
+                                IndexOfLastNewline = i;
                             }
                             break;
                         case '=':
@@ -308,13 +319,23 @@
                             Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "-", FollowsWhitespace));
                             break;
                         case '*':
-                            RemoveEndOfStatement();
-                            if (NextChara == '*') {
-                                Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "**", FollowsWhitespace));
-                                i++;
+                            if (IsDefStatement()) {
+                                if (NextChara == '*') {
+                                    Tokens.Add(new(Location, Phase1TokenType.SplatOperator, "**", FollowsWhitespace));
+                                    i++;
+                                }
+                                else
+                                    Tokens.Add(new(Location, Phase1TokenType.SplatOperator, "*", FollowsWhitespace));
                             }
-                            else
-                                Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "*", FollowsWhitespace));
+                            else {
+                                RemoveEndOfStatement();
+                                if (NextChara == '*') {
+                                    Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "**", FollowsWhitespace));
+                                    i++;
+                                }
+                                else
+                                    Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "*", FollowsWhitespace));
+                            }
                             break;
                         case '/':
                             RemoveEndOfStatement();
@@ -335,13 +356,13 @@
                                 continue;
                             }
                             else {
-                                throw new SyntaxErrorException("'?' is only valid at the end of a method name identifier");
+                                throw new SyntaxErrorException($"{Location}: '?' is only valid at the end of a method name identifier");
                             }
                         default:
                             // Skip whitespace
                             if (char.IsWhiteSpace(Chara)) {
                                 // Add EndOfStatement after class statement
-                                if (!(LastTokenWas(Phase1TokenType.Identifier) && Tokens[^1].Value == ClassKeyword) && IsClassStatement())
+                                if (!(LastTokenWas(Phase1TokenType.Identifier) && Tokens[^1].Value == ClassKeyword) && IsClassName())
                                     Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
                                 break;
                             }
@@ -349,7 +370,7 @@
                             string Identifier = BuildWhile(IsValidIdentifierCharacter);
                             // Double check identifier
                             if (Identifier.Length == 0)
-                                throw new InternalErrorException($"Character not handled correctly: '{Chara}'");
+                                throw new InternalErrorException($"{Location}: Character not handled correctly: '{Chara}'");
                             // Add EndOfStatement before end keyword
                             if (Identifier == EndKeyword && !LastTokenWas(Phase1TokenType.EndOfStatement))
                                 Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, null, FollowsWhitespace));

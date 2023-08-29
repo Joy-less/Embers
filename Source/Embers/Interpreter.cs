@@ -86,17 +86,18 @@ namespace Embers
             public readonly Dictionary<string, Method> Methods = new();
             public readonly Dictionary<string, Method> InstanceMethods = new();
             public readonly Dictionary<string, Instance> ClassVariables = new();
-            public Method Constructor;
-            public Class(string name, Class? parent, Method? constructor = null) : base(parent) {
+            public Class(string name, Class? parent) : base(parent) {
                 Name = name;
-                if (constructor != null) {
-                    Constructor = constructor;
-                }
-                else {
-                    Constructor = new Method(async Input => {
-                        return Input.Interpreter.Nil;
-                    }, 0);
-                }
+                Methods.Add("new", new Method(async Input => {
+                    Instance NewInstance = new(this);
+                    if (true) {
+                        await NewInstance.InstanceMethods["initialize"].Call(Input.Interpreter, NewInstance, Input.Arguments);
+                    }
+                    else {
+                        throw new RuntimeException($"Undefined method 'initialize' for {Name}");
+                    }
+                    return NewInstance;
+                }, null));
             }
         }
         public class Instance {
@@ -124,34 +125,15 @@ namespace Embers
                     Phase2TokenType.String => new StringInstance(Interpreter.String, Token.Value!),
                     Phase2TokenType.Integer => new IntegerInstance(Interpreter.Integer, Token.ValueAsLong),
                     Phase2TokenType.Float => new FloatInstance(Interpreter.Float, Token.ValueAsDouble),
-                    _ => throw new InternalErrorException($"{Token.DebugLocation}: Cannot create new object from token type {Token.Type}")
+                    _ => throw new InternalErrorException($"{Token.Location}: Cannot create new object from token type {Token.Type}")
                 };
             }
-            protected Instance(Class fromClass) {
+            public Instance(Class fromClass) {
                 Class = fromClass;
                 // Copy instance methods
                 if (this is not PseudoInstance) {
                     fromClass.InstanceMethods.CopyTo(InstanceMethods);
                 }
-            }
-            public static async Task<Instance> New(Interpreter Interpreter, Class fromClass, Instances Arguments) {
-                // Create instance
-                Instance NewInstance = new(fromClass);
-                // Call constructor
-                Instances ConstructorReturn = await NewInstance.Class.Constructor.Call(Interpreter, NewInstance, Arguments);
-                if (ConstructorReturn.Instance != null) {
-                    // Return instance
-                    return ConstructorReturn.Instance;
-                }
-                else {
-                    throw new InternalErrorException("Constructor did not return a single instance");
-                }
-            }
-            public static Instance NewIgnoreConstructor(Class fromClass) {
-                // Create instance
-                Instance NewInstance = new(fromClass);
-                // Return instance
-                return NewInstance;
             }
             public bool TryGetInstanceMethod(Interpreter Interpreter, string Name, out Method? Method) {
                 if (InstanceMethods.TryGetValue(Name, out Method? FindMethod)) {
@@ -304,22 +286,43 @@ namespace Embers
                 ArgumentCountRange = new IntRange(argumentCount, argumentCount);
                 ArgumentNames = argumentNames ?? new();
             }
-            public async Task<Instances> Call(Interpreter Interpreter, Instance OnInstance, Instances Arguments, Method? OnYield = null) {
+            public async Task<Instances> Call(Interpreter Interpreter, Instance OnInstance, Instances? Arguments = null, Method? OnYield = null) {
+                Arguments ??= new Instances();
                 if (ArgumentCountRange.IsInRange(Arguments.Count)) {
                     // Create temporary scope
                     Scope PreviousScope = Interpreter.CurrentScope;
                     Interpreter.SetCurrentScope(new Scope(PreviousScope));
                     // Set argument variables
-                    for (int i = 0; i < ArgumentNames.Count; i++) {
+                    /*for (int i = 0; i < ArgumentNames.Count; i++) {
                         MethodArgumentExpression Argument = ArgumentNames[i];
                         Instance GivenArgument;
-                        if (i >= Arguments.Count && Argument.DefaultValue != null) {
-                            GivenArgument = await Interpreter.InterpretExpressionAsync(Argument.DefaultValue);
+                        if (i >= Arguments.Count) {
+                            GivenArgument = await Interpreter.InterpretExpressionAsync(Argument.DefaultValue!);
                         }
                         else {
                             GivenArgument = Arguments[i];
                         }
                         Interpreter.CurrentScope.LocalVariables.Add(Argument.ArgumentName.Value!, GivenArgument);
+                    }*/
+                    for (int i = 0; i < ArgumentNames.Count; i++) {
+                        MethodArgumentExpression Argument = ArgumentNames[i];
+                        if (Argument.SplatType == SplatType.Single) {
+                            // Get splat arguments
+                            int RemainingArgumentNames = ArgumentNames.Count - i - 1;
+                            int RemainingGivenArguments = Arguments.Count - i;
+                            int SplatArgumentCount = RemainingGivenArguments - RemainingArgumentNames;
+                            List<MethodArgumentExpression> SplatArguments = ArgumentNames.GetRange(i, SplatArgumentCount);
+                            i += SplatArgumentCount;
+                            // Create array from splat arguments
+                            throw new NotImplementedException($"Splat arguments not implemented yet, because arrays not implemented yet (but {SplatArguments.Count} arguments were splat)");
+                            // Interpreter.CurrentScope.LocalVariables.Add(Argument.ArgumentName.Value!, SplatArguments);
+                        }
+                        else if (Argument.SplatType == SplatType.Double) {
+                            throw new NotImplementedException("Double splat arguments not implemented yet");
+                        }
+                        else {
+                            Interpreter.CurrentScope.LocalVariables.Add(Argument.ArgumentName.Value!, Arguments[i]);
+                        }
                     }
                     // Call method
                     Instances ReturnValues = await Function(new MethodInput(Interpreter, OnInstance, Arguments, OnYield));
@@ -331,9 +334,6 @@ namespace Embers
                 else {
                     throw new RuntimeException($"Wrong number of arguments (given {Arguments.Count}, expected {ArgumentCountRange})");
                 }
-            }
-            public async Task<Instances> Call(Interpreter Interpreter, Instance OnInstance) {
-                return await Call(Interpreter, OnInstance, new Instances());
             }
             public void ChangeFunction(Func<MethodInput, Task<Instances>> function) {
                 Function = function;
@@ -379,13 +379,16 @@ namespace Embers
                         return "any";
                     }
                     else {
-                        return Min.ToString()!;
+                        return $"{Min}";
                     }
                 }
                 else {
-                    string MinString = Min != null ? Min.ToString()! : "";
-                    string MaxString = Max != null ? Max.ToString()! : "";
-                    return MinString + ".." + MaxString;
+                    if (Min == null)
+                        return $"{Max}";
+                    else if (Max == null)
+                        return $"{Min}+";
+                    else
+                        return $"{Min}..{Max}";
                 }
             }
             public string Serialise() {
@@ -394,13 +397,17 @@ namespace Embers
         }
         public class Instances {
             // At least one of Instance or InstanceList will be null
-            public readonly Instance? Instance;
-            public readonly List<Instance>? InstanceList;
+            readonly Instance? Instance;
+            readonly List<Instance>? InstanceList;
+            public readonly int Count;
+
             public Instances(Instance? instance = null) {
                 Instance = instance;
+                Count = instance != null ? 1 : 0;
             }
             public Instances(List<Instance> instanceList) {
                 InstanceList = instanceList;
+                Count = instanceList.Count;
             }
             public static implicit operator Instances(Instance Instance) {
                 return new Instances(Instance);
@@ -411,9 +418,6 @@ namespace Embers
             public static implicit operator Instance(Instances Instances) {
                 return Instances[0];
             }
-            public int Count { get {
-                return InstanceList != null ? InstanceList.Count : (Instance != null ? 1 : 0);
-            } }
             public Instance this[int i] => InstanceList != null ? InstanceList[i] : (i == 0 && Instance != null ? Instance : throw new ApiException("Index was outside the range of the instances"));
             public IEnumerator<Instance> GetEnumerator() {
                 if (InstanceList != null) {
@@ -455,7 +459,9 @@ namespace Embers
                     }
                     // Instance method
                     else {
-                        return await MethodReference.Instance!.InstanceMethods[MethodReference.Token.Value!].Call(this, MethodReference.Instance);
+                        return await MethodReference.Instance!.InstanceMethods[MethodReference.Token.Value!].Call(
+                            this, MethodReference.Instance, await InterpretExpressionsAsync(MethodCallExpression.Arguments)
+                        );
                     }
                 }
                 else {
@@ -808,7 +814,7 @@ namespace Embers
         }
 
         public Interpreter() {
-            RootInstance = Instance.NewIgnoreConstructor(new Class("RootClass", null)); Class RootClass = RootInstance.Class;
+            RootInstance = new Instance(new Class("RootClass", null)); Class RootClass = RootInstance.Class;
             RootScope = new Scope(RootClass);
             CurrentClass = RootClass;
             CurrentScope = RootScope;
@@ -818,9 +824,9 @@ namespace Embers
             NilClass = new Class("NilClass", RootClass); RootClass.Constants.Add("NilClass", new ClassReference(NilClass)); Nil = new NilInstance(NilClass);
             TrueClass = new Class("TrueClass", RootClass); RootClass.Constants.Add("TrueClass", new ClassReference(TrueClass)); True = new TrueInstance(TrueClass);
             FalseClass = new Class("FalseClass", RootClass); RootClass.Constants.Add("FalseClass", new ClassReference(FalseClass)); False = new FalseInstance(FalseClass);
-            String = new Class("String", RootClass, null); RootClass.Constants.Add("String", new ClassReference(String));
-            Integer = new Class("Integer", RootClass, null); RootClass.Constants.Add("Integer", new ClassReference(Integer));
-            Float = new Class("Float", RootClass, null); RootClass.Constants.Add("Float", new ClassReference(Float));
+            String = new Class("String", RootClass); RootClass.Constants.Add("String", new ClassReference(String));
+            Integer = new Class("Integer", RootClass); RootClass.Constants.Add("Integer", new ClassReference(Integer));
+            Float = new Class("Float", RootClass); RootClass.Constants.Add("Float", new ClassReference(Float));
 
             Api.Setup(this);
         }
