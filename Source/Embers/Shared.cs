@@ -15,4 +15,16 @@
     public class ApiException : EmbersException {
         public ApiException(string Message) : base(Message) { }
     }
+
+    public readonly struct DebugLocation {
+        public readonly int Line;
+        public readonly int Column;
+        public DebugLocation(int line, int column) {
+            Line = line;
+            Column = column;
+        }
+        public override string ToString() {
+            return $"{Line}:{Column}";
+        }
+    }
 }

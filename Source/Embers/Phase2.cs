@@ -80,13 +80,24 @@ namespace Embers
         };
 
         public class Phase2Token : Phase2Object {
+            public DebugLocation Location;
             public readonly Phase2TokenType Type;
             public readonly string? Value;
             public readonly bool FollowsWhitespace;
-            public Phase2Token(Phase2TokenType type, string? value, bool followsWhitespace = false) {
+
+            public readonly bool IsObjectToken;
+            public readonly long ValueAsLong;
+            public readonly double ValueAsDouble;
+
+            public Phase2Token(DebugLocation location, Phase2TokenType type, string? value, bool followsWhitespace = false) {
+                Location = location;
                 Type = type;
                 Value = value;
                 FollowsWhitespace = followsWhitespace;
+
+                IsObjectToken = IsObjectToken(this);
+                if (Type == Phase2TokenType.Integer) ValueAsLong = long.Parse(Value!);
+                if (Type == Phase2TokenType.Float) ValueAsDouble = double.Parse(Value!);
             }
             public override string Inspect() {
                 return $"{Type}{(Value != null ? ":" : "")}{Value?.Replace("\n", "\\n")}";
@@ -138,15 +149,15 @@ namespace Embers
             }
         }
         public class ConstantPathExpression : ObjectTokenExpression {
-            public readonly Expression RootObject;
-            public ConstantPathExpression(Expression rootObject, Phase2Token objectToken) : base(objectToken) {
-                RootObject = rootObject;
+            public readonly Expression ParentObject;
+            public ConstantPathExpression(Expression parentObject, Phase2Token objectToken) : base(objectToken) {
+                ParentObject = parentObject;
             }
             public override string Inspect() {
-                return RootObject.Inspect() + "." + RootObject.Inspect();
+                return ParentObject.Inspect() + "." + ParentObject.Inspect();
             }
             public override string Serialise() {
-                return $"new ConstantPathExpression({RootObject.Serialise()}, {Token.Serialise()})";
+                return $"new ConstantPathExpression({ParentObject.Serialise()}, {Token.Serialise()})";
             }
         }
         /*public class ArithmeticExpression : Expression {
@@ -172,7 +183,7 @@ namespace Embers
                 OnYield = onYield;
             }
             public override string Inspect() {
-                return $"{MethodPath.Inspect()}({InspectList(Arguments)})";
+                return $"{MethodPath.Inspect()}({Arguments.Inspect()})";
             }
             public override string Serialise() {
                 return $"new MethodCallExpression({MethodPath.Serialise()}, {Arguments.Serialise()}, {(OnYield != null ? OnYield.Serialise() : "null")})";
@@ -213,15 +224,22 @@ namespace Embers
             public readonly List<Statement> Statements;
             public readonly IntRange ArgumentCount;
             public readonly List<MethodArgumentExpression> Arguments;
+
+            public readonly Method Method;
+
             public MethodExpression(List<Statement> statements, IntRange? argumentCount, List<MethodArgumentExpression> arguments) {
                 Statements = statements;
                 ArgumentCount = argumentCount ?? new IntRange();
                 Arguments = arguments;
+
+                Method = ToMethod();
             }
             public MethodExpression(List<Statement> statements, Range argumentCount, List<MethodArgumentExpression> arguments) {
                 Statements = statements;
                 ArgumentCount = new IntRange(argumentCount);
                 Arguments = arguments;
+
+                Method = ToMethod();
             }
             public override string Inspect() {
                 return $"method with {ArgumentCount} arguments";
@@ -229,7 +247,7 @@ namespace Embers
             public override string Serialise() {
                 return $"new MethodExpression({Statements.Serialise()}, {ArgumentCount.Serialise()}, {Arguments.Serialise()})";
             }
-            public Method ToMethod() {
+            Method ToMethod() {
                 return new Method(async Input => {
                     return await Input.Interpreter.InterpretAsync(Statements);
                 }, ArgumentCount, Arguments);
@@ -311,7 +329,7 @@ namespace Embers
                 YieldValues = yieldValues;
             }
             public override string Inspect() {
-                if (YieldValues != null) return "yield " + InspectList(YieldValues);
+                if (YieldValues != null) return "yield " + YieldValues.Inspect();
                 else return "yield";
             }
             public override string Serialise() {
@@ -324,7 +342,7 @@ namespace Embers
                 ReturnValues = returnValues;
             }
             public override string Inspect() {
-                if (ReturnValues != null) return "return " + InspectList(ReturnValues);
+                if (ReturnValues != null) return "return " + ReturnValues.Inspect();
                 else return "return";
             }
             public override string Serialise() {
@@ -338,7 +356,7 @@ namespace Embers
 
             foreach (KeyValuePair<string, Phase2TokenType> Keyword in Keywords) {
                 if (Token.Value == Keyword.Key) {
-                    return new Phase2Token(Keyword.Value, null, Token.FollowsWhitespace);
+                    return new Phase2Token(Token.Location, Keyword.Value, null, Token.FollowsWhitespace);
                 }
             }
 
@@ -373,7 +391,7 @@ namespace Embers
                 throw new Exception("Identifier cannot contain $ or @");
             }
 
-            return new Phase2Token(IdentifierType, Identifier, Token.FollowsWhitespace);
+            return new Phase2Token(Token.Location, IdentifierType, Identifier, Token.FollowsWhitespace);
         }
         static List<List<Phase2Object>> SplitObjects(List<Phase2Object> Objects, Phase2TokenType SplitToken, out List<string?> SplitCharas, bool CanStartWithHaveMultipleInARow) {
             List<List<Phase2Object>> SplitObjects = new();
@@ -422,17 +440,6 @@ namespace Embers
         public static bool IsVariableToken(Phase2Token? Token) {
             return Token != null && IsVariableToken(Token.Type);
         }
-        static string InspectList<T>(List<T>? List, string Separator = ", ") where T : Phase2Object {
-            string ListInspection = "";
-            if (List != null) {
-                foreach (Phase2Object Object in List) {
-                    if (ListInspection.Length != 0)
-                        ListInspection += Separator;
-                    ListInspection += Object.Inspect();
-                }
-            }
-            return ListInspection;
-        }
 
         static List<Phase2Token> TokensToPhase2(List<Phase1Token> Tokens) {
             // Phase 1 tokens to phase 2 tokens
@@ -445,24 +452,24 @@ namespace Embers
                 }
                 else if (Token.Type == Phase1TokenType.Integer) {
                     if (i + 2 < Tokens.Count && Tokens[i + 1].Type == Phase1TokenType.Dot && Tokens[i + 2].Type == Phase1TokenType.Integer) {
-                        NewTokens.Add(new Phase2Token(Phase2TokenType.Float, Token.Value + "." + Tokens[i + 2].Value, Token.FollowsWhitespace));
+                        NewTokens.Add(new Phase2Token(Token.Location, Phase2TokenType.Float, Token.Value + "." + Tokens[i + 2].Value, Token.FollowsWhitespace));
                         i += 2;
                     }
                     else {
-                        NewTokens.Add(new Phase2Token(Phase2TokenType.Integer, Token.Value, Token.FollowsWhitespace));
+                        NewTokens.Add(new Phase2Token(Token.Location, Phase2TokenType.Integer, Token.Value, Token.FollowsWhitespace));
                     }
                 }
                 else {
                     NewTokens.Add(Token.Type switch {
-                        Phase1TokenType.String => new Phase2Token(Phase2TokenType.String, Token.Value, Token.FollowsWhitespace),
-                        Phase1TokenType.AssignmentOperator => new Phase2Token(Phase2TokenType.AssignmentOperator, Token.Value, Token.FollowsWhitespace),
-                        Phase1TokenType.ArithmeticOperator => new Phase2Token(Phase2TokenType.ArithmeticOperator, Token.Value, Token.FollowsWhitespace),
-                        Phase1TokenType.Dot => new Phase2Token(Phase2TokenType.Dot, Token.Value, Token.FollowsWhitespace),
-                        Phase1TokenType.DoubleColon => new Phase2Token(Phase2TokenType.DoubleColon, Token.Value, Token.FollowsWhitespace),
-                        Phase1TokenType.Comma => new Phase2Token(Phase2TokenType.Comma, Token.Value, Token.FollowsWhitespace),
-                        Phase1TokenType.OpenBracket => new Phase2Token(Phase2TokenType.OpenBracket, Token.Value, Token.FollowsWhitespace),
-                        Phase1TokenType.CloseBracket => new Phase2Token(Phase2TokenType.CloseBracket, Token.Value, Token.FollowsWhitespace),
-                        Phase1TokenType.EndOfStatement => new Phase2Token(Phase2TokenType.EndOfStatement, Token.Value, Token.FollowsWhitespace),
+                        Phase1TokenType.String => new Phase2Token(Token.Location, Phase2TokenType.String, Token.Value, Token.FollowsWhitespace),
+                        Phase1TokenType.AssignmentOperator => new Phase2Token(Token.Location, Phase2TokenType.AssignmentOperator, Token.Value, Token.FollowsWhitespace),
+                        Phase1TokenType.ArithmeticOperator => new Phase2Token(Token.Location, Phase2TokenType.ArithmeticOperator, Token.Value, Token.FollowsWhitespace),
+                        Phase1TokenType.Dot => new Phase2Token(Token.Location, Phase2TokenType.Dot, Token.Value, Token.FollowsWhitespace),
+                        Phase1TokenType.DoubleColon => new Phase2Token(Token.Location, Phase2TokenType.DoubleColon, Token.Value, Token.FollowsWhitespace),
+                        Phase1TokenType.Comma => new Phase2Token(Token.Location, Phase2TokenType.Comma, Token.Value, Token.FollowsWhitespace),
+                        Phase1TokenType.OpenBracket => new Phase2Token(Token.Location, Phase2TokenType.OpenBracket, Token.Value, Token.FollowsWhitespace),
+                        Phase1TokenType.CloseBracket => new Phase2Token(Token.Location, Phase2TokenType.CloseBracket, Token.Value, Token.FollowsWhitespace),
+                        Phase1TokenType.EndOfStatement => new Phase2Token(Token.Location, Phase2TokenType.EndOfStatement, Token.Value, Token.FollowsWhitespace),
                         _ => throw new InternalErrorException($"Conversion of {Token.Type} from phase 1 to phase 2 not supported")
                     });
                 }
@@ -569,22 +576,32 @@ namespace Embers
                 Phase2Object? NextObject = i + 1 < ParsedObjects.Count ? ParsedObjects[i + 1] : null;
 
                 if (Object is Phase2Token Token) {
-                    if (Token.Type == Phase2TokenType.Dot) {
+                    // Path or Constant Path
+                    if (Token.Type == Phase2TokenType.Dot || Token.Type == Phase2TokenType.DoubleColon) {
                         if (LastObject != null) {
                             if (LastObject is Expression LastExpression && NextObject is Phase2Token NextToken) {
+                                if (!(NextToken.Type == Phase2TokenType.ConstantOrMethod
+                                    || (Token.Type == Phase2TokenType.Dot && NextToken.Type == Phase2TokenType.LocalVariableOrMethod)))
+                                {
+                                    throw new SyntaxErrorException($"Expected identifier after ., got {NextToken.Type}");
+                                }
+
                                 ParsedObjects.RemoveRange(i - 1, 3);
-                                ParsedObjects.Insert(i - 1, new PathExpression(LastExpression, NextToken));
+                                ParsedObjects.Insert(i - 1, Token.Type == Phase2TokenType.Dot
+                                    ? new PathExpression(LastExpression, NextToken)
+                                    : new ConstantPathExpression(LastExpression, NextToken));
                                 i -= 2;
                             }
                             else {
-                                throw new SyntaxErrorException("Expected expression before and after .");
+                                throw new SyntaxErrorException($"Expected expression before and after '{Token.Value!}'");
                             }
                         }
                         else {
-                            throw new SyntaxErrorException("Expected a value before .");
+                            throw new SyntaxErrorException($"Expected a value before '{Token.Value!}'");
                         }
                     }
-                    else if (IsVariableToken(Token) || IsObjectToken(Token)) {
+                    // Object
+                    else if (IsVariableToken(Token) || Token.IsObjectToken) {
                         ParsedObjects.RemoveAt(i);
                         ParsedObjects.Insert(i, new ObjectTokenExpression(Token));
                     }
@@ -604,7 +621,7 @@ namespace Embers
                                 i--;
                                 ParsedObjects.RemoveRange(i, 3);
                                 ParsedObjects.Insert(i, new MethodCallExpression(
-                                    new PathExpression(LastExpression, new Phase2Token(Phase2TokenType.LocalVariableOrMethod, "+")),
+                                    new PathExpression(LastExpression, new Phase2Token(Token.DebugLocation, Phase2TokenType.LocalVariableOrMethod, "+")),
                                     new List<Expression>() {NextExpression})
                                 );
                             }
@@ -669,7 +686,7 @@ namespace Embers
         static Expression ObjectsToExpression(List<Phase2Object> Phase2Objects) {
             List<Expression> Expressions = ObjectsToExpressions(Phase2Objects);
             if (Expressions.Count != 1)
-                throw new InternalErrorException($"Parsed objects should result in a single object (got {Expressions.Count} objects ({InspectList(Expressions)}))");
+                throw new InternalErrorException($"Parsed objects should result in a single object (got {Expressions.Count} objects ({Expressions.Inspect()}))");
             return Expressions[0];
         }
         /*static Expression TokenListToExpression(List<Phase1Token> Tokens) {
@@ -717,7 +734,7 @@ namespace Embers
             // Check for remaining arguments (internal error)
             if (EndOfDef + 1 > StatementTokens.Count) {
                 List<Phase2Object> RemainingArguments = StatementTokens.GetIndexRange(EndOfDef + 1);
-                throw new InternalErrorException($"There shouldn't be any remaining arguments after DefObjects (got {InspectList(RemainingArguments)})");
+                throw new InternalErrorException($"There shouldn't be any remaining arguments after DefObjects (got {RemainingArguments.Inspect()})");
             }
 
             // Get method name
@@ -753,7 +770,7 @@ namespace Embers
                         else if (ObjectToken.Type == Phase2TokenType.OpenBracket) {
                             break;
                         }
-                        else if (IsObjectToken(ObjectToken)) {
+                        else if (ObjectToken.IsObjectToken) {
                             break;
                         }
                         else {
@@ -897,7 +914,7 @@ namespace Embers
                         else if (ObjectToken.Type == Phase2TokenType.OpenBracket) {
                             break;
                         }
-                        else if (IsObjectToken(ObjectToken)) {
+                        else if (ObjectToken.IsObjectToken) {
                             break;
                         }
                         else {
@@ -1155,6 +1172,22 @@ namespace Embers
                 Serialised += Item.Serialise();
             }
             return Serialised + "}";
+        }
+        public static string Inspect<T>(this List<T>? List, string Separator = ", ") where T : Phase2.Phase2Object {
+            string ListInspection = "";
+            if (List != null) {
+                foreach (Phase2.Phase2Object Object in List) {
+                    if (ListInspection.Length != 0)
+                        ListInspection += Separator;
+                    ListInspection += Object.Inspect();
+                }
+            }
+            return ListInspection;
+        }
+        public static void CopyTo<TKey, TValue>(this Dictionary<TKey, TValue> Origin, Dictionary<TKey, TValue> Target) where TKey : notnull {
+            foreach (KeyValuePair<TKey, TValue> Pair in Origin) {
+                Target.Add(Pair.Key, Pair.Value);
+            }
         }
     }
 }

@@ -20,10 +20,12 @@
             Comma,
         }
         public class Phase1Token {
+            public DebugLocation Location;
             public readonly Phase1TokenType Type;
             public string? Value;
             public readonly bool FollowsWhitespace;
-            public Phase1Token(Phase1TokenType type, string? value, bool followsWhitespace) {
+            public Phase1Token(DebugLocation location, Phase1TokenType type, string? value, bool followsWhitespace) {
+                Location = location;
                 Type = type;
                 Value = value;
                 FollowsWhitespace = followsWhitespace;
@@ -41,6 +43,9 @@
 
             List<Phase1Token> Tokens = new();
             Stack<char> Brackets = new();
+
+            int CurrentLine = 1;
+            int CurrentColumn = 1;
             
             for (int i = 0; i < Code.Length; i++) {
                 // Functions
@@ -217,10 +222,14 @@
                 char? NextChara = i + 1 < Code.Length ? Code[i + 1] : null;
                 bool FollowsWhitespace = i - 1 >= 0 && IsWhitespace(Code[i - 1]);
 
+                // Get debug location
+                CurrentColumn++;
+                DebugLocation Location = new(CurrentLine, CurrentColumn);
+
                 // Integer
                 if (char.IsAsciiDigit(Chara)) {
                     string Number = BuildWhile(char.IsAsciiDigit);
-                    Tokens.Add(new(Phase1TokenType.Integer, Number, FollowsWhitespace));
+                    Tokens.Add(new(Location, Phase1TokenType.Integer, Number, FollowsWhitespace));
                     i--;
                 }
                 // Special character
@@ -228,25 +237,25 @@
                     switch (Chara) {
                         case '.':
                             RemoveEndOfStatement();
-                            Tokens.Add(new(Phase1TokenType.Dot, null, FollowsWhitespace));
+                            Tokens.Add(new(Location, Phase1TokenType.Dot, null, FollowsWhitespace));
                             break;
                         case ',':
                             RemoveEndOfStatement();
-                            Tokens.Add(new(Phase1TokenType.Comma, null, FollowsWhitespace));
+                            Tokens.Add(new(Location, Phase1TokenType.Comma, null, FollowsWhitespace));
                             break;
                         case '(':
-                            Tokens.Add(new(Phase1TokenType.OpenBracket, null, FollowsWhitespace));
+                            Tokens.Add(new(Location, Phase1TokenType.OpenBracket, null, FollowsWhitespace));
                             Brackets.Push('(');
                             break;
                         case ')':
                             RemoveEndOfStatement();
-                            Tokens.Add(new(Phase1TokenType.CloseBracket, null, FollowsWhitespace));
+                            Tokens.Add(new(Location, Phase1TokenType.CloseBracket, null, FollowsWhitespace));
                             // Handle unexpected close bracket
                             if (Brackets.TryPop(out char Opener) == false || Opener != '(')
                                 throw new SyntaxErrorException("Unexpected close bracket: )");
                             // Add EndOfStatement after def statement
                             if (IsDefStatement())
-                                Tokens.Add(new(Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
+                                Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
                             break;
                         case '"':
                         case '\'':
@@ -259,7 +268,7 @@
                                 return c == Chara;
                             });
                             String = EscapeString(String);
-                            Tokens.Add(new(Phase1TokenType.String, String, FollowsWhitespace));
+                            Tokens.Add(new(Location, Phase1TokenType.String, String, FollowsWhitespace));
                             break;
                         case '\n':
                         case '\r':
@@ -272,7 +281,7 @@
                         case ':':
                             if (NextChara == ':') {
                                 i++;
-                                Tokens.Add(new(Phase1TokenType.DoubleColon, null, FollowsWhitespace));
+                                Tokens.Add(new(Location, Phase1TokenType.DoubleColon, null, FollowsWhitespace));
                             }
                             else {
                                 throw new NotImplementedException();
@@ -280,36 +289,40 @@
                             break;
                         case ';':
                             if (!LastTokenWas(Phase1TokenType.EndOfStatement))
-                                Tokens.Add(new(Phase1TokenType.EndOfStatement, Chara.ToString(), FollowsWhitespace));
+                                Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, Chara.ToString(), FollowsWhitespace));
+                            if (Chara == '\n') {
+                                CurrentLine++;
+                                CurrentColumn = 0;
+                            }
                             break;
                         case '=':
                             RemoveEndOfStatement();
-                            Tokens.Add(new(Phase1TokenType.AssignmentOperator, "=", FollowsWhitespace));
+                            Tokens.Add(new(Location, Phase1TokenType.AssignmentOperator, "=", FollowsWhitespace));
                             break;
                         case '+':
                             RemoveEndOfStatement();
-                            Tokens.Add(new(Phase1TokenType.ArithmeticOperator, "+", FollowsWhitespace));
+                            Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "+", FollowsWhitespace));
                             break;
                         case '-':
                             RemoveEndOfStatement();
-                            Tokens.Add(new(Phase1TokenType.ArithmeticOperator, "-", FollowsWhitespace));
+                            Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "-", FollowsWhitespace));
                             break;
                         case '*':
                             RemoveEndOfStatement();
                             if (NextChara == '*') {
-                                Tokens.Add(new(Phase1TokenType.ArithmeticOperator, "**", FollowsWhitespace));
+                                Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "**", FollowsWhitespace));
                                 i++;
                             }
                             else
-                                Tokens.Add(new(Phase1TokenType.ArithmeticOperator, "*", FollowsWhitespace));
+                                Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "*", FollowsWhitespace));
                             break;
                         case '/':
                             RemoveEndOfStatement();
-                            Tokens.Add(new(Phase1TokenType.ArithmeticOperator, "/", FollowsWhitespace));
+                            Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "/", FollowsWhitespace));
                             break;
                         case '%':
                             RemoveEndOfStatement();
-                            Tokens.Add(new(Phase1TokenType.ArithmeticOperator, "%", FollowsWhitespace));
+                            Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "%", FollowsWhitespace));
                             break;
                         case '#':
                             do {
@@ -329,7 +342,7 @@
                             if (char.IsWhiteSpace(Chara)) {
                                 // Add EndOfStatement after class statement
                                 if (!(LastTokenWas(Phase1TokenType.Identifier) && Tokens[^1].Value == ClassKeyword) && IsClassStatement())
-                                    Tokens.Add(new(Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
+                                    Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
                                 break;
                             }
                             // Build identifier
@@ -339,9 +352,9 @@
                                 throw new InternalErrorException($"Character not handled correctly: '{Chara}'");
                             // Add EndOfStatement before end keyword
                             if (Identifier == EndKeyword && !LastTokenWas(Phase1TokenType.EndOfStatement))
-                                Tokens.Add(new(Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
+                                Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
                             // Add identifier
-                            Tokens.Add(new(Phase1TokenType.Identifier, Identifier, FollowsWhitespace));
+                            Tokens.Add(new(Location, Phase1TokenType.Identifier, Identifier, FollowsWhitespace));
                             i--;
                             break;
                     }

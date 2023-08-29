@@ -9,14 +9,14 @@ namespace Embers
     public static class Api
     {
         public static void Setup(Interpreter Interpreter) {
-            // Interpreter.RootClass.Constants["Integer"].Class.Methods["+"] = new Method(Integer._Add, 1);
+            // Interpreter.RootInstance.Constants["Integer"].Class.Methods["+"] = new Method(Integer._Add, 1);
 
             // Global methods
-            Interpreter.RootClass.Methods["puts"] = new Method(Puts, null);
-            Interpreter.RootClass.Methods["print"] = new Method(Print, null);
-            Interpreter.RootClass.Methods["p"] = new Method(P, null);
-            Interpreter.RootClass.Methods["warn"] = new Method(Warn, null);
-            Interpreter.RootClass.Methods["sleep"] = new Method(Sleep, 0..1);
+            Interpreter.RootInstance.InstanceMethods["puts"] = new Method(Puts, null);
+            Interpreter.RootInstance.InstanceMethods["print"] = new Method(Print, null);
+            Interpreter.RootInstance.InstanceMethods["p"] = new Method(P, null);
+            Interpreter.RootInstance.InstanceMethods["warn"] = new Method(Warn, null);
+            Interpreter.RootInstance.InstanceMethods["sleep"] = new Method(Sleep, 0..1);
 
             // String
             Interpreter.String.Methods["+"] = new Method(String._Add, 1);
@@ -29,7 +29,7 @@ namespace Embers
             Interpreter.Integer.Methods["/"] = new Method(Integer._Exponentiate, 1);
             Interpreter.Integer.Methods["%"] = new Method(Integer._Modulo, 1);
             Interpreter.Integer.Methods["**"] = new Method(Integer._Exponentiate, 1);
-            Interpreter.Integer.Methods["times"] = new Method(Integer.Times, 0);
+            Interpreter.Integer.InstanceMethods["times"] = new Method(Integer.Times, 0);
 
             // Float
             Interpreter.Float.Methods["+"] = new Method(Float._Add, 1);

@@ -7,7 +7,8 @@ namespace Embers
     internal class Program
     {
         static void Main() {
-            string Code = @"
+            {
+                string Code = @"
 #class A
 #    def a
 #        puts 'hi'
@@ -42,10 +43,11 @@ class A
         
     end
 end
-A.a
+# A.a
 ";
-            Benchmark(() => new Interpreter().Evaluate(Code));
-            Console.ReadLine();
+                Benchmark(() => new Interpreter().Evaluate(Code));
+                Console.ReadLine();
+            }
 
             // Benchmark (pre-baked)
             {
