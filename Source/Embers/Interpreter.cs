@@ -496,7 +496,7 @@ namespace Embers
                     }
                 }
                 else {
-                    throw new InternalErrorException($"MethodPath should be VariableReference, not {MethodPath.GetType().Name}");
+                    throw new InternalErrorException($"{MethodCallExpression.Location}: MethodPath should be VariableReference, not {MethodPath.GetType().Name}");
                 }
             }
             // Path or Object Token
@@ -702,7 +702,7 @@ namespace Embers
                 }
             }
             // Unknown
-            throw new InternalErrorException($"Not sure how to interpret expression {Expression.GetType().Name} ({Expression.Inspect()})");
+            throw new InternalErrorException($"{Expression.Location}: Not sure how to interpret expression {Expression.GetType().Name} ({Expression.Inspect()})");
         }
         async Task<List<Instance>> InterpretExpressionsAsync(List<Expression> Expressions) {
             List<Instance> Results = new();
@@ -734,7 +734,7 @@ namespace Embers
                         case Phase2TokenType.ClassVariable:
                             throw new NotImplementedException();
                         default:
-                            throw new InternalErrorException($"Assignment variable token is not a variable type (got {Variable.Token.Type})");
+                            throw new InternalErrorException($"{Variable.Token.Location}: Assignment variable token is not a variable type (got {Variable.Token.Type})");
                     }
                 }
                 
@@ -751,11 +751,11 @@ namespace Embers
                             LastExpression = Left;
                         }
                         else {
-                            throw new InternalErrorException($"Assignment value should be an instance, but got {Right.GetType().Name}");
+                            throw new InternalErrorException($"{LeftVariable.Token.Location}: Assignment value should be an instance, but got {Right.GetType().Name}");
                         }
                     }
                     else {
-                        throw new RuntimeException($"{Left.GetType()} cannot be the target of an assignment");
+                        throw new RuntimeException($"{AssignmentStatement.Left.Location}: {Left.GetType()} cannot be the target of an assignment");
                     }
                 }
                 else if (Statement is DefineMethodStatement DefineMethodStatement) {
@@ -771,7 +771,7 @@ namespace Embers
                         }
                     }
                     else {
-                        throw new InternalErrorException($"Invalid method name: {MethodNameObject}");
+                        throw new InternalErrorException($"{DefineMethodStatement.Location}: Invalid method name: {MethodNameObject}");
                     }
                 }
                 else if (Statement is DefineClassStatement DefineClassStatement) {
@@ -802,7 +802,7 @@ namespace Embers
                         }
                     }
                     else {
-                        throw new InternalErrorException($"Invalid class name: {ClassNameObject}");
+                        throw new InternalErrorException($"{DefineClassStatement.Location}: Invalid class name: {ClassNameObject}");
                     }
                 }
                 else if (Statement is ReturnStatement ReturnStatement) {
@@ -818,7 +818,7 @@ namespace Embers
                         await OnYield(YieldArgs);
                     }
                     else {
-                        throw new RuntimeException("No block given to yield to");
+                        throw new RuntimeException($"{YieldStatement.Location}: No block given to yield to");
                     }
                 }
                 else if (Statement is IfStatement IfStatement) {
@@ -838,7 +838,7 @@ namespace Embers
                     }
                 }
                 else {
-                    throw new InternalErrorException($"Not sure how to interpret statement {Statement.GetType().Name}");
+                    throw new InternalErrorException($"{Statement.Location}: Not sure how to interpret statement {Statement.GetType().Name}");
                 }
             }
             return LastExpression;

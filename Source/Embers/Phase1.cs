@@ -2,9 +2,10 @@
 {
     public static class Phase1
     {
-        static readonly string EndKeyword = Phase2.Phase2TokenType.End.ToString().ToLower();
-        static readonly string DefKeyword = Phase2.Phase2TokenType.Def.ToString().ToLower();
-        static readonly string ClassKeyword = Phase2.Phase2TokenType.Class.ToString().ToLower();
+        static readonly string EndKeyword = nameof(Phase2.Phase2TokenType.End).ToLower();
+        static readonly string DefKeyword = nameof(Phase2.Phase2TokenType.Def).ToLower();
+        static readonly string ClassKeyword = nameof(Phase2.Phase2TokenType.Class).ToLower();
+        static readonly string ElseKeyword = nameof(Phase2.Phase2TokenType.Else).ToLower();
 
         public enum Phase1TokenType {
             Identifier,
@@ -406,6 +407,10 @@
                                 Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
                             // Add identifier
                             Tokens.Add(new(Location, Phase1TokenType.Identifier, Identifier, FollowsWhitespace));
+                            // Add EndOfStatement after else keyword
+                            if (Identifier == ElseKeyword)
+                                Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
+                            //
                             i--;
                             break;
                     }
