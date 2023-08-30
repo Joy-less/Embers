@@ -229,6 +229,20 @@ namespace Embers
                 }, ArgumentCount, Arguments);
             }
         }
+        public class IfExpression : Expression {
+            public readonly Expression? Condition;
+            public List<Statement> Statements;
+            public IfExpression(Expression? condition, List<Statement> statements) {
+                Condition = condition;
+                Statements = statements;
+            }
+            public override string Inspect() {
+                return (Condition != null ? $"if {Condition.Inspect()} " : "else ") + "{" + Statements.Inspect() + "}";
+            }
+            public override string Serialise() {
+                return $"new IfExpression({(Condition != null ? Condition.Serialise() : "null")}, {Statements.Serialise()})";
+            }
+        }
 
         public abstract class Statement : Expression { }
         public class ExpressionStatement : Statement {
@@ -323,6 +337,18 @@ namespace Embers
             }
             public override string Serialise() {
                 return $"new ReturnStatement({(ReturnValues != null ? ReturnValues.Serialise() : "null")})";
+            }
+        }
+        public class IfStatement : Statement {
+            public List<IfExpression> Branches;
+            public IfStatement(List<IfExpression> branches) {
+                Branches = branches;
+            }
+            public override string Inspect() {
+                return Branches.Inspect(" ");
+            }
+            public override string Serialise() {
+                return $"new IfStatement({Branches.Serialise()})";
             }
         }
 
@@ -1003,10 +1029,6 @@ namespace Embers
                         }
                     }
 
-                    // Get on yield method
-                    /*Method? OnYield = new(async Input => {
-                        return await Input.Interpreter.InterpretAsync(DoBlock.Statements);
-                    }, null, DoBlock.Arguments);*/
                     MethodExpression OnYield = new(DoBlock.Statements, null, DoBlock.Arguments);
 
                     // Set on yield for already known method call
@@ -1039,6 +1061,18 @@ namespace Embers
                     throw new SyntaxErrorException("Do block must follow method call");
                 }
             }
+            // End If Block
+            else if (Block is BuildingIfBranches IfBranches) {
+                List<IfExpression> IfExpressions = new();
+                for (int i = 0; i < IfBranches.Branches.Count; i++) {
+                    BuildingIf Branch = IfBranches.Branches[i];
+                    if (Branch.Condition == null && i != IfBranches.Branches.Count - 1) {
+                        throw new SyntaxErrorException("Else must be the last branch in an if statement");
+                    }
+                    IfExpressions.Add(new IfExpression(Branch.Condition, Branch.Statements));
+                }
+                return new IfStatement(IfExpressions);
+            }
             // End Unknown Block (internal error)
             else {
                 throw new InternalErrorException($"End block not handled for type: {Block.GetType().Name}");
@@ -1051,9 +1085,28 @@ namespace Embers
             // Create yield/return statement
             return IsReturn ? new ReturnStatement(ReturnOrYieldValues) : new YieldStatement(ReturnOrYieldValues);
         }
+        static BuildingIf ParseStartIf(List<Phase2Object> StatementTokens) {
+            // Get condition
+            int EndConditionIndex;
+            for (EndConditionIndex = 1; EndConditionIndex < StatementTokens.Count; EndConditionIndex++) {
+                if (StatementTokens[EndConditionIndex] is Phase2Token Token) {
+                    if (Token.Type == Phase2TokenType.EndOfStatement || Token.Type == Phase2TokenType.Then) {
+                        break;
+                    }
+                }
+            }
+            List<Phase2Object> Condition = StatementTokens.GetIndexRange(1, EndConditionIndex - 1);
+            Expression ConditionExpression = ObjectsToExpression(Condition);
+
+            // Open if block
+            return new BuildingIf(ConditionExpression);
+        }
 
         class BuildingBlock {
             public List<Statement> Statements = new();
+            public virtual void AddStatement(Statement Statement) {
+                Statements.Add(Statement);
+            }
         }
         class BuildingMethod : BuildingBlock {
             public readonly ObjectTokenExpression MethodName;
@@ -1099,6 +1152,21 @@ namespace Embers
                 Arguments = arguments;
             }
         }
+        class BuildingIfBranches : BuildingBlock {
+            public readonly List<BuildingIf> Branches;
+            public BuildingIfBranches(List<BuildingIf> branches) {
+                Branches = branches;
+            }
+            public override void AddStatement(Statement Statement) {
+                Branches[^1].Statements.Add(Statement);
+            }
+        }
+        class BuildingIf : BuildingBlock {
+            public readonly Expression? Condition;
+            public BuildingIf(Expression? condition) {
+                Condition = condition;
+            }
+        }
         public static List<Statement> GetStatements(List<Phase2Object> Phase2Objects) {
             // Get statements tokens
             List<List<Phase2Object>> StatementsTokens = SplitObjects(Phase2Objects, Phase2TokenType.EndOfStatement, out _, true);
@@ -1111,33 +1179,59 @@ namespace Embers
                 bool NoBlockBuilt = false;
                 // Special token
                 if (StatementTokens[0] is Phase2Token Token) {
-                    if (Token.Type == Phase2TokenType.Def) {
-                        BuildingMethod BuildingMethod = ParseStartDefineMethod(StatementTokens);
-                        // Open define method block
-                        BlockStackInfo.Push(BuildingMethod);
-                    }
-                    else if (Token.Type == Phase2TokenType.Class) {
-                        BuildingClass BuildingClass = ParseStartDefineClass(StatementTokens);
-                        // Open define class block
-                        BlockStackInfo.Push(BuildingClass);
-                    }
-                    else if (Token.Type == Phase2TokenType.End) {
-                        if (BlockStackInfo.Count == 1) {
-                            throw new SyntaxErrorException("Unexpected end statement");
-                        }
-                        Statement? FinishedStatement = ParseEndStatement(BlockStackInfo);
-                        if (FinishedStatement != null)
-                            BlockStackInfo.Peek().Statements.Add(FinishedStatement);
-                    }
-                    else if (Token.Type == Phase2TokenType.Return) {
-                        BlockStackInfo.Peek().Statements.Add(ParseReturnOrYield(StatementTokens, true));
-                    }
-                    else if (Token.Type == Phase2TokenType.Yield) {
-                        BlockStackInfo.Peek().Statements.Add(ParseReturnOrYield(StatementTokens, false));
-                    }
-                    else {
-                        // BlockStackInfo.Peek().Statements.Add(new ExpressionStatement(ObjectsToExpression(StatementTokens)));
-                        NoBlockBuilt = true;
+                    switch (Token.Type) {
+                        case Phase2TokenType.Def:
+                            BuildingMethod BuildingMethod = ParseStartDefineMethod(StatementTokens);
+                            // Open define method block
+                            BlockStackInfo.Push(BuildingMethod);
+                            break;
+                        case Phase2TokenType.Class:
+                            BuildingClass BuildingClass = ParseStartDefineClass(StatementTokens);
+                            // Open define class block
+                            BlockStackInfo.Push(BuildingClass);
+                            break;
+                        case Phase2TokenType.End:
+                            if (BlockStackInfo.Count == 1) {
+                                throw new SyntaxErrorException("Unexpected end statement");
+                            }
+                            Statement? FinishedStatement = ParseEndStatement(BlockStackInfo);
+                            if (FinishedStatement != null)
+                                BlockStackInfo.Peek().AddStatement(FinishedStatement);
+                            break;
+                        case Phase2TokenType.Return:
+                            BlockStackInfo.Peek().AddStatement(ParseReturnOrYield(StatementTokens, true));
+                            break;
+                        case Phase2TokenType.Yield:
+                            BlockStackInfo.Peek().AddStatement(ParseReturnOrYield(StatementTokens, false));
+                            break;
+                        case Phase2TokenType.If:
+                            BuildingIf BuildingIf = ParseStartIf(StatementTokens);
+                            // Open if block
+                            BlockStackInfo.Push(new BuildingIfBranches(new List<BuildingIf>() {BuildingIf}));
+                            break;
+                        case Phase2TokenType.Elsif:
+                            {
+                                if (BlockStackInfo.TryPeek(out BuildingBlock? Block) && Block is BuildingIfBranches IfBlock) {
+                                    IfBlock.Branches.Add(ParseStartIf(StatementTokens));
+                                }
+                                else {
+                                    throw new SyntaxErrorException("Elsif must follow if");
+                                }
+                            }
+                            break;
+                        case Phase2TokenType.Else:
+                            {
+                                if (BlockStackInfo.TryPeek(out BuildingBlock? Block) && Block is BuildingIfBranches IfBlock) {
+                                    IfBlock.Branches.Add(new BuildingIf(null));
+                                }
+                                else {
+                                    throw new SyntaxErrorException("Else must follow if");
+                                }
+                            }
+                            break;
+                        default:
+                            NoBlockBuilt = true;
+                            break;
                     }
                 }
                 else {
@@ -1154,10 +1248,10 @@ namespace Embers
                     // Parse assignment or expression
                     AssignmentStatement? Assignment = ParseAssignmentStatement(UnlockedStatementTokens);
                     if (Assignment != null) {
-                        BlockStackInfo.Peek().Statements.Add(Assignment);
+                        BlockStackInfo.Peek().AddStatement(Assignment);
                     }
                     else {
-                        BlockStackInfo.Peek().Statements.Add(new ExpressionStatement(ObjectsToExpression(UnlockedStatementTokens)));
+                        BlockStackInfo.Peek().AddStatement(new ExpressionStatement(ObjectsToExpression(UnlockedStatementTokens)));
                     }
                     // Parse do statement
                     if (FindDoStatement != -1) {

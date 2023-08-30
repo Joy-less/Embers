@@ -821,6 +821,22 @@ namespace Embers
                         throw new RuntimeException("No block given to yield to");
                     }
                 }
+                else if (Statement is IfStatement IfStatement) {
+                    for (int i = 0; i < IfStatement.Branches.Count; i++) {
+                        IfExpression Branch = IfStatement.Branches[i];
+                        if (Branch.Condition != null) {
+                            Instance ConditionResult = await InterpretExpressionAsync(Branch.Condition);
+                            if (ConditionResult == True) {
+                                await InterpretAsync(Branch.Statements);
+                                break;
+                            }
+                        }
+                        else {
+                            await InterpretAsync(Branch.Statements);
+                            break;
+                        }
+                    }
+                }
                 else {
                     throw new InternalErrorException($"Not sure how to interpret statement {Statement.GetType().Name}");
                 }

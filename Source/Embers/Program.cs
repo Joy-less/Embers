@@ -9,6 +9,14 @@ namespace Embers
         static void Main() {
             {
                 string Code = @"
+if false then
+    puts 'First.'
+elsif true
+    puts 'Second.'
+else
+    puts 'Third.'
+end
+
 puts 'Tell me your name.'
 Name = gets.chomp
 puts ""Hello, #{Name}!""
