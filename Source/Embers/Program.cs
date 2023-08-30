@@ -9,7 +9,9 @@ namespace Embers
         static void Main() {
             {
                 string Code = @"
-puts 'Hello, world!'
+puts 'Tell me your name.'
+Name = gets
+puts ""Hello, #{Name}!""
 ";
                 Benchmark(() => new Interpreter().Evaluate(Code));
                 Console.ReadLine();

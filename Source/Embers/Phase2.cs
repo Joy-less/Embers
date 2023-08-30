@@ -81,27 +81,29 @@ namespace Embers
         };
 
         public class Phase2Token : Phase2Object {
-            public DebugLocation Location;
+            public readonly DebugLocation Location;
             public readonly Phase2TokenType Type;
             public readonly string? Value;
             public readonly bool FollowsWhitespace;
+            public readonly bool ProcessFormatting;
 
             public readonly bool IsObjectToken;
             public readonly long ValueAsLong;
             public readonly double ValueAsDouble;
 
-            public Phase2Token(DebugLocation location, Phase2TokenType type, string? value, bool followsWhitespace = false) {
+            public Phase2Token(DebugLocation location, Phase2TokenType type, string? value, bool followsWhitespace = false, bool processFormatting = false) {
                 Location = location;
                 Type = type;
                 Value = value;
                 FollowsWhitespace = followsWhitespace;
+                ProcessFormatting = processFormatting;
 
                 IsObjectToken = IsObjectToken(this);
                 if (Type == Phase2TokenType.Integer) ValueAsLong = long.Parse(Value!);
                 if (Type == Phase2TokenType.Float) ValueAsDouble = double.Parse(Value!);
             }
             public override string Inspect() {
-                return $"{Type}{(Value != null ? ":" : "")}{Value?.Replace("\n", "\\n")}";
+                return Type + (Value != null ? ":" : "") + Value;
             }
             public override string Serialise() {
                 return $"new Phase2Token(Phase2TokenType.{Type}, \"{Value}\", {(FollowsWhitespace ? "true" : "false")})";
@@ -335,7 +337,7 @@ namespace Embers
 
             foreach (KeyValuePair<string, Phase2TokenType> Keyword in Keywords) {
                 if (Token.Value == Keyword.Key) {
-                    return new Phase2Token(Token.Location, Keyword.Value, null, Token.FollowsWhitespace);
+                    return new Phase2Token(Token.Location, Keyword.Value, null, Token.FollowsWhitespace, Token.ProcessFormatting);
                 }
             }
 
@@ -370,7 +372,7 @@ namespace Embers
                 throw new Exception("Identifier cannot contain $ or @");
             }
 
-            return new Phase2Token(Token.Location, IdentifierType, Identifier, Token.FollowsWhitespace);
+            return new Phase2Token(Token.Location, IdentifierType, Identifier, Token.FollowsWhitespace, Token.ProcessFormatting);
         }
         static List<List<Phase2Object>> SplitObjects(List<Phase2Object> Objects, Phase2TokenType SplitToken, out List<string?> SplitCharas, bool CanStartWithHaveMultipleInARow) {
             List<List<Phase2Object>> SplitObjects = new();
@@ -431,25 +433,25 @@ namespace Embers
                 }
                 else if (Token.Type == Phase1TokenType.Integer) {
                     if (i + 2 < Tokens.Count && Tokens[i + 1].Type == Phase1TokenType.Dot && Tokens[i + 2].Type == Phase1TokenType.Integer) {
-                        NewTokens.Add(new Phase2Token(Token.Location, Phase2TokenType.Float, Token.Value + "." + Tokens[i + 2].Value, Token.FollowsWhitespace));
+                        NewTokens.Add(new Phase2Token(Token.Location, Phase2TokenType.Float, Token.Value + "." + Tokens[i + 2].Value, Token.FollowsWhitespace, Token.ProcessFormatting));
                         i += 2;
                     }
                     else {
-                        NewTokens.Add(new Phase2Token(Token.Location, Phase2TokenType.Integer, Token.Value, Token.FollowsWhitespace));
+                        NewTokens.Add(new Phase2Token(Token.Location, Phase2TokenType.Integer, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting));
                     }
                 }
                 else {
                     NewTokens.Add(Token.Type switch {
-                        Phase1TokenType.String => new Phase2Token(Token.Location, Phase2TokenType.String, Token.Value, Token.FollowsWhitespace),
-                        Phase1TokenType.AssignmentOperator => new Phase2Token(Token.Location, Phase2TokenType.AssignmentOperator, Token.Value, Token.FollowsWhitespace),
-                        Phase1TokenType.ArithmeticOperator => new Phase2Token(Token.Location, Phase2TokenType.ArithmeticOperator, Token.Value, Token.FollowsWhitespace),
-                        Phase1TokenType.Dot => new Phase2Token(Token.Location, Phase2TokenType.Dot, Token.Value, Token.FollowsWhitespace),
-                        Phase1TokenType.DoubleColon => new Phase2Token(Token.Location, Phase2TokenType.DoubleColon, Token.Value, Token.FollowsWhitespace),
-                        Phase1TokenType.Comma => new Phase2Token(Token.Location, Phase2TokenType.Comma, Token.Value, Token.FollowsWhitespace),
-                        Phase1TokenType.SplatOperator => new Phase2Token(Token.Location, Phase2TokenType.SplatOperator, Token.Value, Token.FollowsWhitespace),
-                        Phase1TokenType.OpenBracket => new Phase2Token(Token.Location, Phase2TokenType.OpenBracket, Token.Value, Token.FollowsWhitespace),
-                        Phase1TokenType.CloseBracket => new Phase2Token(Token.Location, Phase2TokenType.CloseBracket, Token.Value, Token.FollowsWhitespace),
-                        Phase1TokenType.EndOfStatement => new Phase2Token(Token.Location, Phase2TokenType.EndOfStatement, Token.Value, Token.FollowsWhitespace),
+                        Phase1TokenType.String => new Phase2Token(Token.Location, Phase2TokenType.String, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
+                        Phase1TokenType.AssignmentOperator => new Phase2Token(Token.Location, Phase2TokenType.AssignmentOperator, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
+                        Phase1TokenType.ArithmeticOperator => new Phase2Token(Token.Location, Phase2TokenType.ArithmeticOperator, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
+                        Phase1TokenType.Dot => new Phase2Token(Token.Location, Phase2TokenType.Dot, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
+                        Phase1TokenType.DoubleColon => new Phase2Token(Token.Location, Phase2TokenType.DoubleColon, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
+                        Phase1TokenType.Comma => new Phase2Token(Token.Location, Phase2TokenType.Comma, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
+                        Phase1TokenType.SplatOperator => new Phase2Token(Token.Location, Phase2TokenType.SplatOperator, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
+                        Phase1TokenType.OpenBracket => new Phase2Token(Token.Location, Phase2TokenType.OpenBracket, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
+                        Phase1TokenType.CloseBracket => new Phase2Token(Token.Location, Phase2TokenType.CloseBracket, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
+                        Phase1TokenType.EndOfStatement => new Phase2Token(Token.Location, Phase2TokenType.EndOfStatement, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
                         _ => throw new InternalErrorException($"Conversion of {Token.Type} from phase 1 to phase 2 not supported")
                     });
                 }
@@ -747,13 +749,13 @@ namespace Embers
                                 break;
                             }
                         }
+                        else if (ObjectToken.IsObjectToken) {
+                            break;
+                        }
                         else if (ObjectToken.Type == Phase2TokenType.OpenBracket) {
                             break;
                         }
                         else if (ObjectToken.Type == Phase2TokenType.SplatOperator) {
-                            break;
-                        }
-                        else if (ObjectToken.IsObjectToken) {
                             break;
                         }
                         else {

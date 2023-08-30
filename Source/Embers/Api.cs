@@ -12,53 +12,68 @@ namespace Embers
             // Interpreter.RootInstance.Constants["Integer"].Class.Methods["+"] = new Method(Integer._Add, 1);
 
             // Global methods
-            Interpreter.RootInstance.InstanceMethods["puts"] = new Method(Puts, null);
-            Interpreter.RootInstance.InstanceMethods["print"] = new Method(Print, null);
-            Interpreter.RootInstance.InstanceMethods["p"] = new Method(P, null);
-            Interpreter.RootInstance.InstanceMethods["warn"] = new Method(Warn, null);
-            Interpreter.RootInstance.InstanceMethods["sleep"] = new Method(Sleep, 0..1);
+            Interpreter.RootInstance.InstanceMethods["puts"] = new Method(puts, null);
+            Interpreter.RootInstance.InstanceMethods["print"] = new Method(print, null);
+            Interpreter.RootInstance.InstanceMethods["p"] = new Method(p, null);
+            Interpreter.RootInstance.InstanceMethods["gets"] = new Method(gets, 0);
+            Interpreter.RootInstance.InstanceMethods["getc"] = new Method(getc, 0);
+            Interpreter.RootInstance.InstanceMethods["warn"] = new Method(warn, null);
+            Interpreter.RootInstance.InstanceMethods["sleep"] = new Method(sleep, 0..1);
 
             // String
-            Interpreter.String.Methods["+"] = new Method(String._Add, 1);
-            Interpreter.String.Methods["*"] = new Method(String._Multiply, 1);
+            Interpreter.String.InstanceMethods["+"] = new Method(String._Add, 1);
+            Interpreter.String.InstanceMethods["*"] = new Method(String._Multiply, 1);
 
             // Integer
-            Interpreter.Integer.Methods["+"] = new Method(Integer._Add, 1);
-            Interpreter.Integer.Methods["-"] = new Method(Integer._Subtract, 1);
-            Interpreter.Integer.Methods["*"] = new Method(Integer._Multiply, 1);
-            Interpreter.Integer.Methods["/"] = new Method(Integer._Exponentiate, 1);
-            Interpreter.Integer.Methods["%"] = new Method(Integer._Modulo, 1);
-            Interpreter.Integer.Methods["**"] = new Method(Integer._Exponentiate, 1);
-            Interpreter.Integer.InstanceMethods["times"] = new Method(Integer.Times, 0);
+            Interpreter.Integer.InstanceMethods["+"] = new Method(Integer._Add, 1);
+            Interpreter.Integer.InstanceMethods["-"] = new Method(Integer._Subtract, 1);
+            Interpreter.Integer.InstanceMethods["*"] = new Method(Integer._Multiply, 1);
+            Interpreter.Integer.InstanceMethods["/"] = new Method(Integer._Exponentiate, 1);
+            Interpreter.Integer.InstanceMethods["%"] = new Method(Integer._Modulo, 1);
+            Interpreter.Integer.InstanceMethods["**"] = new Method(Integer._Exponentiate, 1);
+            Interpreter.Integer.InstanceMethods["times"] = new Method(Integer.times, 0);
 
             // Float
-            Interpreter.Float.Methods["+"] = new Method(Float._Add, 1);
-            Interpreter.Float.Methods["-"] = new Method(Float._Subtract, 1);
-            Interpreter.Float.Methods["*"] = new Method(Float._Multiply, 1);
-            Interpreter.Float.Methods["/"] = new Method(Float._Exponentiate, 1);
-            Interpreter.Float.Methods["%"] = new Method(Float._Modulo, 1);
-            Interpreter.Float.Methods["**"] = new Method(Float._Exponentiate, 1);
+            Interpreter.Float.InstanceMethods["+"] = new Method(Float._Add, 1);
+            Interpreter.Float.InstanceMethods["-"] = new Method(Float._Subtract, 1);
+            Interpreter.Float.InstanceMethods["*"] = new Method(Float._Multiply, 1);
+            Interpreter.Float.InstanceMethods["/"] = new Method(Float._Exponentiate, 1);
+            Interpreter.Float.InstanceMethods["%"] = new Method(Float._Modulo, 1);
+            Interpreter.Float.InstanceMethods["**"] = new Method(Float._Exponentiate, 1);
         }
 
-        static async Task<Instances> Puts(MethodInput Input) {
-            foreach (Instance Message in Input.Arguments) {
-                Console.WriteLine(Message.Object);
+        static async Task<Instances> puts(MethodInput Input) {
+            if (Input.Arguments.Count != 0) {
+                foreach (Instance Message in Input.Arguments) {
+                    Console.WriteLine(Message.Object);
+                }
+            }
+            else {
+                Console.WriteLine();
             }
             return Input.Interpreter.Nil;
         }
-        static async Task<Instances> Print(MethodInput Input) {
+        static async Task<Instances> print(MethodInput Input) {
             foreach (Instance Message in Input.Arguments) {
                 Console.Write(Message.Object);
             }
             return Input.Interpreter.Nil;
         }
-        static async Task<Instances> P(MethodInput Input) {
+        static async Task<Instances> p(MethodInput Input) {
             foreach (Instance Message in Input.Arguments) {
                 Console.WriteLine(Message.Inspect());
             }
             return Input.Interpreter.Nil;
         }
-        static async Task<Instances> Warn(MethodInput Input) {
+        static async Task<Instances> gets(MethodInput Input) {
+            string UserInput = Console.ReadLine() ?? "";
+            return new StringInstance(Input.Interpreter.String, UserInput);
+        }
+        static async Task<Instances> getc(MethodInput Input) {
+            string UserInput = Console.ReadKey().KeyChar.ToString();
+            return new StringInstance(Input.Interpreter.String, UserInput);
+        }
+        static async Task<Instances> warn(MethodInput Input) {
             Console.ForegroundColor = ConsoleColor.DarkYellow;
             foreach (Instance Message in Input.Arguments) {
                 Console.WriteLine(Message.Object);
@@ -66,7 +81,7 @@ namespace Embers
             Console.ResetColor();
             return Input.Interpreter.Nil;
         }
-        static async Task<Instances> Sleep(MethodInput Input) {
+        static async Task<Instances> sleep(MethodInput Input) {
             if (Input.Arguments.Count == 1) {
                 await Task.Delay(1);
             }
@@ -123,7 +138,7 @@ namespace Embers
                 Instance Right = Input.Arguments[0];
                 return _GetResult(Input.Interpreter, Math.Pow(Input.Instance.Integer, Right.Float), Right is IntegerInstance);
             }
-            public static async Task<Instances> Times(MethodInput Input) {
+            public static async Task<Instances> times(MethodInput Input) {
                 if (Input.OnYield != null) {
                     long Times = Input.Instance.Integer;
                     for (long i = 0; i < Times; i++) {

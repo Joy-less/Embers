@@ -21,21 +21,23 @@
             SplatOperator,
         }
         public class Phase1Token {
-            public DebugLocation Location;
+            public readonly DebugLocation Location;
             public readonly Phase1TokenType Type;
             public string? Value;
             public readonly bool FollowsWhitespace;
-            public Phase1Token(DebugLocation location, Phase1TokenType type, string? value, bool followsWhitespace) {
+            public readonly bool ProcessFormatting;
+            public Phase1Token(DebugLocation location, Phase1TokenType type, string? value, bool followsWhitespace, bool processFormatting = false) {
                 Location = location;
                 Type = type;
                 Value = value;
                 FollowsWhitespace = followsWhitespace;
+                ProcessFormatting = processFormatting;
             }
             public string NonNullValue {
                 get { return Value ?? throw new InternalErrorException("Value was null"); }
             }
             public string Inspect() {
-                return $"{Type}{(Value != null ? ":" : "")}{Value?.Replace("\n", "\\n")} {(FollowsWhitespace ? "(true)" : "")}";
+                return Type + (Value != null ? ":" : "") + Value?.Replace("\n", "\\n").Replace("\r", "\\r") + (FollowsWhitespace ? " (true)" : "");
             }
         }
 
@@ -271,15 +273,29 @@
                         case '"':
                         case '\'':
                             i++;
-                            char? lastc = null;
-                            string String = BuildUntil(c => {
-                                if (lastc == '\\')
+                            char? LastC = null;
+                            bool ProcessFormatting = false;
+                            int FormatDepth = 0;
+                            string String = BuildUntil(C => {
+                                if (LastC == '\\') {
+                                    LastC = C;
                                     return false;
-                                lastc = c;
-                                return c == Chara;
+                                }
+                                else if (Chara == '"') {
+                                    if (LastC == '#' && C == '{') {
+                                        FormatDepth++;
+                                        ProcessFormatting = true;
+                                    }
+                                    else if (C == '}') {
+                                        if (FormatDepth != 0)
+                                            FormatDepth--;
+                                    }
+                                }
+                                LastC = C;
+                                return FormatDepth == 0 && C == Chara;
                             });
                             String = EscapeString(String);
-                            Tokens.Add(new(Location, Phase1TokenType.String, String, FollowsWhitespace));
+                            Tokens.Add(new(Location, Phase1TokenType.String, String, FollowsWhitespace, ProcessFormatting));
                             break;
                         case '\n':
                         case '\r':
@@ -381,7 +397,6 @@
                     }
                 }
             }
-
             return Tokens;
         }
     }

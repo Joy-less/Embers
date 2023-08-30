@@ -117,7 +117,35 @@ namespace Embers
             public virtual string Inspect() {
                 return ToString()!;
             }
-            public static Instance CreateFromToken(Interpreter Interpreter, Phase2Token Token) {
+            public virtual string LightInspect() {
+                return Inspect();
+            }
+            public static async Task<Instance> CreateFromToken(Interpreter Interpreter, Phase2Token Token) {
+                if (Token.ProcessFormatting) {
+                    string String = Token.Value!;
+                    Stack<int> FormatPositions = new();
+                    char? LastChara = null;
+                    for (int i = 0; i < String.Length; i++) {
+                        char Chara = String[i];
+
+                        if (LastChara == '#' && Chara == '{') {
+                            FormatPositions.Push(i - 1);
+                        }
+                        else if (Chara == '}') {
+                            if (FormatPositions.TryPop(out int StartPosition)) {
+                                string FirstHalf = String[..StartPosition];
+                                string ToFormat = String[(StartPosition + 2)..i];
+                                string SecondHalf = String[(i + 1)..];
+
+                                string Formatted = (await Interpreter.EvaluateAsync(ToFormat))[0].LightInspect();
+                                String = FirstHalf + Formatted + SecondHalf;
+                            }
+                        }
+                        LastChara = Chara;
+                    }
+                    return new StringInstance(Interpreter.String, String);
+                }
+
                 return Token.Type switch {
                     Phase2TokenType.Nil => Interpreter.Nil,
                     Phase2TokenType.True => Interpreter.True,
@@ -179,7 +207,10 @@ namespace Embers
             public override object? Object { get { return Value; } }
             public override string String { get { return Value; } }
             public override string Inspect() {
-                return "\"" + Value + "\"";
+                return "\"" + Value.Replace("\n", "\\n").Replace("\r", "\\r") + "\"";
+            }
+            public override string LightInspect() {
+                return Value;
             }
             public StringInstance(Class fromClass, string value) : base(fromClass) {
                 Value = value;
@@ -527,7 +558,7 @@ namespace Embers
                 else {
                     // Literal
                     if (ObjectTokenExpression.Token.IsObjectToken) {
-                        return Instance.CreateFromToken(this, ObjectTokenExpression.Token);
+                        return await Instance.CreateFromToken(this, ObjectTokenExpression.Token);
                     }
                     else {
                         if (!ReturnVariableReference) {
@@ -681,6 +712,7 @@ namespace Embers
             return Results;
         }
         public async Task<Instances> InterpretAsync(List<Statement> Statements, Func<Instances, Task>? OnYield = null) {
+            Instance LastExpression = Nil;
             for (int Index = 0; Index < Statements.Count; Index++) {
                 Statement Statement = Statements[Index];
 
@@ -707,7 +739,7 @@ namespace Embers
                 }
                 
                 if (Statement is ExpressionStatement ExpressionStatement) {
-                    await InterpretExpressionAsync(ExpressionStatement.Expression);
+                    LastExpression = await InterpretExpressionAsync(ExpressionStatement.Expression);
                 }
                 else if (Statement is AssignmentStatement AssignmentStatement) {
                     Instance Right = await InterpretExpressionAsync(AssignmentStatement.Right);
@@ -716,6 +748,7 @@ namespace Embers
                     if (Left is VariableReference LeftVariable) {
                         if (Right is Instance RightInstance) {
                             await AssignToVariable(LeftVariable, RightInstance);
+                            LastExpression = Left;
                         }
                         else {
                             throw new InternalErrorException($"Assignment value should be an instance, but got {Right.GetType().Name}");
@@ -792,7 +825,7 @@ namespace Embers
                     throw new InternalErrorException($"Not sure how to interpret statement {Statement.GetType().Name}");
                 }
             }
-            return Nil;
+            return LastExpression;
         }
         public Instances Interpret(List<Statement> Statements, Func<Instances, Task>? OnYield = null) {
             return InterpretAsync(Statements, OnYield).Result;

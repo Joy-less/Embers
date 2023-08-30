@@ -10,5 +10,5 @@ Its minimalistic design should be suitable for use in game engines or modding sc
 - Obsolete functionality, such as interpreting numbers starting with 0 as octal, is removed.
 
 ## Drawbacks
-- Likely to be considerably less optimised than Ruby. Benchmarks show it is around 5x slower.
+- Likely to be considerably less optimised than Ruby. Benchmarks show it is several times slower.
 - Does not have 100% compatibility with Ruby syntax or functionality.
