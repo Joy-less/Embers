@@ -274,15 +274,17 @@
                         case '\'':
                             i++;
                             char? LastC = null;
-                            bool ProcessFormatting = false;
-                            int FormatDepth = 0;
-                            string String = BuildUntil(C => {
-                                if (LastC == '\\') {
-                                    LastC = C;
-                                    return false;
-                                }
-                                else if (Chara == '"') {
-                                    if (LastC == '#' && C == '{') {
+                            string String;
+                            // String that can be formatted/escaped
+                            if (Chara == '"') {
+                                bool ProcessFormatting = false;
+                                int FormatDepth = 0;
+                                String = BuildUntil(C => {
+                                    if (LastC == '\\') {
+                                        LastC = C;
+                                        return false;
+                                    }
+                                    else if (LastC == '#' && C == '{') {
                                         FormatDepth++;
                                         ProcessFormatting = true;
                                     }
@@ -290,12 +292,24 @@
                                         if (FormatDepth != 0)
                                             FormatDepth--;
                                     }
-                                }
-                                LastC = C;
-                                return FormatDepth == 0 && C == Chara;
-                            });
-                            String = EscapeString(String);
-                            Tokens.Add(new(Location, Phase1TokenType.String, String, FollowsWhitespace, ProcessFormatting));
+                                    LastC = C;
+                                    return FormatDepth == 0 && C == Chara;
+                                });
+                                String = EscapeString(String);
+                                Tokens.Add(new(Location, Phase1TokenType.String, String, FollowsWhitespace, ProcessFormatting));
+                            }
+                            // String that cannot be formatted/escaped
+                            else {
+                                String = BuildUntil(C => {
+                                    if (LastC == '\\') {
+                                        LastC = C;
+                                        return false;
+                                    }
+                                    LastC = C;
+                                    return C == Chara;
+                                });
+                                Tokens.Add(new(Location, Phase1TokenType.String, String, FollowsWhitespace, false));
+                            }
                             break;
                         case '\n':
                         case '\r':

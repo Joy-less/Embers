@@ -23,6 +23,8 @@ namespace Embers
             // String
             Interpreter.String.InstanceMethods["+"] = new Method(String._Add, 1);
             Interpreter.String.InstanceMethods["*"] = new Method(String._Multiply, 1);
+            Interpreter.String.InstanceMethods["chomp"] = new Method(String.chomp, 0..1);
+            Interpreter.String.InstanceMethods["strip"] = new Method(String.strip, 0);
 
             // Integer
             Interpreter.Integer.InstanceMethods["+"] = new Method(Integer._Add, 1);
@@ -66,7 +68,8 @@ namespace Embers
             return Input.Interpreter.Nil;
         }
         static async Task<Instances> gets(MethodInput Input) {
-            string UserInput = Console.ReadLine() ?? "";
+            string? UserInput = Console.ReadLine();
+            UserInput = UserInput != null ? UserInput + "\n" : "";
             return new StringInstance(Input.Interpreter.String, UserInput);
         }
         static async Task<Instances> getc(MethodInput Input) {
@@ -103,6 +106,32 @@ namespace Embers
                     JoinedString.Append(Input.Instance.String);
                 }
                 return new StringInstance(Input.Interpreter.String, JoinedString.ToString());
+            }
+            public static async Task<Instances> chomp(MethodInput Input) {
+                string String = Input.Instance.String;
+                if (Input.Arguments.Count == 0) {
+                    if (String.EndsWith('\n') || String.EndsWith('\r')) {
+                        return new StringInstance(Input.Interpreter.String, String[0..^1]);
+                    }
+                    else if (String.EndsWith("\r\n")) {
+                        return new StringInstance(Input.Interpreter.String, String[0..^2]);
+                    }
+                }
+                else {
+                    string RemoveFromEnd = Input.Arguments[0].String;
+                    if (String.EndsWith(RemoveFromEnd)) {
+                        return new StringInstance(Input.Interpreter.String, String[0..^RemoveFromEnd.Length]);
+                    }
+                }
+                return Input.Instance;
+            }
+            public static async Task<Instances> strip(MethodInput Input) {
+                string String = Input.Instance.String;
+                string Stripped = String.Trim();
+                if (Stripped.Length != String.Length) {
+                    return new StringInstance(Input.Interpreter.String, Stripped);
+                }
+                return Input.Instance;
             }
         }
         static class Integer {

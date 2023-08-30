@@ -10,7 +10,7 @@ namespace Embers
             {
                 string Code = @"
 puts 'Tell me your name.'
-Name = gets
+Name = gets.chomp
 puts ""Hello, #{Name}!""
 ";
                 Benchmark(() => new Interpreter().Evaluate(Code));
