@@ -23,6 +23,9 @@ namespace Embers
             // String
             Interpreter.String.InstanceMethods["+"] = new Method(String._Add, 1);
             Interpreter.String.InstanceMethods["*"] = new Method(String._Multiply, 1);
+            Interpreter.String.InstanceMethods["to_str"] = new Method(String.to_str, 0);
+            Interpreter.String.InstanceMethods["to_i"] = new Method(String.to_i, 0);
+            Interpreter.String.InstanceMethods["to_f"] = new Method(String.to_f, 0);
             Interpreter.String.InstanceMethods["chomp"] = new Method(String.chomp, 0..1);
             Interpreter.String.InstanceMethods["strip"] = new Method(String.strip, 0);
 
@@ -33,6 +36,8 @@ namespace Embers
             Interpreter.Integer.InstanceMethods["/"] = new Method(Integer._Divide, 1);
             Interpreter.Integer.InstanceMethods["%"] = new Method(Integer._Modulo, 1);
             Interpreter.Integer.InstanceMethods["**"] = new Method(Integer._Exponentiate, 1);
+            Interpreter.Integer.InstanceMethods["to_i"] = new Method(Integer.to_i, 0);
+            Interpreter.Integer.InstanceMethods["to_f"] = new Method(Integer.to_f, 0);
             Interpreter.Integer.InstanceMethods["times"] = new Method(Integer.times, 0);
 
             // Float
@@ -42,12 +47,19 @@ namespace Embers
             Interpreter.Float.InstanceMethods["/"] = new Method(Float._Divide, 1);
             Interpreter.Float.InstanceMethods["%"] = new Method(Float._Modulo, 1);
             Interpreter.Float.InstanceMethods["**"] = new Method(Float._Exponentiate, 1);
+            Interpreter.Float.InstanceMethods["to_i"] = new Method(Float.to_i, 0);
+            Interpreter.Float.InstanceMethods["to_f"] = new Method(Float.to_f, 0);
         }
+
+        public static readonly IReadOnlyDictionary<string, Method> DefaultClassAndInstanceMethods = new Dictionary<string, Method>() {
+            {"inspect", new Method(ClassInstance.inspect, 0)},
+            {"to_s", new Method(ClassInstance.to_s, 0)}
+        };
 
         static async Task<Instances> puts(MethodInput Input) {
             if (Input.Arguments.Count != 0) {
                 foreach (Instance Message in Input.Arguments) {
-                    Console.WriteLine(Message.Object);
+                    Console.WriteLine(Message.LightInspect());
                 }
             }
             else {
@@ -57,7 +69,7 @@ namespace Embers
         }
         static async Task<Instances> print(MethodInput Input) {
             foreach (Instance Message in Input.Arguments) {
-                Console.Write(Message.Object);
+                Console.Write(Message.LightInspect());
             }
             return Input.Interpreter.Nil;
         }
@@ -93,6 +105,14 @@ namespace Embers
             }
             return Input.Interpreter.Nil;
         }
+        static class ClassInstance {
+            public static async Task<Instances> inspect(MethodInput Input) {
+                return new StringInstance(Input.Interpreter.String, Input.Instance.Inspect());
+            }
+            public static async Task<Instances> to_s(MethodInput Input) {
+                return new StringInstance(Input.Interpreter.String, Input.Instance.LightInspect());
+            }
+        }
         static class String {
             public static async Task<Instances> _Add(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
@@ -106,6 +126,48 @@ namespace Embers
                     JoinedString.Append(Input.Instance.String);
                 }
                 return new StringInstance(Input.Interpreter.String, JoinedString.ToString());
+            }
+            public static async Task<Instances> to_str(MethodInput Input) {
+                return await ClassInstance.to_s(Input);
+            }
+            public static async Task<Instances> to_i(MethodInput Input) {
+                string IntegerAsString = Input.Instance.LightInspect();
+                StringBuilder IntegerString = new();
+                for (int i = 0; i < IntegerAsString.Length; i++) {
+                    char Chara = IntegerAsString[i];
+
+                    if (char.IsAsciiDigit(Chara)) {
+                        IntegerString.Append(Chara);
+                    }
+                    else {
+                        break;
+                    }
+                }
+                if (IntegerString.Length == 0) return new IntegerInstance(Input.Interpreter.Integer, 0);
+                return new IntegerInstance(Input.Interpreter.Integer, long.Parse(IntegerString.ToString()));
+            }
+            public static async Task<Instances> to_f(MethodInput Input) {
+                string FloatAsString = Input.Instance.LightInspect();
+                StringBuilder FloatString = new();
+                bool SeenDot = false;
+                for (int i = 0; i < FloatAsString.Length; i++) {
+                    char Chara = FloatAsString[i];
+
+                    if (char.IsAsciiDigit(Chara)) {
+                        FloatString.Append(Chara);
+                    }
+                    else if (Chara == '.') {
+                        if (SeenDot) break;
+                        SeenDot = true;
+                        FloatString.Append(Chara);
+                    }
+                    else {
+                        break;
+                    }
+                }
+                if (FloatString.Length == 0) return new FloatInstance(Input.Interpreter.Float, 0);
+                if (!SeenDot) FloatString.Append(".0");
+                return new FloatInstance(Input.Interpreter.Float, double.Parse(FloatString.ToString()));
             }
             public static async Task<Instances> chomp(MethodInput Input) {
                 string String = Input.Instance.String;
@@ -167,6 +229,12 @@ namespace Embers
                 Instance Right = Input.Arguments[0];
                 return _GetResult(Input.Interpreter, Math.Pow(Input.Instance.Integer, Right.Float), Right is IntegerInstance);
             }
+            public static async Task<Instances> to_i(MethodInput Input) {
+                return Input.Instance;
+            }
+            public static async Task<Instances> to_f(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Input.Instance.Float);
+            }
             public static async Task<Instances> times(MethodInput Input) {
                 if (Input.OnYield != null) {
                     long Times = Input.Instance.Integer;
@@ -201,6 +269,12 @@ namespace Embers
             public static async Task<Instances> _Exponentiate(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
                 return new FloatInstance(Input.Interpreter.Float, Math.Pow(Input.Instance.Float, Right.Float));
+            }
+            public static async Task<Instances> to_i(MethodInput Input) {
+                return new IntegerInstance(Input.Interpreter.Float, Input.Instance.Integer);
+            }
+            public static async Task<Instances> to_f(MethodInput Input) {
+                return Input.Instance;
             }
         }
     }

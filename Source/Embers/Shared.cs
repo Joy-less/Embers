@@ -38,5 +38,11 @@
                 return "?";
             }
         }
+        public string Serialise() {
+            if (!Unknown)
+                return $"new DebugLocation({Line}, {Column})";
+            else
+                return "new DebugLocation()";
+        }
     }
 }

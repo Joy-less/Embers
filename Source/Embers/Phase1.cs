@@ -252,19 +252,19 @@
                     switch (Chara) {
                         case '.':
                             RemoveEndOfStatement();
-                            Tokens.Add(new(Location, Phase1TokenType.Dot, null, FollowsWhitespace));
+                            Tokens.Add(new(Location, Phase1TokenType.Dot, ".", FollowsWhitespace));
                             break;
                         case ',':
                             RemoveEndOfStatement();
-                            Tokens.Add(new(Location, Phase1TokenType.Comma, null, FollowsWhitespace));
+                            Tokens.Add(new(Location, Phase1TokenType.Comma, ",", FollowsWhitespace));
                             break;
                         case '(':
-                            Tokens.Add(new(Location, Phase1TokenType.OpenBracket, null, FollowsWhitespace));
+                            Tokens.Add(new(Location, Phase1TokenType.OpenBracket, "(", FollowsWhitespace));
                             Brackets.Push('(');
                             break;
                         case ')':
                             RemoveEndOfStatement();
-                            Tokens.Add(new(Location, Phase1TokenType.CloseBracket, null, FollowsWhitespace));
+                            Tokens.Add(new(Location, Phase1TokenType.CloseBracket, ")", FollowsWhitespace));
                             // Handle unexpected close bracket
                             if (Brackets.TryPop(out char Opener) == false || Opener != '(')
                                 throw new SyntaxErrorException($"{Location}: Unexpected close bracket: )");
@@ -323,11 +323,11 @@
                             goto case ';';
                         case ':':
                             if (NextChara == ':') {
-                                Tokens.Add(new(Location, Phase1TokenType.DoubleColon, null, FollowsWhitespace));
+                                Tokens.Add(new(Location, Phase1TokenType.DoubleColon, "::", FollowsWhitespace));
                                 i++;
                             }
                             else {
-                                throw new NotImplementedException();
+                                throw new NotImplementedException("Symbols not yet implemented");
                             }
                             break;
                         case ';':

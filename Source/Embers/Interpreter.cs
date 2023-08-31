@@ -1,4 +1,5 @@
-﻿using static Embers.Interpreter;
+﻿using System.Text;
+using static Embers.Interpreter;
 using static Embers.Phase2;
 
 namespace Embers
@@ -88,6 +89,7 @@ namespace Embers
             public readonly Dictionary<string, Instance> ClassVariables = new();
             public Class(string name, Class? parent) : base(parent) {
                 Name = name;
+                // Default method: new
                 Methods.Add("new", new Method(async Input => {
                     Instance NewInstance = new(this);
                     if (NewInstance.InstanceMethods.TryGetValue("initialize", out Method? Initialize)) {
@@ -103,7 +105,10 @@ namespace Embers
                         throw new RuntimeException($"Undefined method 'initialize' for {Name}");
                     }
                     return NewInstance;
-                }, null));
+                }, 0));
+                // Default class and instance methods
+                Api.DefaultClassAndInstanceMethods.CopyTo(InstanceMethods);
+                Api.DefaultClassAndInstanceMethods.CopyTo(Methods);
             }
         }
         public class Instance {
@@ -247,7 +252,11 @@ namespace Embers
             public override double Float { get { return Value; } }
             public override long Integer { get { return (long)Value; } }
             public override string Inspect() {
-                return Value.ToString("0.0");
+                string FloatString = Value.ToString();
+                if (!FloatString.Contains('.')) {
+                    FloatString += ".0";
+                }
+                return FloatString;
             }
             public FloatInstance(Class fromClass, double value) : base(fromClass) {
                 Value = value;
@@ -290,6 +299,9 @@ namespace Embers
             public override object? Object { get { return Class; } }
             public override Class ClassRef { get { return Class; } }
             public override string Inspect() {
+                return Class.Name;
+            }
+            public override string LightInspect() {
                 return Class.Name;
             }
             public ClassReference(Class _class) : base(_class) { }
@@ -651,6 +663,10 @@ namespace Embers
                     await InterpretAsync(WhileExpression.Statements);
                 }
                 return Nil;
+            }
+            // Self
+            else if (Expression is SelfExpression) {
+                return new ClassReference(CurrentClass);
             }
             // Defined?
             else if (Expression is DefinedExpression DefinedExpression) {

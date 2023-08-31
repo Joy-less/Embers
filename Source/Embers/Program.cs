@@ -20,6 +20,9 @@ puts ""-----""
 
 puts 5 * 2 + 3 / 4
 puts 5 * (2 + 3) / 4
+
+puts ""Something"".inspect
+puts '5.234'.to_f
 ";
                 Benchmark(() => new Interpreter().Evaluate(Code));
                 Console.ReadLine();

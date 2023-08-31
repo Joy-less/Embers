@@ -108,10 +108,11 @@ namespace Embers
                 return Type + (Value != null ? ":" : "") + Value;
             }
             public override string Serialise() {
-                return $"new Phase2Token(Phase2TokenType.{Type}, \"{Value}\", {(FollowsWhitespace ? "true" : "false")})";
+                return $"new Phase2Token({Location.Serialise()}, Phase2TokenType.{Type}, \"{Value}\", {(FollowsWhitespace ? "true" : "false")})";
             }
         }
 
+        // Expressions
         public abstract class Expression : Phase2Object {
             public Expression(DebugLocation location) : base(location) { }
         }
@@ -225,12 +226,21 @@ namespace Embers
                 return $"method with {ArgumentCount} arguments";
             }
             public override string Serialise() {
-                return $"new MethodExpression({Statements.Serialise()}, {ArgumentCount.Serialise()}, {Arguments.Serialise()})";
+                return $"new MethodExpression({Location.Serialise()}, {Statements.Serialise()}, {ArgumentCount.Serialise()}, {Arguments.Serialise()})";
             }
             Method ToMethod() {
                 return new Method(async Input => {
                     return await Input.Interpreter.InterpretAsync(Statements);
                 }, ArgumentCount, Arguments);
+            }
+        }
+        public class SelfExpression : Expression {
+            public SelfExpression(DebugLocation location) : base(location) { }
+            public override string Inspect() {
+                return "self";
+            }
+            public override string Serialise() {
+                return $"new SelfExpression({Location.Serialise()})";
             }
         }
         public abstract class ConditionalExpression : Expression {
@@ -247,7 +257,7 @@ namespace Embers
                 return (Condition != null ? $"if {Condition.Inspect()} " : "else ") + "{" + Statements.Inspect() + "}";
             }
             public override string Serialise() {
-                return $"new IfExpression({(Condition != null ? Condition.Serialise() : "null")}, {Statements.Serialise()})";
+                return $"new IfExpression({Location.Serialise()}, {(Condition != null ? Condition.Serialise() : "null")}, {Statements.Serialise()})";
             }
         }
         public class WhileExpression : ConditionalExpression {
@@ -256,10 +266,11 @@ namespace Embers
                 return $"while {Condition!.Inspect()} {{" + Statements.Inspect() + "}";
             }
             public override string Serialise() {
-                return $"new WhileExpression({Condition!.Serialise()}, {Statements.Serialise()})";
+                return $"new WhileExpression({Location.Serialise()}, {Condition!.Serialise()}, {Statements.Serialise()})";
             }
         }
 
+        // Statements
         public abstract class Statement : Expression {
             public Statement(DebugLocation location) : base(location) { }
         }
@@ -330,7 +341,7 @@ namespace Embers
                 return "undef " + MethodName.Inspect();
             }
             public override string Serialise() {
-                return $"new UndefineMethodStatement({MethodName.Serialise()})";
+                return $"new UndefineMethodStatement({Location.Serialise()}, {MethodName.Serialise()})";
             }
         }
         public class DefineClassStatement : Statement {
@@ -357,7 +368,7 @@ namespace Embers
                 else return "yield";
             }
             public override string Serialise() {
-                return $"new YieldStatement({(YieldValues != null ? YieldValues.Serialise() : "null")})";
+                return $"new YieldStatement({Location.Serialise()}, {(YieldValues != null ? YieldValues.Serialise() : "null")})";
             }
         }
         public class ReturnStatement : Statement {
@@ -370,7 +381,7 @@ namespace Embers
                 else return "return";
             }
             public override string Serialise() {
-                return $"new ReturnStatement({(ReturnValues != null ? ReturnValues.Serialise() : "null")})";
+                return $"new ReturnStatement({Location.Serialise()}, {(ReturnValues != null ? ReturnValues.Serialise() : "null")})";
             }
         }
         public class IfStatement : Statement {
@@ -382,7 +393,7 @@ namespace Embers
                 return Branches.Inspect(" ");
             }
             public override string Serialise() {
-                return $"new IfStatement({Branches.Serialise()})";
+                return $"new IfStatement({Location.Serialise()}, {Branches.Serialise()})";
             }
         }
 
@@ -611,6 +622,15 @@ namespace Embers
         static List<Expression> ObjectsToExpressions(List<Phase2Object> Phase2Objects) {
             List<Phase2Object> ParsedObjects = new(Phase2Objects); // Preserve the original list
 
+            // Self
+            for (int i = 0; i < ParsedObjects.Count; i++) {
+                if (ParsedObjects[i] is Phase2Token Token) {
+                    if (Token.Type == Phase2TokenType.Self) {
+                        ParsedObjects[i] = new SelfExpression(Token.Location);
+                    }
+                }
+            }
+
             // Brackets
             {
                 Stack<int> BracketsStack = new();
@@ -663,7 +683,12 @@ namespace Embers
                                 i -= 2;
                             }
                             else {
-                                throw new SyntaxErrorException($"{Token.Location}: Expected expression before and after '{Token.Value!}'");
+                                if (LastObject is not Expression) {
+                                    throw new SyntaxErrorException($"{Token.Location}: Expected expression before '{Token.Value!}' (got {LastObject.Inspect()})");
+                                }
+                                else {
+                                    throw new SyntaxErrorException($"{Token.Location}: Expected identifier after '{Token.Value!}' (got {(NextObject != null ? NextObject.Inspect() : "nothing")})");
+                                }
                             }
                         }
                         else {
@@ -1427,6 +1452,11 @@ namespace Embers
                 return new DebugLocation();
         }
         public static void CopyTo<TKey, TValue>(this Dictionary<TKey, TValue> Origin, Dictionary<TKey, TValue> Target) where TKey : notnull {
+            foreach (KeyValuePair<TKey, TValue> Pair in Origin) {
+                Target.Add(Pair.Key, Pair.Value);
+            }
+        }
+        public static void CopyTo<TKey, TValue>(this IReadOnlyDictionary<TKey, TValue> Origin, Dictionary<TKey, TValue> Target) where TKey : notnull {
             foreach (KeyValuePair<TKey, TValue> Pair in Origin) {
                 Target.Add(Pair.Key, Pair.Value);
             }
