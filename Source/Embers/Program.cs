@@ -9,20 +9,15 @@ namespace Embers
         static void Main() {
             {
                 string Code = @"
-puts ""a"" if true
-puts ""b"" if 1
-puts ""c"" if false
-puts ""d"" if nil
-puts ""e"" if ""true""
-puts ""f"" if 0
+def a b, c
+    return b.to_f + c.to_f
+end
+puts a '75', '23' if true
 
-puts ""-----""
+puts(a '23', a('65', '65').to_s) if true
 
-puts 5 * 2 + 3 / 4
-puts 5 * (2 + 3) / 4
-
-puts ""Something"".inspect
-puts '5.234'.to_f
+File.write('something.txt', 'Hi!')
+puts File.read 'something.txt'
 ";
                 Benchmark(() => new Interpreter().Evaluate(Code));
                 Console.ReadLine();

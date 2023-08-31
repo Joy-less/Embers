@@ -9,8 +9,6 @@ namespace Embers
     public static class Api
     {
         public static void Setup(Interpreter Interpreter) {
-            // Interpreter.RootInstance.Constants["Integer"].Class.Methods["+"] = new Method(Integer._Add, 1);
-
             // Global methods
             Interpreter.RootInstance.InstanceMethods["puts"] = new Method(puts, null);
             Interpreter.RootInstance.InstanceMethods["print"] = new Method(print, null);
@@ -49,6 +47,14 @@ namespace Embers
             Interpreter.Float.InstanceMethods["**"] = new Method(Float._Exponentiate, 1);
             Interpreter.Float.InstanceMethods["to_i"] = new Method(Float.to_i, 0);
             Interpreter.Float.InstanceMethods["to_f"] = new Method(Float.to_f, 0);
+
+            // Unsafe Api
+            if (Interpreter.AllowUnsafeApi) {
+                // File
+                Class FileClass = Interpreter.CreateClass("File");
+                FileClass.Methods.Add("read", new Method(File.read, 1));
+                FileClass.Methods.Add("write", new Method(File.write, 2));
+            }
         }
 
         public static readonly IReadOnlyDictionary<string, Method> DefaultClassAndInstanceMethods = new Dictionary<string, Method>() {
@@ -56,6 +62,7 @@ namespace Embers
             {"to_s", new Method(ClassInstance.to_s, 0)}
         };
 
+        // API
         static async Task<Instances> puts(MethodInput Input) {
             if (Input.Arguments.Count != 0) {
                 foreach (Instance Message in Input.Arguments) {
@@ -275,6 +282,32 @@ namespace Embers
             }
             public static async Task<Instances> to_f(MethodInput Input) {
                 return Input.Instance;
+            }
+        }
+        static class File {
+            public static async Task<Instances> read(MethodInput Input) {
+                string FilePath = Input.Arguments[0].String;
+                try {
+                    string FileContents = System.IO.File.ReadAllText(FilePath);
+                    return new StringInstance(Input.Interpreter.String, FileContents);
+                }
+                catch (FileNotFoundException) {
+                    throw new RuntimeException($"No such file or directory: '{FilePath}'");
+                }
+                catch (Exception Ex) {
+                    throw new RuntimeException($"Error reading file: '{Ex.Message}'");
+                }
+            }
+            public static async Task<Instances> write(MethodInput Input) {
+                string FilePath = Input.Arguments[0].String;
+                string Text = Input.Arguments[1].String;
+                try {
+                    System.IO.File.WriteAllText(FilePath, Text);
+                    return Input.Interpreter.Nil;
+                }
+                catch (Exception Ex) {
+                    throw new RuntimeException($"Error writing file: '{Ex.Message}'");
+                }
             }
         }
     }

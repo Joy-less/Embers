@@ -6,6 +6,8 @@ namespace Embers
 {
     public class Interpreter
     {
+        public readonly bool AllowUnsafeApi;
+
         public readonly Instance RootInstance;
         public readonly Scope RootScope;
         readonly Dictionary<string, Instance> GlobalVariables = new();
@@ -481,8 +483,16 @@ namespace Embers
             }
         }
 
-        async Task Warn(string Message) {
+        public async Task Warn(string Message) {
             await RootInstance.InstanceMethods["warn"].Call(this, new ClassReference(RootInstance.Class), new StringInstance(String, Message));
+        }
+        public static Class CreateClass(Class Parent, string Name) {
+            Class NewClass = new(Name, Parent);
+            Parent.Constants.Add(Name, new ClassReference(NewClass));
+            return NewClass;
+        }
+        public Class CreateClass(string Name) {
+            return CreateClass(RootInstance.Class, Name);
         }
 
         async Task<Instances> InterpretExpressionAsync(Expression Expression, bool ReturnVariableReference = false) {
@@ -806,9 +816,11 @@ namespace Embers
                         SetCurrentClass(PreviousClass);
                         // Store class constant
                         if (ClassName.Block != null) {
+                            // Path
                             ClassName.Block.Parent!.Constants[ClassName.Token.Value!] = new ClassReference(NewClass);
                         }
                         else if (ClassName.Instance == CurrentInstance) {
+                            // Local
                             CurrentInstance.Class.Constants[ClassName.Token.Value!] = new ClassReference(NewClass);
                         }
                         else {
@@ -876,7 +888,9 @@ namespace Embers
             return Statements.Serialise();
         }
 
-        public Interpreter() {
+        public Interpreter(bool allowUnsafeApi = true) {
+            AllowUnsafeApi = allowUnsafeApi;
+
             RootInstance = new Instance(new Class("RootClass", null)); Class RootClass = RootInstance.Class;
             RootScope = new Scope(RootClass);
             CurrentClass = RootClass;
@@ -884,12 +898,12 @@ namespace Embers
             CurrentBlock = RootScope;
             CurrentInstance = RootInstance;
 
-            NilClass = new Class("NilClass", RootClass); RootClass.Constants.Add("NilClass", new ClassReference(NilClass)); Nil = new NilInstance(NilClass);
-            TrueClass = new Class("TrueClass", RootClass); RootClass.Constants.Add("TrueClass", new ClassReference(TrueClass)); True = new TrueInstance(TrueClass);
-            FalseClass = new Class("FalseClass", RootClass); RootClass.Constants.Add("FalseClass", new ClassReference(FalseClass)); False = new FalseInstance(FalseClass);
-            String = new Class("String", RootClass); RootClass.Constants.Add("String", new ClassReference(String));
-            Integer = new Class("Integer", RootClass); RootClass.Constants.Add("Integer", new ClassReference(Integer));
-            Float = new Class("Float", RootClass); RootClass.Constants.Add("Float", new ClassReference(Float));
+            NilClass = CreateClass("NilClass"); Nil = new NilInstance(NilClass);
+            TrueClass = CreateClass("TrueClass"); True = new TrueInstance(TrueClass);
+            FalseClass = CreateClass("FalseClass"); False = new FalseInstance(FalseClass);
+            String = CreateClass("String");
+            Integer = CreateClass("Integer");
+            Float = CreateClass("Float");
 
             Api.Setup(this);
         }
