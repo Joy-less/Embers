@@ -513,6 +513,7 @@ namespace Embers
                             tok.Type == Phase2TokenType.Comma
                             || tok.Type == Phase2TokenType.CloseBracket
                             || tok.Type == Phase2TokenType.Do
+                            || tok.Type == Phase2TokenType.If
                         ));
                     Arguments.Add(ObjectsToExpression(Argument));
                     Index--;
@@ -530,7 +531,9 @@ namespace Embers
                             Index++;
                         break;
                     }
-                    else if (Token.Type == Phase2TokenType.Do) {
+                    else if (Token.Type == Phase2TokenType.Do
+                        || Token.Type == Phase2TokenType.If)
+                    {
                         break;
                     }
                     else {
@@ -687,7 +690,30 @@ namespace Embers
                 }
             }
 
-            // Convert objects to expressions
+            // Statement if condition
+            for (int i = 0; i < ParsedObjects.Count; i++) {
+                Phase2Object UnknownToken = ParsedObjects[i];
+
+                if (UnknownToken is Phase2Token Token) {
+                    if (Token.Type == Phase2TokenType.If) {
+                        if (i - 1 >= 0 && ParsedObjects[i - 1] is Expression Statement) {
+                            if (i + 1 < ParsedObjects.Count && ParsedObjects[i + 1] is Expression Condition) {
+                                i--;
+                                ParsedObjects.RemoveRange(i, 3);
+                                ParsedObjects.Insert(i, new IfExpression(Statement.Location, Condition, new List<Statement>() { new ExpressionStatement(Statement) }));
+                            }
+                            else {
+                                throw new SyntaxErrorException("Expected condition after 'if'");
+                            }
+                        }
+                        else {
+                            throw new InternalErrorException("Unhandled 'if' statement");
+                        }
+                    }
+                }
+            }
+
+            // Cast objects to expressions
             List<Expression> Expressions = new();
             foreach (Phase2Object ParsedObject in ParsedObjects) {
                 if (ParsedObject is Expression ParsedExpression)

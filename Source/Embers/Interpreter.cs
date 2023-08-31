@@ -90,8 +90,14 @@ namespace Embers
                 Name = name;
                 Methods.Add("new", new Method(async Input => {
                     Instance NewInstance = new(this);
-                    if (true) {
-                        await NewInstance.InstanceMethods["initialize"].Call(Input.Interpreter, NewInstance, Input.Arguments);
+                    if (NewInstance.InstanceMethods.TryGetValue("initialize", out Method? Initialize)) {
+                        // Set instance
+                        Instance PreviousInstance = Input.Interpreter.CurrentInstance;
+                        Input.Interpreter.CurrentInstance = NewInstance;
+                        // Call initialize
+                        await Initialize.Call(Input.Interpreter, NewInstance, Input.Arguments);
+                        // Step back an instance
+                        Input.Interpreter.CurrentInstance = PreviousInstance;
                     }
                     else {
                         throw new RuntimeException($"Undefined method 'initialize' for {Name}");
@@ -179,6 +185,7 @@ namespace Embers
                 InstanceMethods[Name] =
                 Class.InstanceMethods[Name] = Method;
             }
+            public bool IsTruthy => !(Object == null || false.Equals(Object));
         }
         public class NilInstance : Instance {
             public override string Inspect() {
@@ -631,29 +638,6 @@ namespace Embers
                     }
                 }
             }
-            /*// Arithmetic
-            else if (Expression is ArithmeticExpression ArithmeticExpression) {
-                Instance Left = await InterpretExpression(ArithmeticExpression.Left);
-                Instance Right = await InterpretExpression(ArithmeticExpression.Right);
-                if (Left == null) {
-                    throw new RuntimeException($"Cannot call {ArithmeticExpression.Operator} on nil value");
-                }
-                Method? Operation = ArithmeticExpression.Operator switch {
-                    "+" => Left.Add,
-                    "-" => Left.Subtract,
-                    "*" => Left.Multiply,
-                    "/" => Left.Divide,
-                    "%" => Left.Modulo,
-                    "**" => Left.Exponentiate,
-                    _ => throw new InternalErrorException($"Operator not recognised: '{ArithmeticExpression.Operator}'")
-                };
-                if (Operation != null) {
-                    return await Operation.Call(this, Right);
-                }
-                else {
-                    throw new RuntimeException($"Undefined method '{ArithmeticExpression.Operator}' for {Left}");
-                }
-            }*/
             // Defined?
             else if (Expression is DefinedExpression DefinedExpression) {
                 if (DefinedExpression.Expression is MethodCallExpression || DefinedExpression.Expression is PathExpression) {
@@ -700,6 +684,13 @@ namespace Embers
                 else {
                     throw new InternalErrorException($"Unknown expression type for defined?: {DefinedExpression.Expression.GetType().Name}");
                 }
+            }
+            // If
+            else if (Expression is IfExpression IfExpression) {
+                if (IfExpression.Condition == null || (await InterpretExpressionAsync(IfExpression.Condition))[0].IsTruthy) {
+                    return await InterpretAsync(IfExpression.Statements);
+                }
+                return Nil;
             }
             // Unknown
             throw new InternalErrorException($"{Expression.Location}: Not sure how to interpret expression {Expression.GetType().Name} ({Expression.Inspect()})");
@@ -826,7 +817,7 @@ namespace Embers
                         IfExpression Branch = IfStatement.Branches[i];
                         if (Branch.Condition != null) {
                             Instance ConditionResult = await InterpretExpressionAsync(Branch.Condition);
-                            if (ConditionResult == True) {
+                            if (ConditionResult.IsTruthy) {
                                 await InterpretAsync(Branch.Statements);
                                 break;
                             }

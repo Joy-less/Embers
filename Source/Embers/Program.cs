@@ -9,17 +9,12 @@ namespace Embers
         static void Main() {
             {
                 string Code = @"
-if false then
-    puts 'First.'
-elsif true
-    puts 'Second.'
-else
-    puts 'Third.'
-end
-
-puts 'Tell me your name.'
-Name = gets.chomp
-puts ""Hello, #{Name}!""
+puts ""a"" if true
+puts ""b"" if 1
+puts ""c"" if false
+puts ""d"" if nil
+puts ""e"" if ""true""
+puts ""f"" if 0
 ";
                 Benchmark(() => new Interpreter().Evaluate(Code));
                 Console.ReadLine();
