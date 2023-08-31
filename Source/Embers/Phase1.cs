@@ -234,6 +234,7 @@
                 // Process current character
                 char Chara = Code[i];
                 char? NextChara = i + 1 < Code.Length ? Code[i + 1] : null;
+                char? NextNextChara = i + 2 < Code.Length ? Code[i + 2] : null;
                 bool FollowsWhitespace = i - 1 >= 0 && IsWhitespace(Code[i - 1]);
 
                 // Get debug location
@@ -322,8 +323,8 @@
                             goto case ';';
                         case ':':
                             if (NextChara == ':') {
-                                i++;
                                 Tokens.Add(new(Location, Phase1TokenType.DoubleColon, null, FollowsWhitespace));
+                                i++;
                             }
                             else {
                                 throw new NotImplementedException();
@@ -343,11 +344,23 @@
                             break;
                         case '+':
                             RemoveEndOfStatement();
-                            Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "+", FollowsWhitespace));
+                            if (NextChara == '=') {
+                                Tokens.Add(new(Location, Phase1TokenType.AssignmentOperator, "+=", FollowsWhitespace));
+                                i++;
+                            }
+                            else {
+                                Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "+", FollowsWhitespace));
+                            }
                             break;
                         case '-':
                             RemoveEndOfStatement();
-                            Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "-", FollowsWhitespace));
+                            if (NextChara == '=') {
+                                Tokens.Add(new(Location, Phase1TokenType.AssignmentOperator, "-=", FollowsWhitespace));
+                                i++;
+                            }
+                            else {
+                                Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "-", FollowsWhitespace));
+                            }
                             break;
                         case '*':
                             if (IsDefStatement()) {
@@ -361,20 +374,43 @@
                             else {
                                 RemoveEndOfStatement();
                                 if (NextChara == '*') {
-                                    Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "**", FollowsWhitespace));
+                                    if (NextNextChara == '=') {
+                                        Tokens.Add(new(Location, Phase1TokenType.AssignmentOperator, "**=", FollowsWhitespace));
+                                        i += 2;
+                                    }
+                                    else {
+                                        Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "**", FollowsWhitespace));
+                                        i++;
+                                    }
+                                }
+                                else if (NextChara == '=') {
+                                    Tokens.Add(new(Location, Phase1TokenType.AssignmentOperator, "*=", FollowsWhitespace));
                                     i++;
                                 }
-                                else
+                                else {
                                     Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "*", FollowsWhitespace));
+                                }
                             }
                             break;
                         case '/':
                             RemoveEndOfStatement();
-                            Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "/", FollowsWhitespace));
+                            if (NextChara == '=') {
+                                Tokens.Add(new(Location, Phase1TokenType.AssignmentOperator, "/=", FollowsWhitespace));
+                                i++;
+                            }
+                            else {
+                                Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "/", FollowsWhitespace));
+                            }
                             break;
                         case '%':
                             RemoveEndOfStatement();
-                            Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "%", FollowsWhitespace));
+                            if (NextChara == '=') {
+                                Tokens.Add(new(Location, Phase1TokenType.AssignmentOperator, "%=", FollowsWhitespace));
+                                i++;
+                            }
+                            else {
+                                Tokens.Add(new(Location, Phase1TokenType.ArithmeticOperator, "%", FollowsWhitespace));
+                            }
                             break;
                         case '#':
                             do {

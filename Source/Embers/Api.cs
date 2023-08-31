@@ -30,7 +30,7 @@ namespace Embers
             Interpreter.Integer.InstanceMethods["+"] = new Method(Integer._Add, 1);
             Interpreter.Integer.InstanceMethods["-"] = new Method(Integer._Subtract, 1);
             Interpreter.Integer.InstanceMethods["*"] = new Method(Integer._Multiply, 1);
-            Interpreter.Integer.InstanceMethods["/"] = new Method(Integer._Exponentiate, 1);
+            Interpreter.Integer.InstanceMethods["/"] = new Method(Integer._Divide, 1);
             Interpreter.Integer.InstanceMethods["%"] = new Method(Integer._Modulo, 1);
             Interpreter.Integer.InstanceMethods["**"] = new Method(Integer._Exponentiate, 1);
             Interpreter.Integer.InstanceMethods["times"] = new Method(Integer.times, 0);
@@ -39,7 +39,7 @@ namespace Embers
             Interpreter.Float.InstanceMethods["+"] = new Method(Float._Add, 1);
             Interpreter.Float.InstanceMethods["-"] = new Method(Float._Subtract, 1);
             Interpreter.Float.InstanceMethods["*"] = new Method(Float._Multiply, 1);
-            Interpreter.Float.InstanceMethods["/"] = new Method(Float._Exponentiate, 1);
+            Interpreter.Float.InstanceMethods["/"] = new Method(Float._Divide, 1);
             Interpreter.Float.InstanceMethods["%"] = new Method(Float._Modulo, 1);
             Interpreter.Float.InstanceMethods["**"] = new Method(Float._Exponentiate, 1);
         }

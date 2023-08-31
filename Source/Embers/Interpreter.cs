@@ -638,6 +638,20 @@ namespace Embers
                     }
                 }
             }
+            // If
+            else if (Expression is IfExpression IfExpression) {
+                if (IfExpression.Condition == null || (await InterpretExpressionAsync(IfExpression.Condition))[0].IsTruthy) {
+                    return await InterpretAsync(IfExpression.Statements);
+                }
+                else return Nil;
+            }
+            // While
+            else if (Expression is WhileExpression WhileExpression) {
+                while ((await InterpretExpressionAsync(WhileExpression.Condition!))[0].IsTruthy) {
+                    await InterpretAsync(WhileExpression.Statements);
+                }
+                return Nil;
+            }
             // Defined?
             else if (Expression is DefinedExpression DefinedExpression) {
                 if (DefinedExpression.Expression is MethodCallExpression || DefinedExpression.Expression is PathExpression) {
@@ -684,13 +698,6 @@ namespace Embers
                 else {
                     throw new InternalErrorException($"Unknown expression type for defined?: {DefinedExpression.Expression.GetType().Name}");
                 }
-            }
-            // If
-            else if (Expression is IfExpression IfExpression) {
-                if (IfExpression.Condition == null || (await InterpretExpressionAsync(IfExpression.Condition))[0].IsTruthy) {
-                    return await InterpretAsync(IfExpression.Statements);
-                }
-                return Nil;
             }
             // Unknown
             throw new InternalErrorException($"{Expression.Location}: Not sure how to interpret expression {Expression.GetType().Name} ({Expression.Inspect()})");

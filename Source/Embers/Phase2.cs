@@ -233,18 +233,30 @@ namespace Embers
                 }, ArgumentCount, Arguments);
             }
         }
-        public class IfExpression : Expression {
+        public abstract class ConditionalExpression : Expression {
             public readonly Expression? Condition;
-            public List<Statement> Statements;
-            public IfExpression(DebugLocation location, Expression? condition, List<Statement> statements) : base(location) {
+            public readonly List<Statement> Statements;
+            public ConditionalExpression(DebugLocation location, Expression? condition, List<Statement> statements) : base(location) {
                 Condition = condition;
                 Statements = statements;
             }
+        }
+        public class IfExpression : ConditionalExpression {
+            public IfExpression(DebugLocation location, Expression? condition, List<Statement> statements) : base(location, condition, statements) { }
             public override string Inspect() {
                 return (Condition != null ? $"if {Condition.Inspect()} " : "else ") + "{" + Statements.Inspect() + "}";
             }
             public override string Serialise() {
                 return $"new IfExpression({(Condition != null ? Condition.Serialise() : "null")}, {Statements.Serialise()})";
+            }
+        }
+        public class WhileExpression : ConditionalExpression {
+            public WhileExpression(DebugLocation location, Expression condition, List<Statement> statements) : base(location, condition, statements) { }
+            public override string Inspect() {
+                return $"while {Condition!.Inspect()} {{" + Statements.Inspect() + "}";
+            }
+            public override string Serialise() {
+                return $"new WhileExpression({Condition!.Serialise()}, {Statements.Serialise()})";
             }
         }
 
@@ -264,13 +276,29 @@ namespace Embers
             }
         }
         public class AssignmentStatement : Statement {
-            public Expression Left;
-            public readonly string Operator;
+            public ObjectTokenExpression Left;
             public Expression Right;
-            public AssignmentStatement(Expression left, string op, Expression right) : base(left.Location) {
+
+            readonly string Operator;
+
+            public AssignmentStatement(ObjectTokenExpression left, string op, Expression right) : base(left.Location) {
                 Left = left;
                 Operator = op;
                 Right = right;
+
+                // Compound assignment operators
+                if (Operator != "=") {
+                    if (Operator.Length >= 2) {
+                        string ArithmeticOperator = Operator[..^1];
+                        Right = new MethodCallExpression(
+                            new PathExpression(Left, new Phase2Token(Left.Location, Phase2TokenType.ArithmeticOperator, ArithmeticOperator)),
+                            new List<Expression>() { Right }
+                        );
+                    }
+                    else {
+                        throw new InternalErrorException($"Unknown assigment operator: '{Operator}'");
+                    }
+                }
             }
             public override string Inspect() {
                 return Left.Inspect() + " " + Operator + " " + Right.Inspect();
@@ -584,7 +612,32 @@ namespace Embers
             List<Phase2Object> ParsedObjects = new(Phase2Objects); // Preserve the original list
 
             // Brackets
-            
+            {
+                Stack<int> BracketsStack = new();
+                for (int i = 0; i < ParsedObjects.Count; i++) {
+                    Phase2Object Object = ParsedObjects[i];
+
+                    if (Object is Phase2Token Token) {
+                        if (Token.Type == Phase2TokenType.OpenBracket) {
+                            BracketsStack.Push(i);
+                        }
+                        else if (Token.Type == Phase2TokenType.CloseBracket) {
+                            if (BracketsStack.TryPop(out int OpenBracketIndex)) {
+                                Expression BracketsExpression = ObjectsToExpression(ParsedObjects.GetIndexRange(OpenBracketIndex + 1, i - 1));
+                                ParsedObjects.RemoveIndexRange(OpenBracketIndex, i);
+                                ParsedObjects.Insert(OpenBracketIndex, BracketsExpression);
+                                i = OpenBracketIndex;
+                            }
+                            else {
+                                throw new SyntaxErrorException($"{Token.Location}: Unexpected close bracket");
+                            }
+                        }
+                    }
+                }
+                if (BracketsStack.TryPop(out int RemainingOpenBracketIndex)) {
+                    throw new SyntaxErrorException($"{ParsedObjects[RemainingOpenBracketIndex].Location}: Unclosed bracket");
+                }
+            }
 
             // Paths
             for (int i = 0; i < ParsedObjects.Count; i++) {
@@ -638,7 +691,7 @@ namespace Embers
                                 i--;
                                 ParsedObjects.RemoveRange(i, 3);
                                 ParsedObjects.Insert(i, new MethodCallExpression(
-                                    new PathExpression(LastExpression, new Phase2Token(Token.Location, Phase2TokenType.LocalVariableOrMethod, "+")),
+                                    new PathExpression(LastExpression, new Phase2Token(Token.Location, Phase2TokenType.LocalVariableOrMethod, Token.Value!)),
                                     new List<Expression>() {NextExpression})
                                 );
                             }
@@ -690,17 +743,28 @@ namespace Embers
                 }
             }
 
-            // Statement if condition
+            // Statement if/while condition
             for (int i = 0; i < ParsedObjects.Count; i++) {
                 Phase2Object UnknownToken = ParsedObjects[i];
 
                 if (UnknownToken is Phase2Token Token) {
-                    if (Token.Type == Phase2TokenType.If) {
+                    if (Token.Type == Phase2TokenType.If || Token.Type == Phase2TokenType.While) {
                         if (i - 1 >= 0 && ParsedObjects[i - 1] is Expression Statement) {
                             if (i + 1 < ParsedObjects.Count && ParsedObjects[i + 1] is Expression Condition) {
+                                // Remove three expressions
                                 i--;
                                 ParsedObjects.RemoveRange(i, 3);
-                                ParsedObjects.Insert(i, new IfExpression(Statement.Location, Condition, new List<Statement>() { new ExpressionStatement(Statement) }));
+                                // Get statement & conditional expression
+                                List<Statement> ConditionalStatement = new() { new ExpressionStatement(Statement) };
+                                ConditionalExpression ConditionalExpression;
+                                if (Token.Type == Phase2TokenType.If) {
+                                    ConditionalExpression = new IfExpression(Statement.Location, Condition, ConditionalStatement);
+                                }
+                                else {
+                                    ConditionalExpression = new WhileExpression(Statement.Location, Condition, ConditionalStatement);
+                                }
+                                // Insert conditional expression
+                                ParsedObjects.Insert(i, ConditionalExpression);
                             }
                             else {
                                 throw new SyntaxErrorException("Expected condition after 'if'");
@@ -744,7 +808,9 @@ namespace Embers
             string Operator = AssignmentOperators[^1] ?? throw new InternalErrorException($"{Left.Location()}: Assignment operator was null");
             List<Phase2Object> Right = Expressions[^1];
 
-            AssignmentStatement? CurrentAssignment = new(ObjectsToExpression(Left), Operator, ObjectsToExpression(Right));
+            ObjectTokenExpression LeftExpression = ObjectsToExpression(Left) as ObjectTokenExpression ?? throw new SyntaxErrorException($"Invalid assignment target: '{Left.Inspect()}'");
+
+            AssignmentStatement? CurrentAssignment = new(LeftExpression, Operator, ObjectsToExpression(Right));
 
             Expressions.RemoveRange(Expressions.Count - 2, 2);
             AssignmentOperators.RemoveAt(AssignmentOperators.Count - 1);
@@ -754,10 +820,12 @@ namespace Embers
                 List<Phase2Object> Left2 = Expressions[^1];
                 string Operator2 = AssignmentOperators[^1] ?? throw new InternalErrorException($"{Left2.Location()}: Assignment operator was null");
 
+                ObjectTokenExpression Left2Expression = ObjectsToExpression(Left2) as ObjectTokenExpression ?? throw new SyntaxErrorException($"Invalid assignment target: '{Left2.Inspect()}'");
+
                 Expressions.RemoveAt(Expressions.Count - 1);
                 AssignmentOperators.RemoveAt(AssignmentOperators.Count - 1);
 
-                CurrentAssignment = new AssignmentStatement(ObjectsToExpression(Left2), Operator2, CurrentAssignment);
+                CurrentAssignment = new AssignmentStatement(Left2Expression, Operator2, CurrentAssignment);
             }
 
             return CurrentAssignment;
@@ -1321,6 +1389,15 @@ namespace Embers
             if (StartIndex > EndIndex)
                 return new List<T>();
             return List.GetRange(StartIndex, EndIndex - StartIndex + 1);
+        }
+        public static void RemoveIndexRange<T>(this List<T> List, int StartIndex, int EndIndex) {
+            if (StartIndex <= EndIndex)
+                List.RemoveRange(StartIndex, EndIndex - StartIndex + 1);
+        }
+        public static void RemoveIndexRange<T>(this List<T> List, int StartIndex) {
+            int EndIndex = List.Count - 1;
+            if (StartIndex <= EndIndex)
+                List.RemoveRange(StartIndex, EndIndex - StartIndex + 1);
         }
         public static string Serialise<T>(this List<T> List) where T : Phase2.Phase2Object {
             string Serialised = $"new List<{typeof(T).Name}>() {{";

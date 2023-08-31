@@ -15,6 +15,11 @@ puts ""c"" if false
 puts ""d"" if nil
 puts ""e"" if ""true""
 puts ""f"" if 0
+
+puts ""-----""
+
+puts 5 * 2 + 3 / 4
+puts 5 * (2 + 3) / 4
 ";
                 Benchmark(() => new Interpreter().Evaluate(Code));
                 Console.ReadLine();
