@@ -14,7 +14,7 @@ Its minimalistic design should be suitable for use in game engines or modding sc
 - Does not have 100% compatibility with Ruby syntax or functionality.
 
 ## Note
-Ruby is a very flexible language that is often likened to a set of sharp knives. One such feature is allowing the programmer to patch core classes. Please keep this in mind when using or contributing to this repository.
+Ruby is a very flexible language that is often likened to a set of sharp knives. One such feature is the ability to patch core classes. Please keep this in mind when using or contributing to this repository.
 
 ## Usage
 ### Basic example:
@@ -92,3 +92,9 @@ end
 pos = Vector2.new 1, 2; puts(""{#{pos.x}, #{pos.y}}"") # {1, 2}
 ");
 ```
+### Sandboxing
+If you don't trust the Ruby code that will be run, you can remove access to dangerous APIs by passing `false` when creating the interpreter:
+```csharp
+Interpreter MyInterpreter = new(false);
+```
+You can see which APIs can still be accessed in [`Api.cs`](Source/Embers/Api.cs).
