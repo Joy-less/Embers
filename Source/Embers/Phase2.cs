@@ -362,9 +362,11 @@ namespace Embers
         public class DefineClassStatement : Statement {
             public readonly ObjectTokenExpression ClassName;
             public readonly List<Statement> BlockStatements;
-            public DefineClassStatement(ObjectTokenExpression className, List<Statement> blockStatements) : base(className.Location) {
+            public readonly bool IsModule;
+            public DefineClassStatement(ObjectTokenExpression className, List<Statement> blockStatements, bool isModule) : base(className.Location) {
                 ClassName = className;
                 BlockStatements = blockStatements;
+                IsModule = isModule;
             }
             public override string Inspect() {
                 return "class " + ClassName.Inspect();
@@ -508,7 +510,8 @@ namespace Embers
                 || Type == Phase2TokenType.ConstantOrMethod
                 || Type == Phase2TokenType.InstanceVariable
                 || Type == Phase2TokenType.ClassVariable
-                || Type == Phase2TokenType.Symbol;
+                || Type == Phase2TokenType.Symbol
+                || Type == Phase2TokenType.Self;
         }
         public static bool IsVariableToken(Phase2Token? Token) {
             return Token != null && IsVariableToken(Token.Type);
@@ -972,7 +975,7 @@ namespace Embers
                     MethodNamePathExpression = new ObjectTokenExpression(MethodNamePath[0]);
                 }
                 else {
-                    for (int i = 0; i < MethodNamePath.Count; i++) {
+                    for (int i = 0; i < MethodNamePath.Count - 1; i++) {
                         MethodNamePathExpression = new PathExpression(new ObjectTokenExpression(MethodNamePath[i]), MethodNamePath[i + 1]);
                     }
                 }
@@ -1111,9 +1114,11 @@ namespace Embers
             // Open define method block
             return new BuildingMethod(Location, MethodName, MethodArguments);
         }
-        static BuildingClass ParseStartDefineClass(DebugLocation Location, List<Phase2Object> StatementTokens) {
+        static BuildingClass ParseStartDefineClass(DebugLocation Location, List<Phase2Object> StatementTokens, bool IsModule) {
+            string ObjectType = IsModule ? "Module" : "Class";
+
             if (StatementTokens.Count == 1)
-                throw new SyntaxErrorException($"{Location}: Class keyword must be followed by an identifier (got nothing)");
+                throw new SyntaxErrorException($"{Location}: {ObjectType} keyword must be followed by an identifier (got nothing)");
             
             // Get class name
             {
@@ -1164,13 +1169,13 @@ namespace Embers
                 }
                 StatementTokens.Insert(0, ClassNamePathExpression!);
             }
-            ObjectTokenExpression ClassName = StatementTokens[0] as ObjectTokenExpression ?? throw new SyntaxErrorException($"{StatementTokens[0].Location}: Class keyword must be followed by an identifier (got {StatementTokens[0].Inspect()})");
+            ObjectTokenExpression ClassName = StatementTokens[0] as ObjectTokenExpression ?? throw new SyntaxErrorException($"{StatementTokens[0].Location}: {ObjectType} keyword must be followed by an identifier (got {StatementTokens[0].Inspect()})");
             if (ClassName.Token.Type != Phase2TokenType.ConstantOrMethod) {
-                throw new SyntaxErrorException($"{ClassName.Location}: Class name must be Constant");
+                throw new SyntaxErrorException($"{ClassName.Location}: {ObjectType} name must be Constant");
             }
 
             // Open define class block
-            return new BuildingClass(Location, ClassName);
+            return new BuildingClass(Location, ClassName, IsModule);
         }
         static Statement? ParseEndStatement(Stack<BuildingBlock> BlockStackInfo) {
             BuildingBlock Block = BlockStackInfo.Pop();
@@ -1181,9 +1186,9 @@ namespace Embers
                     new MethodExpression(MethodBlock.Location, MethodBlock.Statements, new IntRange(MethodBlock.MinArgumentsCount, MethodBlock.MaxArgumentsCount), MethodBlock.Arguments)
                 );
             }
-            // End Class Block
+            // End Class/Module Block
             else if (Block is BuildingClass ClassBlock) {
-                return new DefineClassStatement(ClassBlock.ClassName, ClassBlock.Statements);
+                return new DefineClassStatement(ClassBlock.ClassName, ClassBlock.Statements, ClassBlock.IsModule);
             }
             // End Do Block
             else if (Block is BuildingDo DoBlock) {
@@ -1261,6 +1266,24 @@ namespace Embers
             // Create yield/return statement
             return IsReturn ? new ReturnStatement(Location, ReturnOrYieldValues) : new YieldStatement(Location, ReturnOrYieldValues);
         }
+        static Statement ParseUndef(DebugLocation Location, List<Phase2Object> StatementTokens) {
+            // Get undef method name
+            int EndOfValuesIndex = 0;
+            List<Expression>? UndefName = ParseArguments(StatementTokens, ref EndOfValuesIndex);
+            // Get method name
+            if (UndefName != null) {
+                // Create undef statement
+                if (UndefName.Count == 1 && UndefName[0] is ObjectTokenExpression MethodName && MethodName is not PathExpression) {
+                    return new UndefineMethodStatement(Location, MethodName);
+                }
+                else {
+                    throw new SyntaxErrorException($"{Location}: Expected local method name after 'undef', got {UndefName.Inspect()}");
+                }
+            }
+            else {
+                throw new SyntaxErrorException($"{Location}: Expected method name after 'undef', got nothing");
+            }
+        }
         static BuildingIf ParseStartIf(DebugLocation Location, List<Phase2Object> StatementTokens) {
             // Get condition
             int EndConditionIndex;
@@ -1322,8 +1345,10 @@ namespace Embers
         }
         class BuildingClass : BuildingBlock {
             public readonly ObjectTokenExpression ClassName;
-            public BuildingClass(DebugLocation location, ObjectTokenExpression className) : base(location) {
+            public bool IsModule;
+            public BuildingClass(DebugLocation location, ObjectTokenExpression className, bool isModule) : base(location) {
                 ClassName = className;
+                IsModule = isModule;
             }
         }
         class BuildingDo : BuildingBlock {
@@ -1366,8 +1391,9 @@ namespace Embers
                             BlockStackInfo.Push(BuildingMethod);
                             break;
                         case Phase2TokenType.Class:
-                            BuildingClass BuildingClass = ParseStartDefineClass(Token.Location, StatementTokens);
-                            // Open define class block
+                        case Phase2TokenType.Module:
+                            BuildingClass BuildingClass = ParseStartDefineClass(Token.Location, StatementTokens, Token.Type == Phase2TokenType.Module);
+                            // Open define class/module block
                             BlockStackInfo.Push(BuildingClass);
                             break;
                         case Phase2TokenType.End:
@@ -1383,6 +1409,9 @@ namespace Embers
                             break;
                         case Phase2TokenType.Yield:
                             BlockStackInfo.Peek().AddStatement(ParseReturnOrYield(Token.Location, StatementTokens, false));
+                            break;
+                        case Phase2TokenType.Undef:
+                            BlockStackInfo.Peek().AddStatement(ParseUndef(Token.Location, StatementTokens));
                             break;
                         case Phase2TokenType.If:
                             BuildingIf BuildingIf = ParseStartIf(Token.Location, StatementTokens);

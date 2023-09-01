@@ -8,15 +8,16 @@ namespace Embers
     {
         public readonly bool AllowUnsafeApi;
 
+        public readonly Class RootModule;
         public readonly Instance RootInstance;
         public readonly Scope RootScope;
         readonly Dictionary<string, Instance> GlobalVariables = new();
         readonly Dictionary<string, SymbolInstance> Symbols = new();
-        Class CurrentClass;
+        Module CurrentModule;
         Scope CurrentScope;
         Block CurrentBlock;
         Instance CurrentInstance;
-        void SetCurrentClass(Class NewCurrentClass) { CurrentClass = NewCurrentClass; CurrentBlock = NewCurrentClass; }
+        void SetCurrentModule(Module NewCurrentModule) { CurrentModule = NewCurrentModule; CurrentBlock = NewCurrentModule; }
         void SetCurrentScope(Scope NewCurrentScope) { CurrentScope = NewCurrentScope; CurrentBlock = NewCurrentScope; }
 
         public readonly Class NilClass;
@@ -86,13 +87,20 @@ namespace Embers
         public class Scope : Block {
             public Scope(Block? parent) : base(parent) { }
         }
-        public class Class : Block {
+        public class Module : Block {
             public readonly string Name;
             public readonly Dictionary<string, Method> Methods = new();
             public readonly Dictionary<string, Method> InstanceMethods = new();
             public readonly Dictionary<string, Instance> ClassVariables = new();
-            public Class(string name, Class? parent) : base(parent) {
+            public Module(string name, Module? parent) : base(parent) {
                 Name = name;
+                // Default class and instance methods
+                Api.DefaultClassAndInstanceMethods.CopyTo(InstanceMethods);
+                Api.DefaultClassAndInstanceMethods.CopyTo(Methods);
+            }
+        }
+        public class Class : Module {
+            public Class(string name, Module? parent) : base(name, parent) {
                 // Default method: new
                 Methods.Add("new", new Method(async Input => {
                     Instance NewInstance = new(this);
@@ -101,25 +109,27 @@ namespace Embers
                         Instance PreviousInstance = Input.Interpreter.CurrentInstance;
                         Input.Interpreter.CurrentInstance = NewInstance;
                         // Call initialize
-                        await Initialize.Call(Input.Interpreter, NewInstance, Input.Arguments);
+                        Instances InitializeResult = await Initialize.Call(Input.Interpreter, NewInstance, Input.Arguments);
                         // Step back an instance
                         Input.Interpreter.CurrentInstance = PreviousInstance;
+                        // Return initialize result
+                        return InitializeResult;
                     }
                     else {
                         throw new RuntimeException($"Undefined method 'initialize' for {Name}");
                     }
-                    return NewInstance;
                 }, null));
-                // Default class and instance methods
-                Api.DefaultClassAndInstanceMethods.CopyTo(InstanceMethods);
-                Api.DefaultClassAndInstanceMethods.CopyTo(Methods);
+                // Default method: initialize
+                InstanceMethods.Add("initialize", new Method(async Input => {
+                    return Input.Instance;
+                }, 0));
             }
         }
         public class Instance {
             /*public bool IsA<T>() {
                 return GetType() == typeof(T);
             }*/
-            public readonly Class Class;
+            public readonly Module Module;
             public virtual Dictionary<string, Instance> InstanceVariables { get; } = new();
             public virtual Dictionary<string, Method> InstanceMethods { get; } = new();
             public virtual object? Object { get { return null; } }
@@ -127,7 +137,7 @@ namespace Embers
             public virtual string String { get { throw new ApiException("Instance is not a string"); } }
             public virtual long Integer { get { throw new ApiException("Instance is not an integer"); } }
             public virtual double Float { get { throw new ApiException("Instance is not a float"); } }
-            public virtual Class ClassRef { get { throw new ApiException("Instance is not a class reference"); } }
+            public virtual Module ModuleRef { get { throw new ApiException("Instance is not a class/module reference"); } }
             public virtual Method MethodRef { get { throw new ApiException("Instance is not a method reference"); } }
             public virtual string Inspect() {
                 return ToString()!;
@@ -172,8 +182,8 @@ namespace Embers
                     _ => throw new InternalErrorException($"{Token.Location}: Cannot create new object from token type {Token.Type}")
                 };
             }
-            public Instance(Class fromClass) {
-                Class = fromClass;
+            public Instance(Module fromClass) {
+                Module = fromClass;
                 // Copy instance methods
                 if (this is not PseudoInstance) {
                     fromClass.InstanceMethods.CopyTo(InstanceMethods);
@@ -193,7 +203,7 @@ namespace Embers
             }
             public void AddOrUpdateInstanceMethod(string Name, Method Method) {
                 InstanceMethods[Name] =
-                Class.InstanceMethods[Name] = Method;
+                Module.InstanceMethods[Name] = Method;
             }
             public bool IsTruthy => !(Object == null || false.Equals(Object));
         }
@@ -299,7 +309,7 @@ namespace Embers
         public abstract class PseudoInstance : Instance {
             public override Dictionary<string, Instance> InstanceVariables { get { throw new ApiException($"{this.GetType().Name} instance does not have instance variables"); } }
             public override Dictionary<string, Method> InstanceMethods { get { throw new ApiException($"{this.GetType().Name} instance does not have instance methods"); } }
-            public PseudoInstance(Class? fromClass) : base(fromClass) { }
+            public PseudoInstance(Module? fromModule) : base(fromModule) { }
         }
         public class VariableReference : PseudoInstance {
             public Block? Block;
@@ -326,16 +336,16 @@ namespace Embers
                 Scope = scope;
             }
         }
-        public class ClassReference : PseudoInstance {
-            public override object? Object { get { return Class; } }
-            public override Class ClassRef { get { return Class; } }
+        public class ModuleReference : PseudoInstance {
+            public override object? Object { get { return Module; } }
+            public override Module ModuleRef { get { return Module; } }
             public override string Inspect() {
-                return Class.Name;
+                return Module.Name;
             }
             public override string LightInspect() {
-                return Class.Name;
+                return Module.Name;
             }
-            public ClassReference(Class _class) : base(_class) { }
+            public ModuleReference(Module _module) : base(_module) { }
         }
         public class MethodReference : PseudoInstance {
             readonly Method Method;
@@ -502,24 +512,32 @@ namespace Embers
         }
 
         public async Task Warn(string Message) {
-            await RootInstance.InstanceMethods["warn"].Call(this, new ClassReference(RootInstance.Class), new StringInstance(String, Message));
+            await RootInstance.InstanceMethods["warn"].Call(this, new ModuleReference(RootModule), new StringInstance(String, Message));
         }
-        public static Class CreateClass(Class Parent, string Name) {
+        public static Module CreateModule(Module Parent, string Name) {
+            Module NewClass = new(Name, Parent);
+            Parent.Constants[Name] = new ModuleReference(NewClass);
+            return NewClass;
+        }
+        public Module CreateModule(string Name) {
+            return CreateModule(RootModule, Name);
+        }
+        public static Class CreateClass(Module Parent, string Name) {
             Class NewClass = new(Name, Parent);
-            Parent.Constants[Name] = new ClassReference(NewClass);
+            Parent.Constants[Name] = new ModuleReference(NewClass);
             return NewClass;
         }
         public Class CreateClass(string Name) {
-            return CreateClass(RootInstance.Class, Name);
+            return CreateClass(RootModule, Name);
         }
-        T CreateTemporaryClassScope<T>(Class Class, Func<T> Do) {
-            // Create temporary class scope
-            Class PreviousClass = CurrentClass;
-            CurrentClass = Class;
+        T CreateTemporaryClassScope<T>(Module Module, Func<T> Do) {
+            // Create temporary class/module scope
+            Module PreviousModule = CurrentModule;
+            SetCurrentModule(Module);
             // Do action
             T Result = Do();
-            // Step back a class
-            CurrentClass = PreviousClass;
+            // Step back a class/module
+            SetCurrentModule(PreviousModule);
             // Return result
             return Result;
         }
@@ -552,19 +570,19 @@ namespace Embers
                 if (MethodPath is VariableReference MethodReference) {
                     // Static method
                     if (MethodReference.Block != null) {
-                        // Get class which owns method
-                        Class MethodClass = MethodReference.Block as Class ?? CurrentClass;
-                        // Get instance of the class which owns method
+                        // Get class/module which owns method
+                        Module MethodModule = MethodReference.Block as Module ?? CurrentModule;
+                        // Get instance of the class/module which owns method
                         Instance MethodOwner;
                         if (MethodCallExpression.MethodPath is PathExpression MethodCallPathExpression) {
                             MethodOwner = await InterpretExpressionAsync(MethodCallPathExpression.ParentObject);
                         }
                         else {
-                            MethodOwner = new ClassReference(MethodClass);
+                            MethodOwner = new ModuleReference(MethodModule);
                         }
                         // Call class method
-                        return await CreateTemporaryClassScope(MethodClass, async () =>
-                            await MethodClass.Methods[MethodReference.Token.Value!].Call(
+                        return await CreateTemporaryClassScope(MethodModule, async () =>
+                            await MethodModule.Methods[MethodReference.Token.Value!].Call(
                                 this, MethodOwner, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
                             )
                         );
@@ -590,41 +608,45 @@ namespace Embers
                 if (ObjectTokenExpression is PathExpression PathExpression) {
                     Instance ParentInstance = await InterpretExpressionAsync(PathExpression.ParentObject);
                     // Static method
-                    if (ParentInstance is ClassReference ParentClass) {
+                    if (ParentInstance is ModuleReference ParentModule) {
                         // Method
-                        if (ParentClass.Class.Methods.TryGetValue(PathExpression.Token.Value!, out Method? FindMethod)) {
-                            if (!ReturnVariableReference) {
-                                // Call class method
-                                return await CreateTemporaryClassScope(ParentClass.Class, async () =>
-                                    await FindMethod.Call(this, ParentClass)
+                        if (!ReturnVariableReference) {
+                            // Method
+                            if (ParentModule.Module.Methods.TryGetValue(PathExpression.Token.Value!, out Method? FindMethod)) {
+                                // Call class/module method
+                                return await CreateTemporaryClassScope(ParentModule.Module, async () =>
+                                    await FindMethod.Call(this, ParentModule)
                                 );
                             }
+                            // Error
                             else {
-                                return new VariableReference(ParentClass.Class, PathExpression.Token);
+                                throw new RuntimeException($"{PathExpression.Token.Location}: Undefined method '{PathExpression.Token.Value!}' for {ParentModule.Module.Name}");
                             }
                         }
-                        // Error
+                        // New method
                         else {
-                            throw new RuntimeException($"{PathExpression.Token.Location}: Undefined method '{PathExpression.Token.Value!}' for {ParentClass.Class.Name}");
+                            return new VariableReference(ParentModule.Module, PathExpression.Token);
                         }
                     }
                     // Instance method
                     else {
                         // Method
-                        if (ParentInstance.InstanceMethods.TryGetValue(PathExpression.Token.Value!, out Method? FindMethod)) {
-                            if (!ReturnVariableReference) {
+                        if (!ReturnVariableReference) {
+                            // Method
+                            if (ParentInstance.InstanceMethods.TryGetValue(PathExpression.Token.Value!, out Method? FindMethod)) {
                                 // Call instance method
                                 return await CreateTemporaryInstanceScope(ParentInstance, async () =>
                                     await FindMethod.Call(this, ParentInstance)
                                 );
                             }
+                            // Error
                             else {
-                                return new VariableReference(ParentInstance, PathExpression.Token);
+                                throw new RuntimeException($"{PathExpression.Token.Location}: Undefined method '{PathExpression.Token.Value!}' for {ParentInstance.Module.Name} instance");
                             }
                         }
-                        // Error
+                        // New method
                         else {
-                            throw new RuntimeException($"{PathExpression.Token.Location}: Undefined method '{PathExpression.Token.Value!}' for {ParentInstance.Class.Name} instance");
+                            return new VariableReference(ParentInstance, PathExpression.Token);
                         }
                     }
                 }
@@ -632,17 +654,19 @@ namespace Embers
                 else if (ObjectTokenExpression is ConstantPathExpression ConstantPathExpression) {
                     Instance ParentInstance = await InterpretExpressionAsync(ConstantPathExpression.ParentObject);
                     // Constant
-                    if (ParentInstance.Class.Constants.TryGetValue(ConstantPathExpression.Token.Value!, out Instance? ConstantValue)) {
-                        if (!ReturnVariableReference) {
+                    if (!ReturnVariableReference) {
+                        // Constant
+                        if (ParentInstance.Module.Constants.TryGetValue(ConstantPathExpression.Token.Value!, out Instance? ConstantValue)) {
                             return ConstantValue;
                         }
+                        // Error
                         else {
-                            return new VariableReference(ParentInstance.Class, ConstantPathExpression.Token);
+                            throw new RuntimeException($"{ConstantPathExpression.Token.Location}: Uninitialized constant {ConstantPathExpression.Inspect()}");
                         }
                     }
-                    // Error
+                    // New constant
                     else {
-                        throw new RuntimeException($"{ConstantPathExpression.Token.Location}: Uninitialized constant {ConstantPathExpression.Inspect()}");
+                        return new VariableReference(ParentInstance.Module, ConstantPathExpression.Token);
                     }
                 }
                 // Local
@@ -653,7 +677,6 @@ namespace Embers
                     }
                     else {
                         if (!ReturnVariableReference) {
-
                             switch (ObjectTokenExpression.Token.Type) {
                                 // Local variable or method
                                 case Phase2TokenType.LocalVariableOrMethod: {
@@ -705,21 +728,24 @@ namespace Embers
                                 }
                                 // Class variable
                                 case Phase2TokenType.ClassVariable: {
-                                    if (CurrentClass.ClassVariables.TryGetValue(ObjectTokenExpression.Token.Value!, out Instance? Value)) {
+                                    if (CurrentModule.ClassVariables.TryGetValue(ObjectTokenExpression.Token.Value!, out Instance? Value)) {
                                         return Value;
                                     }
                                     else {
-                                        throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Uninitialized class variable '{ObjectTokenExpression.Token.Value!}' for {CurrentClass}");
+                                        throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Uninitialized class variable '{ObjectTokenExpression.Token.Value!}' for {CurrentModule}");
                                     }
                                 }
                                 // Symbol
                                 case Phase2TokenType.Symbol: {
                                     return GetSymbol(ObjectTokenExpression.Token.Value!);
                                 }
+                                // Self
+                                case Phase2TokenType.Self: {
+                                    return new ModuleReference(CurrentModule);
+                                }
                                 // Error
                                 default:
                                     throw new InternalErrorException($"{ObjectTokenExpression.Token.Location}: Unknown variable type {ObjectTokenExpression.Token.Type}");
-
                             }
                         }
                         // Variable
@@ -745,7 +771,7 @@ namespace Embers
             }
             // Self
             else if (Expression is SelfExpression) {
-                return new ClassReference(CurrentClass);
+                return new ModuleReference(CurrentModule);
             }
             // Defined?
             else if (Expression is DefinedExpression DefinedExpression) {
@@ -779,7 +805,7 @@ namespace Embers
                         throw new NotImplementedException("Defined? not yet implemented for instance variables");
                     }
                     else if (ObjectToken.Token.Type == Phase2TokenType.ClassVariable) {
-                        if (CurrentClass.ClassVariables.ContainsKey(ObjectToken.Token.Value!)) {
+                        if (CurrentModule.ClassVariables.ContainsKey(ObjectToken.Token.Value!)) {
                             return new StringInstance(String, "class-variable");
                         }
                         else {
@@ -826,7 +852,7 @@ namespace Embers
                             CurrentInstance.InstanceVariables[Variable.Token.Value!] = Value;
                             break;
                         case Phase2TokenType.ClassVariable:
-                            CurrentClass.ClassVariables[Variable.Token.Value!] = Value;
+                            CurrentModule.ClassVariables[Variable.Token.Value!] = Value;
                             break;
                         default:
                             throw new InternalErrorException($"{Variable.Token.Location}: Assignment variable token is not a variable type (got {Variable.Token.Type})");
@@ -858,7 +884,7 @@ namespace Embers
                     if (MethodNameObject is VariableReference MethodName) {
                         // Define static method
                         if (MethodName.Block != null) {
-                            MethodName.Block.FindFirstAncestorOrSelfWhichIsA<Class>().Methods[MethodName.Token.Value!] = DefineMethodStatement.Method.Method;
+                            MethodName.Block.FindFirstAncestorOrSelfWhichIsA<Module>().Methods[MethodName.Token.Value!] = DefineMethodStatement.Method.Method;
                         }
                         // Define instance method
                         else {
@@ -877,34 +903,36 @@ namespace Embers
                             await Warn($"Already initialized constant '{ClassName.Token.Value!}'");
                         }*/
                         // Create class
-                        Class NewClass = new(ClassName.Token.Value!, ClassName.Class);
-                        // Create temporary class scope
-                        Class PreviousClass = CurrentClass;
-                        SetCurrentClass(NewClass);
-                        // Create temporary class instance
-                        Instance PreviousInstance = CurrentInstance;
-                        CurrentInstance = new Instance(NewClass);
-                        // Interpret the statements inside the class definition
-                        await InterpretAsync(DefineClassStatement.BlockStatements);
-                        // Step back an instance
-                        CurrentInstance = PreviousInstance;
-                        // Step back a class scope
-                        SetCurrentClass(PreviousClass);
-                        // Store class constant
+                        Module NewModule;
+                        if (DefineClassStatement.IsModule) {
+                            NewModule = new Module(ClassName.Token.Value!, ClassName.Module);
+                        }
+                        else {
+                            NewModule = new Class(ClassName.Token.Value!, ClassName.Module);
+                        }
+
+                        // Interpret class statements
+                        await CreateTemporaryClassScope(NewModule, async () => {
+                            await CreateTemporaryInstanceScope(new Instance(NewModule), async () => {
+                                await InterpretAsync(DefineClassStatement.BlockStatements);
+                            });
+                        });
+
+                        // Store class/module constant
                         if (ClassName.Block != null) {
                             // Path
-                            ClassName.Block.Parent!.Constants[ClassName.Token.Value!] = new ClassReference(NewClass);
+                            ClassName.Block.Parent!.Constants[ClassName.Token.Value!] = new ModuleReference(NewModule);
                         }
                         else if (ClassName.Instance == CurrentInstance) {
                             // Local
-                            CurrentInstance.Class.Constants[ClassName.Token.Value!] = new ClassReference(NewClass);
+                            CurrentInstance.Module.Constants[ClassName.Token.Value!] = new ModuleReference(NewModule);
                         }
                         else {
                             throw new RuntimeException($"{ClassName.Inspect()} is not a class/module");
                         }
                     }
                     else {
-                        throw new InternalErrorException($"{DefineClassStatement.Location}: Invalid class name: {ClassNameObject}");
+                        throw new InternalErrorException($"{DefineClassStatement.Location}: Invalid class/module name: {ClassNameObject}");
                     }
                 }
                 else if (Statement is ReturnStatement ReturnStatement) {
@@ -921,6 +949,15 @@ namespace Embers
                     }
                     else {
                         throw new RuntimeException($"{YieldStatement.Location}: No block given to yield to");
+                    }
+                }
+                else if (Statement is UndefineMethodStatement UndefineMethodStatement) {
+                    string MethodName = UndefineMethodStatement.MethodName.Token.Value!;
+                    if (MethodName == "initialize") {
+                        await Warn("undefining 'initialize' may cause serious problems");
+                    }
+                    if (!CurrentModule.InstanceMethods.Remove(MethodName)) {
+                        throw new RuntimeException($"{UndefineMethodStatement.MethodName.Token.Location}: Undefined method '{MethodName}' for {CurrentModule.Name}");
                     }
                 }
                 else if (Statement is IfStatement IfStatement) {
@@ -967,9 +1004,10 @@ namespace Embers
         public Interpreter(bool allowUnsafeApi = true) {
             AllowUnsafeApi = allowUnsafeApi;
 
-            RootInstance = new Instance(new Class("main", null)); Class RootClass = RootInstance.Class;
-            RootScope = new Scope(RootClass);
-            CurrentClass = RootClass;
+            RootModule = new("main", null);
+            RootInstance = new Instance(RootModule);
+            RootScope = new Scope(RootModule);
+            CurrentModule = RootModule;
             CurrentScope = RootScope;
             CurrentBlock = RootScope;
             CurrentInstance = RootInstance;

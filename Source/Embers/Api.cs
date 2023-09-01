@@ -97,7 +97,7 @@ namespace Embers
             return new StringInstance(Input.Interpreter.String, UserInput);
         }
         static async Task<Instances> warn(MethodInput Input) {
-            Console.ForegroundColor = ConsoleColor.DarkYellow;
+            Console.ForegroundColor = ConsoleColor.Yellow;
             foreach (Instance Message in Input.Arguments) {
                 Console.WriteLine(Message.Object);
             }

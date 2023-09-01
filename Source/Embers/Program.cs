@@ -13,6 +13,11 @@ p :hi
 p 'Hi'.to_sym
 p :hey.to_s
 p '5'.to_sym
+
+class Hi
+    undef initialize
+end
+Hi.new
 ";
                 Benchmark(() => new Interpreter().Evaluate(Code));
 
