@@ -1,6 +1,5 @@
 ﻿using System.Diagnostics;
 using static Embers.Interpreter;
-using static Embers.Phase2;
 
 namespace Embers
 {
@@ -20,6 +19,7 @@ File.write('something.txt', 'Hi!')
 puts File.read 'something.txt'
 ";
                 Benchmark(() => new Interpreter().Evaluate(Code));
+
                 Console.ReadLine();
             }
 

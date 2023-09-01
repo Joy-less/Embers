@@ -107,7 +107,7 @@ namespace Embers
                         throw new RuntimeException($"Undefined method 'initialize' for {Name}");
                     }
                     return NewInstance;
-                }, 0));
+                }, null));
                 // Default class and instance methods
                 Api.DefaultClassAndInstanceMethods.CopyTo(InstanceMethods);
                 Api.DefaultClassAndInstanceMethods.CopyTo(Methods);
@@ -152,6 +152,7 @@ namespace Embers
 
                                 string Formatted = (await Interpreter.EvaluateAsync(ToFormat))[0].LightInspect();
                                 String = FirstHalf + Formatted + SecondHalf;
+                                i = FirstHalf.Length - 1;
                             }
                         }
                         LastChara = Chara;
@@ -345,17 +346,6 @@ namespace Embers
                     Scope PreviousScope = Interpreter.CurrentScope;
                     Interpreter.SetCurrentScope(new Scope(PreviousScope));
                     // Set argument variables
-                    /*for (int i = 0; i < ArgumentNames.Count; i++) {
-                        MethodArgumentExpression Argument = ArgumentNames[i];
-                        Instance GivenArgument;
-                        if (i >= Arguments.Count) {
-                            GivenArgument = await Interpreter.InterpretExpressionAsync(Argument.DefaultValue!);
-                        }
-                        else {
-                            GivenArgument = Arguments[i];
-                        }
-                        Interpreter.CurrentScope.LocalVariables.Add(Argument.ArgumentName.Value!, GivenArgument);
-                    }*/
                     for (int i = 0; i < ArgumentNames.Count; i++) {
                         MethodArgumentExpression Argument = ArgumentNames[i];
                         if (Argument.SplatType == SplatType.Single) {
@@ -488,11 +478,33 @@ namespace Embers
         }
         public static Class CreateClass(Class Parent, string Name) {
             Class NewClass = new(Name, Parent);
-            Parent.Constants.Add(Name, new ClassReference(NewClass));
+            Parent.Constants[Name] = new ClassReference(NewClass);
             return NewClass;
         }
         public Class CreateClass(string Name) {
             return CreateClass(RootInstance.Class, Name);
+        }
+        T CreateTemporaryClassScope<T>(Class Class, Func<T> Do) {
+            // Create temporary class scope
+            Class PreviousClass = CurrentClass;
+            CurrentClass = Class;
+            // Do action
+            T Result = Do();
+            // Step back a class
+            CurrentClass = PreviousClass;
+            // Return result
+            return Result;
+        }
+        T CreateTemporaryInstanceScope<T>(Instance Instance, Func<T> Do) {
+            // Create temporary instance scope
+            Instance PreviousInstance = CurrentInstance;
+            CurrentInstance = Instance;
+            // Do action
+            T Result = Do();
+            // Step back an instance
+            CurrentInstance = PreviousInstance;
+            // Return result
+            return Result;
         }
 
         async Task<Instances> InterpretExpressionAsync(Expression Expression, bool ReturnVariableReference = false) {
@@ -512,15 +524,21 @@ namespace Embers
                         else {
                             MethodOwner = new ClassReference(MethodClass);
                         }
-                        // Return result of method call
-                        return await MethodClass.Methods[MethodReference.Token.Value!].Call(
-                            this, MethodOwner, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
+                        // Call class method
+                        return await CreateTemporaryClassScope(MethodClass, async () =>
+                            await MethodClass.Methods[MethodReference.Token.Value!].Call(
+                                this, MethodOwner, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
+                            )
                         );
                     }
                     // Instance method
                     else {
-                        return await MethodReference.Instance!.InstanceMethods[MethodReference.Token.Value!].Call(
-                            this, MethodReference.Instance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
+                        // Call instance method
+                        Instance MethodInstance = MethodReference.Instance!;
+                        return await CreateTemporaryInstanceScope(MethodInstance, async () =>
+                            await MethodReference.Instance!.InstanceMethods[MethodReference.Token.Value!].Call(
+                                this, MethodReference.Instance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
+                            )
                         );
                     }
                 }
@@ -538,7 +556,10 @@ namespace Embers
                         // Method
                         if (ParentClass.Class.Methods.TryGetValue(PathExpression.Token.Value!, out Method? FindMethod)) {
                             if (!ReturnVariableReference) {
-                                return await FindMethod.Call(this, ParentClass);
+                                // Call class method
+                                return await CreateTemporaryClassScope(ParentClass.Class, async () =>
+                                    await FindMethod.Call(this, ParentClass)
+                                );
                             }
                             else {
                                 return new VariableReference(ParentClass.Class, PathExpression.Token);
@@ -554,7 +575,10 @@ namespace Embers
                         // Method
                         if (ParentInstance.InstanceMethods.TryGetValue(PathExpression.Token.Value!, out Method? FindMethod)) {
                             if (!ReturnVariableReference) {
-                                return await FindMethod.Call(this, ParentInstance);
+                                // Call instance method
+                                return await CreateTemporaryInstanceScope(ParentInstance, async () =>
+                                    await FindMethod.Call(this, ParentInstance)
+                                );
                             }
                             else {
                                 return new VariableReference(ParentInstance, PathExpression.Token);
@@ -754,9 +778,11 @@ namespace Embers
                             CurrentBlock.Constants[Variable.Token.Value!] = Value;
                             break;
                         case Phase2TokenType.InstanceVariable:
-                            throw new NotImplementedException();
+                            CurrentInstance.InstanceVariables[Variable.Token.Value!] = Value;
+                            break;
                         case Phase2TokenType.ClassVariable:
-                            throw new NotImplementedException();
+                            CurrentClass.ClassVariables[Variable.Token.Value!] = Value;
+                            break;
                         default:
                             throw new InternalErrorException($"{Variable.Token.Location}: Assignment variable token is not a variable type (got {Variable.Token.Type})");
                     }
@@ -810,8 +836,13 @@ namespace Embers
                         // Create temporary class scope
                         Class PreviousClass = CurrentClass;
                         SetCurrentClass(NewClass);
+                        // Create temporary class instance
+                        Instance PreviousInstance = CurrentInstance;
+                        CurrentInstance = new Instance(NewClass);
                         // Interpret the statements inside the class definition
                         await InterpretAsync(DefineClassStatement.BlockStatements);
+                        // Step back an instance
+                        CurrentInstance = PreviousInstance;
                         // Step back a class scope
                         SetCurrentClass(PreviousClass);
                         // Store class constant
