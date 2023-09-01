@@ -20,6 +20,7 @@
             DoubleColon,
             Comma,
             SplatOperator,
+            Colon,
         }
         public class Phase1Token {
             public readonly DebugLocation Location;
@@ -312,6 +313,15 @@
                                 });
                                 Tokens.Add(new(Location, Phase1TokenType.String, String, FollowsWhitespace, false));
                             }
+                            // Symbol string
+                            if (Tokens.Count >= 2 && Tokens[^2].Type == Phase1TokenType.Colon) {
+                                Phase1Token SymbolToken = Tokens[^2];
+                                Phase1Token StringToken = Tokens[^1];
+                                if (!StringToken.FollowsWhitespace) {
+                                    Tokens.RemoveRange(Tokens.Count - 2, 2);
+                                    Tokens.Add(new Phase1Token(Location, Phase1TokenType.Identifier, ":" + StringToken.Value, SymbolToken.FollowsWhitespace, StringToken.ProcessFormatting));
+                                }
+                            }
                             break;
                         case '\n':
                         case '\r':
@@ -327,7 +337,7 @@
                                 i++;
                             }
                             else {
-                                throw new NotImplementedException("Symbols not yet implemented");
+                                Tokens.Add(new(Location, Phase1TokenType.Colon, ":", FollowsWhitespace));
                             }
                             break;
                         case ';':
@@ -438,6 +448,11 @@
                             // Double check identifier
                             if (Identifier.Length == 0)
                                 throw new InternalErrorException($"{Location}: Character not handled correctly: '{Chara}'");
+                            // Handle symbol
+                            if (LastTokenWas(Phase1TokenType.Colon) && !FollowsWhitespace) {
+                                Tokens.RemoveAt(Tokens.Count - 1);
+                                Identifier = ":" + Identifier;
+                            }
                             // Add EndOfStatement before end keyword
                             if (Identifier == EndKeyword && !LastTokenWas(Phase1TokenType.EndOfStatement))
                                 Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, null, FollowsWhitespace));

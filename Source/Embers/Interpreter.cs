@@ -11,6 +11,7 @@ namespace Embers
         public readonly Instance RootInstance;
         public readonly Scope RootScope;
         readonly Dictionary<string, Instance> GlobalVariables = new();
+        readonly Dictionary<string, SymbolInstance> Symbols = new();
         Class CurrentClass;
         Scope CurrentScope;
         Block CurrentBlock;
@@ -22,6 +23,7 @@ namespace Embers
         public readonly Class TrueClass;
         public readonly Class FalseClass;
         public readonly Class String;
+        public readonly Class Symbol;
         public readonly Class Integer;
         public readonly Class Float;
 
@@ -232,6 +234,32 @@ namespace Embers
             }
             public void SetValue(string value) {
                 Value = value;
+            }
+        }
+        public class SymbolInstance : Instance {
+            string Value;
+            public override object? Object { get { return Value; } }
+            public override string String { get { return Value; } }
+
+            bool IsStringSymbol;
+            public override string Inspect() {
+                if (IsStringSymbol) {
+                    return ":\"" + Value.Replace("\n", "\\n").Replace("\r", "\\r") + "\"";
+                }
+                else {
+                    return ":" + Value;
+                }
+            }
+            public override string LightInspect() {
+                return Value;
+            }
+            public SymbolInstance(Class fromClass, string value) : base(fromClass) {
+                Value = value;
+                SetValue(value);
+            }
+            public void SetValue(string value) {
+                Value = value;
+                IsStringSymbol = Value.Any("(){}[]<>=+-*/%!?.,;@#&|~^$_".Contains) || Value.Any(char.IsWhiteSpace) || (Value.Length != 0 && char.IsAsciiDigit(Value[0]));
             }
         }
         public class IntegerInstance : Instance {
@@ -506,6 +534,16 @@ namespace Embers
             // Return result
             return Result;
         }
+        SymbolInstance GetSymbol(string Value) {
+            if (Symbols.TryGetValue(Value, out SymbolInstance? FindSymbolInstance)) {
+                return FindSymbolInstance;
+            }
+            else {
+                SymbolInstance SymbolInstance = new(Symbol, Value);
+                Symbols[Value] = SymbolInstance;
+                return SymbolInstance;
+            }
+        }
 
         async Task<Instances> InterpretExpressionAsync(Expression Expression, bool ReturnVariableReference = false) {
             // Method call
@@ -615,66 +653,73 @@ namespace Embers
                     }
                     else {
                         if (!ReturnVariableReference) {
-                            // Local variable or method
-                            if (ObjectTokenExpression.Token.Type == Phase2TokenType.LocalVariableOrMethod) {
-                                // Local variable (priority)
-                                if (CurrentBlock.TryGetLocalVariable(ObjectTokenExpression.Token.Value!, out Instance? Value)) {
-                                    return Value!;
+
+                            switch (ObjectTokenExpression.Token.Type) {
+                                // Local variable or method
+                                case Phase2TokenType.LocalVariableOrMethod: {
+                                    // Local variable (priority)
+                                    if (CurrentBlock.TryGetLocalVariable(ObjectTokenExpression.Token.Value!, out Instance? Value)) {
+                                        return Value!;
+                                    }
+                                    // Method
+                                    else if (CurrentInstance.TryGetInstanceMethod(this, ObjectTokenExpression.Token.Value!, out Method? Method)) {
+                                        return await Method!.Call(this, new ScopeReference(CurrentScope));
+                                    }
+                                    // Undefined
+                                    else {
+                                        throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Undefined local variable or method '{ObjectTokenExpression.Token.Value!}' for {CurrentScope}");
+                                    }
                                 }
-                                // Method
-                                else if (CurrentInstance.TryGetInstanceMethod(this, ObjectTokenExpression.Token.Value!, out Method? Method)) {
-                                    return await Method!.Call(this, new ScopeReference(CurrentScope));
+                                // Global variable
+                                case Phase2TokenType.GlobalVariable: {
+                                    if (GlobalVariables.TryGetValue(ObjectTokenExpression.Token.Value!, out Instance? Value)) {
+                                        return Value;
+                                    }
+                                    else {
+                                        return Nil;
+                                    }
                                 }
-                                // Undefined
-                                else {
-                                    throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Undefined local variable or method '{ObjectTokenExpression.Token.Value!}' for {CurrentScope}");
+                                // Constant
+                                case Phase2TokenType.ConstantOrMethod: {
+                                    // Constant (priority)
+                                    if (CurrentBlock.TryGetConstant(ObjectTokenExpression.Token.Value!, out Instance? ConstantValue)) {
+                                        return ConstantValue!;
+                                    }
+                                    // Method
+                                    else if (CurrentInstance.TryGetInstanceMethod(this, ObjectTokenExpression.Token.Value!, out Method? Method)) {
+                                        return await Method!.Call(this, new ScopeReference(CurrentScope));
+                                    }
+                                    // Uninitialized
+                                    else {
+                                        throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Uninitialized constant '{ObjectTokenExpression.Token.Value!}' for {CurrentBlock}");
+                                    }
                                 }
-                            }
-                            // Global variable
-                            else if (ObjectTokenExpression.Token.Type == Phase2TokenType.GlobalVariable) {
-                                if (GlobalVariables.TryGetValue(ObjectTokenExpression.Token.Value!, out Instance? Value)) {
-                                    return Value;
+                                // Instance variable
+                                case Phase2TokenType.InstanceVariable: {
+                                    if (CurrentInstance.InstanceVariables.TryGetValue(ObjectTokenExpression.Token.Value!, out Instance? Value)) {
+                                        return Value;
+                                    }
+                                    else {
+                                        return Nil;
+                                    }
                                 }
-                                else {
-                                    return Nil;
+                                // Class variable
+                                case Phase2TokenType.ClassVariable: {
+                                    if (CurrentClass.ClassVariables.TryGetValue(ObjectTokenExpression.Token.Value!, out Instance? Value)) {
+                                        return Value;
+                                    }
+                                    else {
+                                        throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Uninitialized class variable '{ObjectTokenExpression.Token.Value!}' for {CurrentClass}");
+                                    }
                                 }
-                            }
-                            // Constant
-                            else if (ObjectTokenExpression.Token.Type == Phase2TokenType.ConstantOrMethod) {
-                                // Constant (priority)
-                                if (CurrentBlock.TryGetConstant(ObjectTokenExpression.Token.Value!, out Instance? ConstantValue)) {
-                                    return ConstantValue!;
+                                // Symbol
+                                case Phase2TokenType.Symbol: {
+                                    return GetSymbol(ObjectTokenExpression.Token.Value!);
                                 }
-                                // Method
-                                else if (CurrentInstance.TryGetInstanceMethod(this, ObjectTokenExpression.Token.Value!, out Method? Method)) {
-                                    return await Method!.Call(this, new ScopeReference(CurrentScope));
-                                }
-                                // Uninitialized
-                                else {
-                                    throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Uninitialized constant '{ObjectTokenExpression.Token.Value!}' for {CurrentBlock}");
-                                }
-                            }
-                            // Instance variable
-                            else if (ObjectTokenExpression.Token.Type == Phase2TokenType.InstanceVariable) {
-                                if (CurrentInstance.InstanceVariables.TryGetValue(ObjectTokenExpression.Token.Value!, out Instance? Value)) {
-                                    return Value;
-                                }
-                                else {
-                                    return Nil;
-                                }
-                            }
-                            // Class variable
-                            else if (ObjectTokenExpression.Token.Type == Phase2TokenType.ClassVariable) {
-                                if (CurrentClass.ClassVariables.TryGetValue(ObjectTokenExpression.Token.Value!, out Instance? Value)) {
-                                    return Value;
-                                }
-                                else {
-                                    throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Uninitialized class variable '{ObjectTokenExpression.Token.Value!}' for {CurrentClass}");
-                                }
-                            }
-                            // Error
-                            else {
-                                throw new InternalErrorException($"{ObjectTokenExpression.Token.Location}: Unknown variable type {ObjectTokenExpression.Token.Type}");
+                                // Error
+                                default:
+                                    throw new InternalErrorException($"{ObjectTokenExpression.Token.Location}: Unknown variable type {ObjectTokenExpression.Token.Type}");
+
                             }
                         }
                         // Variable
@@ -922,7 +967,7 @@ namespace Embers
         public Interpreter(bool allowUnsafeApi = true) {
             AllowUnsafeApi = allowUnsafeApi;
 
-            RootInstance = new Instance(new Class("RootClass", null)); Class RootClass = RootInstance.Class;
+            RootInstance = new Instance(new Class("main", null)); Class RootClass = RootInstance.Class;
             RootScope = new Scope(RootClass);
             CurrentClass = RootClass;
             CurrentScope = RootScope;
@@ -933,6 +978,7 @@ namespace Embers
             TrueClass = CreateClass("TrueClass"); True = new TrueInstance(TrueClass);
             FalseClass = CreateClass("FalseClass"); False = new FalseInstance(FalseClass);
             String = CreateClass("String");
+            Symbol = CreateClass("Symbol");
             Integer = CreateClass("Integer");
             Float = CreateClass("Float");
 

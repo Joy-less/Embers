@@ -17,7 +17,7 @@ Its minimalistic design should be suitable for use in game engines or modding sc
 Ruby is a very flexible language that is often likened to a set of sharp knives. One such feature is the ability to patch core classes. Please keep this in mind when using or contributing to this repository.
 
 ## Usage
-### Basic example:
+### Basic example
 ```csharp
 using static Embers.Interpreter;
 
@@ -26,16 +26,16 @@ using static Embers.Interpreter;
 Interpreter MyInterpreter = new();
 MyInterpreter.Evaluate("puts 'hi!'");
 ```
-### Returning values:
+### Returning values
 ```csharp
 Instances Result = MyInterpreter.Evaluate("3 + 2");
 Console.WriteLine(Result[0].Integer); // 5
 ```
-### Asynchronously:
+### Asynchronously
 ```csharp
 await MyInterpreter.EvaluateAsync("sleep(2)");
 ```
-### Custom methods:
+### Custom methods
 ```csharp
 MyInterpreter.Integer.InstanceMethods.Add("double_number", new Method(async Input => {
     return new IntegerInstance(Input.Interpreter.Integer, Input.Instance.Integer * 2);
@@ -58,7 +58,7 @@ MyInterpreter.Integer.InstanceMethods.Add("catify", new Method(async Input => {
 }, 1));
 MyInterpreter.Evaluate("puts 3.catify 2"); // 3 ~nya ~nya
 ```
-### Custom classes:
+### Custom classes
 ```csharp
 Class Vector2 = MyInterpreter.CreateClass("Vector2");
 Vector2.InstanceMethods["initialize"] = new Method(async Input => {

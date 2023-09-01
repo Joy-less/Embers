@@ -24,6 +24,7 @@ namespace Embers
             Interpreter.String.InstanceMethods["to_str"] = new Method(String.to_str, 0);
             Interpreter.String.InstanceMethods["to_i"] = new Method(String.to_i, 0);
             Interpreter.String.InstanceMethods["to_f"] = new Method(String.to_f, 0);
+            Interpreter.String.InstanceMethods["to_sym"] = new Method(String.to_sym, 0);
             Interpreter.String.InstanceMethods["chomp"] = new Method(String.chomp, 0..1);
             Interpreter.String.InstanceMethods["strip"] = new Method(String.strip, 0);
 
@@ -176,6 +177,9 @@ namespace Embers
                 if (FloatString.Length == 0) return new FloatInstance(Input.Interpreter.Float, 0);
                 if (!SeenDot) FloatString.Append(".0");
                 return new FloatInstance(Input.Interpreter.Float, double.Parse(FloatString.ToString()));
+            }
+            public static async Task<Instances> to_sym(MethodInput Input) {
+                return new SymbolInstance(Input.Interpreter.Symbol, Input.Instance.LightInspect());
             }
             public static async Task<Instances> chomp(MethodInput Input) {
                 string String = Input.Instance.String;

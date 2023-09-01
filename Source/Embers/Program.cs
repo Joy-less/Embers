@@ -8,15 +8,11 @@ namespace Embers
         static void Main() {
             {
                 string Code = @"
-def a b, c
-    return b.to_f + c.to_f
-end
-puts a '75', '23' if true
-
-puts(a '23', a('65', '65').to_s) if true
-
-File.write('something.txt', 'Hi!')
-puts File.read 'something.txt'
+p :'hi '
+p :hi
+p 'Hi'.to_sym
+p :hey.to_s
+p '5'.to_sym
 ";
                 Benchmark(() => new Interpreter().Evaluate(Code));
 

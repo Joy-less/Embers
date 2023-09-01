@@ -20,6 +20,7 @@ namespace Embers
             ConstantOrMethod,
             InstanceVariable,
             ClassVariable,
+            Symbol,
 
             Integer,
             Float,
@@ -94,11 +95,13 @@ namespace Embers
             public readonly long ValueAsLong;
             public readonly double ValueAsDouble;
 
-            public Phase2Token(DebugLocation location, Phase2TokenType type, string? value, bool followsWhitespace = false, bool processFormatting = false) : base(location) {
+            public Phase2Token(DebugLocation location, Phase2TokenType type, string? value, Phase1Token? fromPhase1Token = null) : base(location) {
                 Type = type;
                 Value = value;
-                FollowsWhitespace = followsWhitespace;
-                ProcessFormatting = processFormatting;
+                if (fromPhase1Token != null) {
+                    FollowsWhitespace = fromPhase1Token.FollowsWhitespace;
+                    ProcessFormatting = fromPhase1Token.ProcessFormatting;
+                }
 
                 IsObjectToken = IsObjectToken(this);
                 if (Type == Phase2TokenType.Integer) ValueAsLong = long.Parse(Value!);
@@ -420,14 +423,19 @@ namespace Embers
 
             foreach (KeyValuePair<string, Phase2TokenType> Keyword in Keywords) {
                 if (Token.Value == Keyword.Key) {
-                    return new Phase2Token(Token.Location, Keyword.Value, null, Token.FollowsWhitespace, Token.ProcessFormatting);
+                    return new Phase2Token(Token.Location, Keyword.Value, null, Token);
                 }
             }
 
             Phase2TokenType IdentifierType;
             string Identifier;
 
-            if (Token.NonNullValue[0] == '$') {
+            if (Token.NonNullValue[0] == ':') {
+                IdentifierType = Phase2TokenType.Symbol;
+                if (Token.NonNullValue.Length == 0) throw new SyntaxErrorException($"{Token.Location}: Identifier ':' not valid for symbol");
+                Identifier = Token.NonNullValue[1..];
+            }
+            else if (Token.NonNullValue[0] == '$') {
                 IdentifierType = Phase2TokenType.GlobalVariable;
                 if (Token.NonNullValue.Length == 0) throw new SyntaxErrorException($"{Token.Location}: Identifier '$' not valid for global variable");
                 Identifier = Token.NonNullValue[1..];
@@ -455,7 +463,7 @@ namespace Embers
                 throw new Exception($"{Token.Location}: Identifier cannot contain $ or @");
             }
 
-            return new Phase2Token(Token.Location, IdentifierType, Identifier, Token.FollowsWhitespace, Token.ProcessFormatting);
+            return new Phase2Token(Token.Location, IdentifierType, Identifier, Token);
         }
         static List<List<Phase2Object>> SplitObjects(List<Phase2Object> Objects, Phase2TokenType SplitToken, out List<string?> SplitCharas, bool CanStartWithHaveMultipleInARow) {
             List<List<Phase2Object>> SplitObjects = new();
@@ -499,7 +507,8 @@ namespace Embers
                 || Type == Phase2TokenType.GlobalVariable
                 || Type == Phase2TokenType.ConstantOrMethod
                 || Type == Phase2TokenType.InstanceVariable
-                || Type == Phase2TokenType.ClassVariable;
+                || Type == Phase2TokenType.ClassVariable
+                || Type == Phase2TokenType.Symbol;
         }
         public static bool IsVariableToken(Phase2Token? Token) {
             return Token != null && IsVariableToken(Token.Type);
@@ -516,25 +525,25 @@ namespace Embers
                 }
                 else if (Token.Type == Phase1TokenType.Integer) {
                     if (i + 2 < Tokens.Count && Tokens[i + 1].Type == Phase1TokenType.Dot && Tokens[i + 2].Type == Phase1TokenType.Integer) {
-                        NewTokens.Add(new Phase2Token(Token.Location, Phase2TokenType.Float, Token.Value + "." + Tokens[i + 2].Value, Token.FollowsWhitespace, Token.ProcessFormatting));
+                        NewTokens.Add(new Phase2Token(Token.Location, Phase2TokenType.Float, Token.Value + "." + Tokens[i + 2].Value, Token));
                         i += 2;
                     }
                     else {
-                        NewTokens.Add(new Phase2Token(Token.Location, Phase2TokenType.Integer, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting));
+                        NewTokens.Add(new Phase2Token(Token.Location, Phase2TokenType.Integer, Token.Value, Token));
                     }
                 }
                 else {
                     NewTokens.Add(Token.Type switch {
-                        Phase1TokenType.String => new Phase2Token(Token.Location, Phase2TokenType.String, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
-                        Phase1TokenType.AssignmentOperator => new Phase2Token(Token.Location, Phase2TokenType.AssignmentOperator, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
-                        Phase1TokenType.ArithmeticOperator => new Phase2Token(Token.Location, Phase2TokenType.ArithmeticOperator, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
-                        Phase1TokenType.Dot => new Phase2Token(Token.Location, Phase2TokenType.Dot, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
-                        Phase1TokenType.DoubleColon => new Phase2Token(Token.Location, Phase2TokenType.DoubleColon, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
-                        Phase1TokenType.Comma => new Phase2Token(Token.Location, Phase2TokenType.Comma, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
-                        Phase1TokenType.SplatOperator => new Phase2Token(Token.Location, Phase2TokenType.SplatOperator, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
-                        Phase1TokenType.OpenBracket => new Phase2Token(Token.Location, Phase2TokenType.OpenBracket, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
-                        Phase1TokenType.CloseBracket => new Phase2Token(Token.Location, Phase2TokenType.CloseBracket, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
-                        Phase1TokenType.EndOfStatement => new Phase2Token(Token.Location, Phase2TokenType.EndOfStatement, Token.Value, Token.FollowsWhitespace, Token.ProcessFormatting),
+                        Phase1TokenType.String => new Phase2Token(Token.Location, Phase2TokenType.String, Token.Value, Token),
+                        Phase1TokenType.AssignmentOperator => new Phase2Token(Token.Location, Phase2TokenType.AssignmentOperator, Token.Value, Token),
+                        Phase1TokenType.ArithmeticOperator => new Phase2Token(Token.Location, Phase2TokenType.ArithmeticOperator, Token.Value, Token),
+                        Phase1TokenType.Dot => new Phase2Token(Token.Location, Phase2TokenType.Dot, Token.Value, Token),
+                        Phase1TokenType.DoubleColon => new Phase2Token(Token.Location, Phase2TokenType.DoubleColon, Token.Value, Token),
+                        Phase1TokenType.Comma => new Phase2Token(Token.Location, Phase2TokenType.Comma, Token.Value, Token),
+                        Phase1TokenType.SplatOperator => new Phase2Token(Token.Location, Phase2TokenType.SplatOperator, Token.Value, Token),
+                        Phase1TokenType.OpenBracket => new Phase2Token(Token.Location, Phase2TokenType.OpenBracket, Token.Value, Token),
+                        Phase1TokenType.CloseBracket => new Phase2Token(Token.Location, Phase2TokenType.CloseBracket, Token.Value, Token),
+                        Phase1TokenType.EndOfStatement => new Phase2Token(Token.Location, Phase2TokenType.EndOfStatement, Token.Value, Token),
                         _ => throw new InternalErrorException($"{Token.Location}: Conversion of {Token.Type} from phase 1 to phase 2 not supported")
                     });
                 }
