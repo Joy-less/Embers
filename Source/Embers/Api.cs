@@ -21,6 +21,7 @@ namespace Embers
             // String
             Interpreter.String.InstanceMethods["+"] = new Method(String._Add, 1);
             Interpreter.String.InstanceMethods["*"] = new Method(String._Multiply, 1);
+            Interpreter.String.InstanceMethods["=="] = new Method(String._Equals, 1);
             Interpreter.String.InstanceMethods["to_str"] = new Method(String.to_str, 0);
             Interpreter.String.InstanceMethods["to_i"] = new Method(String.to_i, 0);
             Interpreter.String.InstanceMethods["to_f"] = new Method(String.to_f, 0);
@@ -35,6 +36,7 @@ namespace Embers
             Interpreter.Integer.InstanceMethods["/"] = new Method(Integer._Divide, 1);
             Interpreter.Integer.InstanceMethods["%"] = new Method(Integer._Modulo, 1);
             Interpreter.Integer.InstanceMethods["**"] = new Method(Integer._Exponentiate, 1);
+            Interpreter.Integer.InstanceMethods["=="] = new Method(Integer._Equals, 1);
             Interpreter.Integer.InstanceMethods["to_i"] = new Method(Integer.to_i, 0);
             Interpreter.Integer.InstanceMethods["to_f"] = new Method(Integer.to_f, 0);
             Interpreter.Integer.InstanceMethods["times"] = new Method(Integer.times, 0);
@@ -46,21 +48,24 @@ namespace Embers
             Interpreter.Float.InstanceMethods["/"] = new Method(Float._Divide, 1);
             Interpreter.Float.InstanceMethods["%"] = new Method(Float._Modulo, 1);
             Interpreter.Float.InstanceMethods["**"] = new Method(Float._Exponentiate, 1);
+            Interpreter.Float.InstanceMethods["=="] = new Method(Float._Equals, 1);
             Interpreter.Float.InstanceMethods["to_i"] = new Method(Float.to_i, 0);
             Interpreter.Float.InstanceMethods["to_f"] = new Method(Float.to_f, 0);
 
             // Unsafe Api
             if (Interpreter.AllowUnsafeApi) {
                 // File
-                Class FileClass = Interpreter.CreateClass("File");
-                FileClass.Methods.Add("read", new Method(File.read, 1));
-                FileClass.Methods.Add("write", new Method(File.write, 2));
+                Module FileModule = Interpreter.CreateModule("File");
+                FileModule.Methods.Add("read", new Method(File.read, 1));
+                FileModule.Methods.Add("write", new Method(File.write, 2));
             }
         }
 
         public static readonly IReadOnlyDictionary<string, Method> DefaultClassAndInstanceMethods = new Dictionary<string, Method>() {
+            {"==", new Method(ClassInstance._Equals, 1)},
+            {"!=", new Method(ClassInstance._NotEquals, 1)},
             {"inspect", new Method(ClassInstance.inspect, 0)},
-            {"to_s", new Method(ClassInstance.to_s, 0)}
+            {"to_s", new Method(ClassInstance.to_s, 0)},
         };
 
         // API
@@ -115,6 +120,21 @@ namespace Embers
             return Input.Interpreter.Nil;
         }
         static class ClassInstance {
+            public static async Task<Instances> _Equals(MethodInput Input) {
+                Instance Left = Input.Instance;
+                Instance Right = Input.Arguments[0];
+                if (Left is ModuleReference LeftModule && Right is ModuleReference RightModule) {
+                    return LeftModule.Module == RightModule.Module ? Input.Interpreter.True : Input.Interpreter.False;
+                }
+                else {
+                    return Left == Right ? Input.Interpreter.True : Input.Interpreter.False;
+                }
+            }
+            public static async Task<Instances> _NotEquals(MethodInput Input) {
+                Instance Left = Input.Instance;
+                Instance Right = Input.Arguments[0];
+                return (await Left.TryCallInstanceMethod(Input.Interpreter, "==", Right)).SingleInstance().IsTruthy ? Input.Interpreter.False : Input.Interpreter.True;
+            }
             public static async Task<Instances> inspect(MethodInput Input) {
                 return new StringInstance(Input.Interpreter.String, Input.Instance.Inspect());
             }
@@ -135,6 +155,16 @@ namespace Embers
                     JoinedString.Append(Input.Instance.String);
                 }
                 return new StringInstance(Input.Interpreter.String, JoinedString.ToString());
+            }
+            public static async Task<Instances> _Equals(MethodInput Input) {
+                Instance Left = Input.Instance;
+                Instance Right = Input.Arguments[0];
+                if (Right is StringInstance RightString && Left.String == RightString.String) {
+                    return Input.Interpreter.True;
+                }
+                else {
+                    return Input.Interpreter.False;
+                }
             }
             public static async Task<Instances> to_str(MethodInput Input) {
                 return await ClassInstance.to_s(Input);
@@ -209,7 +239,7 @@ namespace Embers
             }
         }
         static class Integer {
-            static Instance _GetResult(Interpreter Interpreter, double Result, bool RightIsInteger) {
+            private static Instance _GetResult(Interpreter Interpreter, double Result, bool RightIsInteger) {
                 if (RightIsInteger) {
                     return new IntegerInstance(Interpreter.Integer, (long)Result);
                 }
@@ -240,6 +270,19 @@ namespace Embers
             public static async Task<Instances> _Exponentiate(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
                 return _GetResult(Input.Interpreter, Math.Pow(Input.Instance.Integer, Right.Float), Right is IntegerInstance);
+            }
+            public static async Task<Instances> _Equals(MethodInput Input) {
+                Instance Left = Input.Instance;
+                Instance Right = Input.Arguments[0];
+                if (Right is IntegerInstance RightInteger && Left.Integer == RightInteger.Integer) {
+                    return Input.Interpreter.True;
+                }
+                else if (Right is FloatInstance RightFloat && Left.Float == RightFloat.Float) {
+                    return Input.Interpreter.True;
+                }
+                else {
+                    return Input.Interpreter.False;
+                }
             }
             public static async Task<Instances> to_i(MethodInput Input) {
                 return Input.Instance;
@@ -281,6 +324,19 @@ namespace Embers
             public static async Task<Instances> _Exponentiate(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
                 return new FloatInstance(Input.Interpreter.Float, Math.Pow(Input.Instance.Float, Right.Float));
+            }
+            public static async Task<Instances> _Equals(MethodInput Input) {
+                Instance Left = Input.Instance;
+                Instance Right = Input.Arguments[0];
+                if (Right is IntegerInstance RightInteger && Left.Float == RightInteger.Float) {
+                    return Input.Interpreter.True;
+                }
+                else if (Right is FloatInstance RightFloat && Left.Float == RightFloat.Float) {
+                    return Input.Interpreter.True;
+                }
+                else {
+                    return Input.Interpreter.False;
+                }
             }
             public static async Task<Instances> to_i(MethodInput Input) {
                 return new IntegerInstance(Input.Interpreter.Float, Input.Instance.Integer);

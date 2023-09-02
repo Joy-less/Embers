@@ -8,16 +8,17 @@ namespace Embers
         static void Main() {
             {
                 string Code = @"
-p :'hi '
-p :hi
-p 'Hi'.to_sym
-p :hey.to_s
-p '5'.to_sym
+class A
 
-class Hi
-    undef initialize
 end
-Hi.new
+
+if 2.5 == 3.2
+    puts 'a'
+elsif 3.0 == 3
+    puts 'b'
+else
+    puts 'c'
+end
 ";
                 Benchmark(() => new Interpreter().Evaluate(Code));
 

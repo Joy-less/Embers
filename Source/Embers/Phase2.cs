@@ -27,10 +27,10 @@ namespace Embers
             String,
 
             AssignmentOperator,
-            ArithmeticOperator,
+            Operator,
 
             // Keywords
-            Alias, And, Begin, Break, Case, Class, Def, Defined, Do, Else, Elsif, End, Ensure, False, For, If, In, Module, Next, Nil, Not, Or, Redo, Rescue, Retry, Return, Self, Super, Then, True, Undef, Unless, Until, When, While, Yield,
+            Alias, Begin, Break, Case, Class, Def, Defined, Do, Else, Elsif, End, Ensure, False, For, If, In, Module, Next, Nil, Redo, Rescue, Retry, Return, Self, Super, Then, True, Undef, Unless, Until, When, While, Yield,
 
             // Temporary
             Dot,
@@ -43,7 +43,6 @@ namespace Embers
         }
         public readonly static Dictionary<string, Phase2TokenType> Keywords = new() {
             {"alias", Phase2TokenType.Alias},
-            {"and", Phase2TokenType.And},
             {"begin", Phase2TokenType.Begin},
             {"break", Phase2TokenType.Break},
             {"case", Phase2TokenType.Case},
@@ -62,8 +61,6 @@ namespace Embers
             {"module", Phase2TokenType.Module},
             {"next", Phase2TokenType.Next},
             {"nil", Phase2TokenType.Nil},
-            {"not", Phase2TokenType.Not},
-            {"or", Phase2TokenType.Or},
             {"redo", Phase2TokenType.Redo},
             {"rescue", Phase2TokenType.Rescue},
             {"retry", Phase2TokenType.Retry},
@@ -79,10 +76,21 @@ namespace Embers
             {"while", Phase2TokenType.While},
             {"yield", Phase2TokenType.Yield}
         };
-        public readonly static string[][] ArithmeticOperatorPrecedence = new[] {
+        public readonly static string[][] OperatorPrecedence = new[] {
             new[] {"**"},
             new[] {"*", "/", "%"},
-            new[] {"+", "-"}
+            new[] {"+", "-"},
+
+            new[] {"&"},
+            new[] {"|", "^"},
+            new[] {">", ">=", "<", "<="},
+            new[] {"<=>", "==", "===", "!=", "=~", "!~"},
+            new[] {"&&"},
+            new[] {"||"},
+            new[] {"or", "and"},
+        };
+        public readonly static string[] NonMethodOperators = new[] {
+            "or", "and", "&&", "||"
         };
 
         public class Phase2Token : Phase2Object {
@@ -246,6 +254,27 @@ namespace Embers
                 return $"new SelfExpression({Location.Serialise()})";
             }
         }
+        public class LogicalExpression : Expression {
+            public readonly LogicalExpressionType LogicType;
+            public readonly Expression Left;
+            public readonly Expression Right;
+            public LogicalExpression(DebugLocation location, LogicalExpressionType logicType, Expression left, Expression right) : base(location) {
+                LogicType = logicType;
+                Left = left;
+                Right = right;
+            }
+            public override string Inspect() {
+                return $"({Left.Inspect()} {LogicType} {Right.Inspect()})";
+            }
+            public override string Serialise() {
+                return $"new LogicalExpression({Location.Serialise()}, {Left.Serialise()}, {Right.Serialise()})";
+            }
+            public enum LogicalExpressionType {
+                And,
+                Or,
+                Xor
+            }
+        }
         public abstract class ConditionalExpression : Expression {
             public readonly Expression? Condition;
             public readonly List<Statement> Statements;
@@ -317,7 +346,7 @@ namespace Embers
                     if (Operator.Length >= 2) {
                         string ArithmeticOperator = Operator[..^1];
                         Right = new MethodCallExpression(
-                            new PathExpression(Left, new Phase2Token(Left.Location, Phase2TokenType.ArithmeticOperator, ArithmeticOperator)),
+                            new PathExpression(Left, new Phase2Token(Left.Location, Phase2TokenType.Operator, ArithmeticOperator)),
                             new List<Expression>() { Right }
                         );
                     }
@@ -539,7 +568,7 @@ namespace Embers
                     NewTokens.Add(Token.Type switch {
                         Phase1TokenType.String => new Phase2Token(Token.Location, Phase2TokenType.String, Token.Value, Token),
                         Phase1TokenType.AssignmentOperator => new Phase2Token(Token.Location, Phase2TokenType.AssignmentOperator, Token.Value, Token),
-                        Phase1TokenType.ArithmeticOperator => new Phase2Token(Token.Location, Phase2TokenType.ArithmeticOperator, Token.Value, Token),
+                        Phase1TokenType.Operator => new Phase2Token(Token.Location, Phase2TokenType.Operator, Token.Value, Token),
                         Phase1TokenType.Dot => new Phase2Token(Token.Location, Phase2TokenType.Dot, Token.Value, Token),
                         Phase1TokenType.DoubleColon => new Phase2Token(Token.Location, Phase2TokenType.DoubleColon, Token.Value, Token),
                         Phase1TokenType.Comma => new Phase2Token(Token.Location, Phase2TokenType.Comma, Token.Value, Token),
@@ -743,25 +772,37 @@ namespace Embers
                 }
             }
 
-            // Arithmetic operators
-            foreach (string[] Operators in ArithmeticOperatorPrecedence) {
+            // Operators
+            foreach (string[] Operators in OperatorPrecedence) {
                 for (int i = 0; i < ParsedObjects.Count; i++) {
                     Phase2Object UnknownObject = ParsedObjects[i];
                     Phase2Object? LastUnknownObject = i - 1 >= 0 ? ParsedObjects[i - 1] : null;
                     Phase2Object? NextUnknownObject = i + 1 < ParsedObjects.Count ? ParsedObjects[i + 1] : null;
 
                     if (UnknownObject is Phase2Token Token) {
-                        if (Token.Type == Phase2TokenType.ArithmeticOperator && Operators.Contains(Token.Value!)) {
+                        if (Token.Type == Phase2TokenType.Operator && Operators.Contains(Token.Value!)) {
                             if (LastUnknownObject != null && NextUnknownObject != null && LastUnknownObject is Expression LastExpression && NextUnknownObject is Expression NextExpression) {
                                 i--;
                                 ParsedObjects.RemoveRange(i, 3);
-                                ParsedObjects.Insert(i, new MethodCallExpression(
-                                    new PathExpression(LastExpression, new Phase2Token(Token.Location, Phase2TokenType.LocalVariableOrMethod, Token.Value!)),
-                                    new List<Expression>() {NextExpression})
-                                );
+
+                                if (NonMethodOperators.Contains(Token.Value!)) {
+                                    LogicalExpression.LogicalExpressionType LogicType = Token.Value switch {
+                                        "and" or "&&" => LogicalExpression.LogicalExpressionType.And,
+                                        "or" or "||" => LogicalExpression.LogicalExpressionType.Or,
+                                        "^" => LogicalExpression.LogicalExpressionType.Xor,
+                                        _ => throw new InternalErrorException($"Unhandled logic expression type: '{Token.Value}'")
+                                    };
+                                    ParsedObjects.Insert(i, new LogicalExpression(LastExpression.Location, LogicType, LastExpression, NextExpression));
+                                }
+                                else {
+                                    ParsedObjects.Insert(i, new MethodCallExpression(
+                                        new PathExpression(LastExpression, new Phase2Token(Token.Location, Phase2TokenType.LocalVariableOrMethod, Token.Value!)),
+                                        new List<Expression>() { NextExpression })
+                                    );
+                                }
                             }
                             else {
-                                throw new SyntaxErrorException($"{Token.Location}: Arithmetic operator must be between two expressions (got {LastUnknownObject?.Inspect()} and {NextUnknownObject?.Inspect()})");
+                                throw new SyntaxErrorException($"{Token.Location}: Operator '{Token.Value!}' must be between two expressions (got {LastUnknownObject?.Inspect()} and {NextUnknownObject?.Inspect()})");
                             }
                         }
                     }
@@ -1377,7 +1418,7 @@ namespace Embers
             List<List<Phase2Object>> StatementsTokens = SplitObjects(Phase2Objects, Phase2TokenType.EndOfStatement, out _, true);
 
             Stack<BuildingBlock> BlockStackInfo = new();
-            BlockStackInfo.Push(new BuildingBlock(Phase2Objects.Count != 0 ? Phase2Objects[0].Location : new DebugLocation()));
+            BlockStackInfo.Push(new BuildingBlock(Phase2Objects.Count != 0 ? Phase2Objects[0].Location : DebugLocation.Unknown));
 
             // Evaluate statements
             foreach (List<Phase2Object> StatementTokens in StatementsTokens) {
