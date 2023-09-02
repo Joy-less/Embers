@@ -26,6 +26,7 @@ namespace Embers
         public readonly Class Symbol;
         public readonly Class Integer;
         public readonly Class Float;
+        public readonly Class Proc;
 
         public readonly Instance Nil;
         public readonly Instance True;
@@ -108,10 +109,11 @@ namespace Embers
             public virtual Dictionary<string, Method> InstanceMethods { get; } = new();
             public bool IsTruthy => !(Object == null || false.Equals(Object));
             public virtual object? Object { get { return null; } }
-            public virtual bool Boolean { get { throw new ApiException("Instance is not a boolean"); } }
-            public virtual string String { get { throw new ApiException("Instance is not a string"); } }
-            public virtual long Integer { get { throw new ApiException("Instance is not an integer"); } }
-            public virtual double Float { get { throw new ApiException("Instance is not a float"); } }
+            public virtual bool Boolean { get { throw new RuntimeException("Instance is not a boolean"); } }
+            public virtual string String { get { throw new RuntimeException("Instance is not a string"); } }
+            public virtual long Integer { get { throw new RuntimeException("Instance is not an integer"); } }
+            public virtual double Float { get { throw new RuntimeException("Instance is not a float"); } }
+            public virtual Method Proc { get { throw new RuntimeException("Instance is not a proc"); } }
             public virtual Module ModuleRef { get { throw new ApiException("Instance is not a class/module reference"); } }
             public virtual Method MethodRef { get { throw new ApiException("Instance is not a method reference"); } }
             public virtual string Inspect() {
@@ -280,6 +282,20 @@ namespace Embers
                 Value = value;
             }
         }
+        public class ProcInstance : Instance {
+            Method Value;
+            public override object? Object { get { return Value; } }
+            public override Method Proc { get { return Value; } }
+            public override string Inspect() {
+                return "ProcInstance";
+            }
+            public ProcInstance(Class fromClass, Method value) : base(fromClass) {
+                Value = value;
+            }
+            public void SetValue(Method value) {
+                Value = value;
+            }
+        }
         public abstract class PseudoInstance : Instance {
             public override Dictionary<string, Instance> InstanceVariables { get { throw new ApiException($"{GetType().Name} instance does not have instance variables"); } }
             public override Dictionary<string, Method> InstanceMethods { get { throw new ApiException($"{GetType().Name} instance does not have instance methods"); } }
@@ -289,6 +305,7 @@ namespace Embers
             public Block? Block;
             public Instance? Instance;
             public Phase2Token Token;
+            public bool IsLocalReference => Block == null && Instance == null;
             public override string Inspect() {
                 return $"{(Block != null ? Block.GetType().Name : Instance!.Inspect())} var ref in {Token.Inspect()}";
             }
@@ -298,6 +315,9 @@ namespace Embers
             }
             public VariableReference(Instance instance, Phase2Token token) : base(null) {
                 Instance = instance;
+                Token = token;
+            }
+            public VariableReference(Phase2Token token) : base(null) {
                 Token = token;
             }
         }
@@ -609,13 +629,26 @@ namespace Embers
                     }
                     // Instance method
                     else {
-                        // Call instance method
-                        Instance MethodInstance = MethodReference.Instance!;
-                        return await CreateTemporaryInstanceScope(MethodInstance, async () =>
-                            await MethodReference.Instance!.InstanceMethods[MethodReference.Token.Value!].Call(
-                                this, MethodReference.Instance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
-                            )
-                        );
+                        // Local
+                        if (MethodReference.IsLocalReference) {
+                            // Call local instance method
+                            TryGetLocalInstanceMethod(MethodReference.Token.Value!, out Method? LocalInstanceMethod);
+                            return await CreateTemporaryInstanceScope(CurrentInstance, async () =>
+                                await LocalInstanceMethod!.Call(
+                                    this, CurrentInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
+                                )
+                            );
+                        }
+                        // Path
+                        else {
+                            Instance MethodInstance = MethodReference.Instance!;
+                            // Call instance method
+                            return await CreateTemporaryInstanceScope(MethodInstance, async () =>
+                                await MethodInstance.InstanceMethods[MethodReference.Token.Value!].Call(
+                                    this, MethodInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
+                                )
+                            );
+                        }
                     }
                 }
                 else {
@@ -673,7 +706,7 @@ namespace Embers
                             }
                             // Error
                             else {
-                                throw new RuntimeException($"{PathExpression.Token.Location}: Undefined method '{PathExpression.Token.Value!}' for {ParentInstance.Module.Name} instance");
+                                throw new RuntimeException($"{PathExpression.Token.Location}: Undefined method '{PathExpression.Token.Value!}' for {ParentInstance.Inspect()}");
                             }
                         }
                         // New method
@@ -727,7 +760,7 @@ namespace Embers
                                         }
                                         // Return local variable reference
                                         else {
-                                            return new VariableReference(CurrentInstance, ObjectTokenExpression.Token);
+                                            return new VariableReference(ObjectTokenExpression.Token);
                                         }
                                     }
                                     // Method
@@ -738,7 +771,7 @@ namespace Embers
                                         }
                                         // Return method reference
                                         else {
-                                            return new VariableReference(CurrentInstance, ObjectTokenExpression.Token);
+                                            return new VariableReference(ObjectTokenExpression.Token);
                                         }
                                     }
                                     // Undefined
@@ -755,7 +788,7 @@ namespace Embers
                                         }
                                         // Return global variable reference
                                         else {
-                                            return new VariableReference(CurrentInstance, ObjectTokenExpression.Token);
+                                            return new VariableReference(ObjectTokenExpression.Token);
                                         }
                                     }
                                     else {
@@ -772,7 +805,7 @@ namespace Embers
                                         }
                                         // Return constant reference
                                         else {
-                                            return new VariableReference(CurrentInstance, ObjectTokenExpression.Token);
+                                            return new VariableReference(ObjectTokenExpression.Token);
                                         }
                                     }
                                     // Method
@@ -783,7 +816,7 @@ namespace Embers
                                         }
                                         // Return method reference
                                         else {
-                                            return new VariableReference(CurrentInstance, ObjectTokenExpression.Token);
+                                            return new VariableReference(ObjectTokenExpression.Token);
                                         }
                                     }
                                     // Uninitialized
@@ -800,7 +833,7 @@ namespace Embers
                                         }
                                         // Return instance variable reference
                                         else {
-                                            return new VariableReference(CurrentInstance, ObjectTokenExpression.Token);
+                                            return new VariableReference(ObjectTokenExpression.Token);
                                         }
                                     }
                                     else {
@@ -816,7 +849,7 @@ namespace Embers
                                         }
                                         // Return class variable reference
                                         else {
-                                            return new VariableReference(CurrentInstance, ObjectTokenExpression.Token);
+                                            return new VariableReference(ObjectTokenExpression.Token);
                                         }
                                     }
                                     else {
@@ -838,7 +871,7 @@ namespace Embers
                         }
                         // Variable
                         else {
-                            return new VariableReference(CurrentInstance, ObjectTokenExpression.Token);
+                            return new VariableReference(ObjectTokenExpression.Token);
                         }
                     }
                 }
@@ -1135,6 +1168,7 @@ namespace Embers
             Symbol = CreateClass("Symbol");
             Integer = CreateClass("Integer");
             Float = CreateClass("Float");
+            Proc = CreateClass("Proc");
 
             Api.Setup(this);
         }

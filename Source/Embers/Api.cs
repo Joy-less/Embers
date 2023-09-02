@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using static Embers.Phase2;
 using static Embers.Interpreter;
 
 #pragma warning disable CS1998
@@ -17,6 +18,10 @@ namespace Embers
             Interpreter.RootInstance.InstanceMethods["getc"] = new Method(getc, 0);
             Interpreter.RootInstance.InstanceMethods["warn"] = new Method(warn, null);
             Interpreter.RootInstance.InstanceMethods["sleep"] = new Method(sleep, 0..1);
+            Interpreter.RootInstance.InstanceMethods["raise"] = new Method(@raise, 1);
+            Interpreter.RootInstance.InstanceMethods["throw"] = new Method(@throw, 1);
+            Interpreter.RootInstance.InstanceMethods["catch"] = new Method(@catch, 1);
+            Interpreter.RootInstance.InstanceMethods["lambda"] = new Method(lambda, 0);
 
             // String
             Interpreter.String.InstanceMethods["+"] = new Method(String._Add, 1);
@@ -51,6 +56,9 @@ namespace Embers
             Interpreter.Float.InstanceMethods["=="] = new Method(Float._Equals, 1);
             Interpreter.Float.InstanceMethods["to_i"] = new Method(Float.to_i, 0);
             Interpreter.Float.InstanceMethods["to_f"] = new Method(Float.to_f, 0);
+
+            // Proc
+            Interpreter.Proc.InstanceMethods.Add("call", new Method(Proc.call, null));
 
             // Unsafe Api
             if (Interpreter.AllowUnsafeApi) {
@@ -118,6 +126,43 @@ namespace Embers
                 await Task.Delay(Timeout.Infinite);
             }
             return Input.Interpreter.Nil;
+        }
+        static async Task<Instances> raise(MethodInput Input) {
+            throw new RuntimeException(Input.Arguments[0].String);
+        }
+        static async Task<Instances> @throw(MethodInput Input) {
+            throw ThrowException.New(Input.Arguments[0]);
+        }
+        static async Task<Instances> @catch(MethodInput Input) {
+            Method? OnYield = Input.OnYield ?? throw new RuntimeException("No block given for catch");
+
+            string CatchIdentifier = Input.Arguments[0].String;
+            try {
+                await OnYield.Call(Input.Interpreter, Input.Instance);
+            }
+            catch (ThrowException Ex) {
+                if (Ex.Identifier != CatchIdentifier)
+                    throw Ex;
+            }
+            return Input.Interpreter.Nil;
+        }
+        static async Task<Instances> lambda(MethodInput Input) {
+            // return new Instance(Input.Interpreter.RootModule.Constants["Proc"].Module);
+
+            /*Instance NewProc = await Input.Interpreter.InterpretExpressionAsync(new MethodCallExpression(
+                new ObjectTokenExpression(new Phase2Token(DebugLocation.Unknown, Phase2TokenType.LocalVariableOrMethod, "new")),
+                null
+            ));
+
+            NewProc.InstanceVariables[""] = null;*/
+
+            Method? OnYield = Input.OnYield ?? throw new RuntimeException("No block given for lambda");
+
+            Instance NewProc = new ProcInstance(Input.Interpreter.Proc, new Method(
+                async Input => await OnYield.Call(Input.Interpreter, Input.Instance, Input.Arguments, Input.OnYield),
+                null
+            ));
+            return NewProc;
         }
         static class ClassInstance {
             public static async Task<Instances> _Equals(MethodInput Input) {
@@ -369,6 +414,11 @@ namespace Embers
                 catch (Exception Ex) {
                     throw new RuntimeException($"Error writing file: '{Ex.Message}'");
                 }
+            }
+        }
+        static class Proc {
+            public static async Task<Instances> call(MethodInput Input) {
+                return await Input.Instance.Proc.Call(Input.Interpreter, Input.Instance, Input.Arguments, Input.OnYield);
             }
         }
     }

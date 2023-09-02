@@ -8,17 +8,17 @@ namespace Embers
         static void Main() {
             {
                 string Code = @"
-class A
-
-end
-
-if 2.5 == 3.2
+catch :hi do
     puts 'a'
-elsif 3.0 == 3
+    throw :hi
     puts 'b'
-else
-    puts 'c'
 end
+puts 'c'
+
+my_lambda = lambda do
+    puts 'Hi!'
+end
+my_lambda.call
 ";
                 Benchmark(() => new Interpreter().Evaluate(Code));
 
