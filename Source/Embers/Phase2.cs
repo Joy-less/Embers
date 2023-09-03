@@ -39,6 +39,8 @@ namespace Embers
             SplatOperator,
             OpenBracket,
             CloseBracket,
+            StartCurly,
+            EndCurly,
             EndOfStatement,
         }
         public readonly static Dictionary<string, Phase2TokenType> Keywords = new() {
@@ -213,20 +215,20 @@ namespace Embers
             }
         }
         public class MethodExpression : Expression {
-            public readonly List<Statement> Statements;
+            public readonly List<Expression> Statements;
             public readonly IntRange ArgumentCount;
             public readonly List<MethodArgumentExpression> Arguments;
 
             public readonly Method Method;
 
-            public MethodExpression(DebugLocation location, List<Statement> statements, IntRange? argumentCount, List<MethodArgumentExpression> arguments) : base(location) {
+            public MethodExpression(DebugLocation location, List<Expression> statements, IntRange? argumentCount, List<MethodArgumentExpression> arguments) : base(location) {
                 Statements = statements;
                 ArgumentCount = argumentCount ?? new IntRange();
                 Arguments = arguments;
 
                 Method = ToMethod();
             }
-            public MethodExpression(DebugLocation location, List<Statement> statements, Range argumentCount, List<MethodArgumentExpression> arguments) : base(location) {
+            public MethodExpression(DebugLocation location, List<Expression> statements, Range argumentCount, List<MethodArgumentExpression> arguments) : base(location) {
                 Statements = statements;
                 ArgumentCount = new IntRange(argumentCount);
                 Arguments = arguments;
@@ -277,23 +279,23 @@ namespace Embers
         }
         public abstract class ConditionalExpression : Expression {
             public readonly Expression? Condition;
-            public readonly List<Statement> Statements;
-            public ConditionalExpression(DebugLocation location, Expression? condition, List<Statement> statements) : base(location) {
+            public readonly List<Expression> Statements;
+            public ConditionalExpression(DebugLocation location, Expression? condition, List<Expression> statements) : base(location) {
                 Condition = condition;
                 Statements = statements;
             }
         }
         public class IfExpression : ConditionalExpression {
-            public IfExpression(DebugLocation location, Expression? condition, List<Statement> statements) : base(location, condition, statements) { }
+            public IfExpression(DebugLocation location, Expression? condition, List<Expression> statements) : base(location, condition, statements) { }
             public override string Inspect() {
                 return (Condition != null ? $"if {Condition.Inspect()} " : "else ") + "{" + Statements.Inspect() + "}";
             }
             public override string Serialise() {
-                return $"new IfExpression({Location.Serialise()}, {(Condition != null ? Condition.Serialise() : "null")}, {Statements.Serialise()})";
+                return $"new ShortIfExpression({Location.Serialise()}, {(Condition != null ? Condition.Serialise() : "null")}, {Statements.Serialise()})";
             }
         }
         public class WhileExpression : ConditionalExpression {
-            public WhileExpression(DebugLocation location, Expression condition, List<Statement> statements) : base(location, condition, statements) { }
+            public WhileExpression(DebugLocation location, Expression condition, List<Expression> statements) : base(location, condition, statements) { }
             public override string Inspect() {
                 return $"while {Condition!.Inspect()} {{" + Statements.Inspect() + "}";
             }
@@ -313,30 +315,13 @@ namespace Embers
                 return $"new ListExpression({Location.Serialise()}, {Expressions.Serialise()})";
             }
         }
-
-        // Statements
-        public abstract class Statement : Expression {
-            public Statement(DebugLocation location) : base(location) { }
-        }
-        public class ExpressionStatement : Statement {
-            public Expression Expression;
-            public ExpressionStatement(Expression expression) : base(expression.Location) {
-                Expression = expression;
-            }
-            public override string Inspect() {
-                return Expression.Inspect();
-            }
-            public override string Serialise() {
-                return $"new ExpressionStatement({Expression.Serialise()})";
-            }
-        }
-        public class AssignmentStatement : Statement {
+        public class AssignmentExpression : Expression {
             public ObjectTokenExpression Left;
             public Expression Right;
 
             readonly string Operator;
 
-            public AssignmentStatement(ObjectTokenExpression left, string op, Expression right) : base(left.Location) {
+            public AssignmentExpression(ObjectTokenExpression left, string op, Expression right) : base(left.Location) {
                 Left = left;
                 Operator = op;
                 Right = right;
@@ -359,40 +344,40 @@ namespace Embers
                 return Left.Inspect() + " " + Operator + " " + Right.Inspect();
             }
             public override string Serialise() {
-                return $"new AssignmentStatement({Left.Serialise()}, \"{Operator}\", {Right.Serialise()})";
+                return $"new AssignmentExpression({Left.Serialise()}, \"{Operator}\", {Right.Serialise()})";
             }
         }
-        public class DefineMethodStatement : Statement {
+        public class DefineMethodExpression : Expression {
             public readonly ObjectTokenExpression MethodName;
-            public readonly MethodExpression Method;
-            public DefineMethodStatement(ObjectTokenExpression methodName, MethodExpression method) : base(methodName.Location) {
+            public readonly MethodExpression MethodExpression;
+            public DefineMethodExpression(ObjectTokenExpression methodName, MethodExpression methodExpression) : base(methodName.Location) {
                 MethodName = methodName;
-                Method = method;
+                MethodExpression = methodExpression;
             }
             public override string Inspect() {
-                return "def " + MethodName.Inspect();
+                return $"def {MethodName.Inspect()}({MethodExpression.Inspect()})";
             }
             public override string Serialise() {
-                return $"new DefineMethodStatement({MethodName.Serialise()}, {Method.Serialise()})";
+                return $"new DefineMethodExpression({MethodName.Serialise()}, {MethodExpression.Serialise()})";
             }
         }
-        public class UndefineMethodStatement : Statement {
+        public class UndefineMethodExpression : Expression {
             public readonly ObjectTokenExpression MethodName;
-            public UndefineMethodStatement(DebugLocation location, ObjectTokenExpression methodName) : base(location) {
+            public UndefineMethodExpression(DebugLocation location, ObjectTokenExpression methodName) : base(location) {
                 MethodName = methodName;
             }
             public override string Inspect() {
                 return "undef " + MethodName.Inspect();
             }
             public override string Serialise() {
-                return $"new UndefineMethodStatement({Location.Serialise()}, {MethodName.Serialise()})";
+                return $"new UndefineMethodExpression({Location.Serialise()}, {MethodName.Serialise()})";
             }
         }
-        public class DefineClassStatement : Statement {
+        public class DefineClassExpression : Expression {
             public readonly ObjectTokenExpression ClassName;
-            public readonly List<Statement> BlockStatements;
+            public readonly List<Expression> BlockStatements;
             public readonly bool IsModule;
-            public DefineClassStatement(ObjectTokenExpression className, List<Statement> blockStatements, bool isModule) : base(className.Location) {
+            public DefineClassExpression(ObjectTokenExpression className, List<Expression> blockStatements, bool isModule) : base(className.Location) {
                 ClassName = className;
                 BlockStatements = blockStatements;
                 IsModule = isModule;
@@ -401,12 +386,12 @@ namespace Embers
                 return "class " + ClassName.Inspect();
             }
             public override string Serialise() {
-                return $"new DefineClassStatement({ClassName.Serialise()}, {BlockStatements.Serialise()})";
+                return $"new DefineClassExpression({ClassName.Serialise()}, {BlockStatements.Serialise()})";
             }
         }
-        public class YieldStatement : Statement {
+        public class YieldExpression : Expression {
             public readonly List<Expression>? YieldValues;
-            public YieldStatement(DebugLocation location, List<Expression>? yieldValues = null) : base(location) {
+            public YieldExpression(DebugLocation location, List<Expression>? yieldValues = null) : base(location) {
                 YieldValues = yieldValues;
             }
             public override string Inspect() {
@@ -414,12 +399,12 @@ namespace Embers
                 else return "yield";
             }
             public override string Serialise() {
-                return $"new YieldStatement({Location.Serialise()}, {(YieldValues != null ? YieldValues.Serialise() : "null")})";
+                return $"new YieldExpression({Location.Serialise()}, {(YieldValues != null ? YieldValues.Serialise() : "null")})";
             }
         }
-        public class ReturnStatement : Statement {
+        public class ReturnExpression : Expression {
             public readonly List<Expression>? ReturnValues;
-            public ReturnStatement(DebugLocation location, List<Expression>? returnValues = null) : base(location) {
+            public ReturnExpression(DebugLocation location, List<Expression>? returnValues = null) : base(location) {
                 ReturnValues = returnValues;
             }
             public override string Inspect() {
@@ -427,22 +412,48 @@ namespace Embers
                 else return "return";
             }
             public override string Serialise() {
-                return $"new ReturnStatement({Location.Serialise()}, {(ReturnValues != null ? ReturnValues.Serialise() : "null")})";
+                return $"new ReturnExpression({Location.Serialise()}, {(ReturnValues != null ? ReturnValues.Serialise() : "null")})";
             }
         }
-        public class IfStatement : Statement {
+        public class IfBranchesExpression : Expression {
             public List<IfExpression> Branches;
-            public IfStatement(DebugLocation location, List<IfExpression> branches) : base(location) {
+            public IfBranchesExpression(DebugLocation location, List<IfExpression> branches) : base(location) {
                 Branches = branches;
             }
             public override string Inspect() {
                 return Branches.Inspect(" ");
             }
             public override string Serialise() {
-                return $"new IfStatement({Location.Serialise()}, {Branches.Serialise()})";
+                return $"new IfExpression({Location.Serialise()}, {Branches.Serialise()})";
             }
         }
-
+        
+        /*class Phase2ObjectsSnippet {
+            public readonly List<Phase2Object> Objects;
+            public readonly List<Phase2Object> AllObjects;
+            public int PositionInAllObjects;
+            public Phase2ObjectsSnippet(List<Phase2Object> objects, List<Phase2Object> allObjects, int positionInAllObjects) {
+                Objects = objects;
+                AllObjects = allObjects;
+                PositionInAllObjects = positionInAllObjects;
+            }
+            public static implicit operator List<Phase2Object>(Phase2ObjectsSnippet Snippet) {
+                return Snippet.Objects;
+            }
+            public static implicit operator Phase2ObjectsSnippet(List<Phase2Object> Objects) {
+                return new Phase2ObjectsSnippet(Objects, Objects, 0);
+            }
+        }*/
+        public class ListAddress<T> {
+            public List<T> List;
+            public int Index;
+            public ListAddress(List<T> list, int index) {
+                List = list;
+                Index = index;
+            }
+            public T Get => List[Index];
+            public T Set(T Value) => List[Index] = Value;
+        }
         public enum SplatType {
             Single,
             Double
@@ -575,6 +586,8 @@ namespace Embers
                         Phase1TokenType.SplatOperator => new Phase2Token(Token.Location, Phase2TokenType.SplatOperator, Token.Value, Token),
                         Phase1TokenType.OpenBracket => new Phase2Token(Token.Location, Phase2TokenType.OpenBracket, Token.Value, Token),
                         Phase1TokenType.CloseBracket => new Phase2Token(Token.Location, Phase2TokenType.CloseBracket, Token.Value, Token),
+                        Phase1TokenType.StartCurly => new Phase2Token(Token.Location, Phase2TokenType.StartCurly, Token.Value, Token),
+                        Phase1TokenType.EndCurly => new Phase2Token(Token.Location, Phase2TokenType.EndCurly, Token.Value, Token),
                         Phase1TokenType.EndOfStatement => new Phase2Token(Token.Location, Phase2TokenType.EndOfStatement, Token.Value, Token),
                         _ => throw new InternalErrorException($"{Token.Location}: Conversion of {Token.Type} from phase 1 to phase 2 not supported")
                     });
@@ -656,7 +669,326 @@ namespace Embers
             }
             return null;
         }
-        static List<Expression> ObjectsToExpressions(List<Phase2Object> Phase2Objects) {
+        static ObjectTokenExpression GetMethodName(List<Phase2Object> Phase2Objects, ref int Index) {
+            bool NextTokenCanBeVariable = true;
+            bool NextTokenCanBeDot = false;
+            List<Phase2Token> MethodNamePath = new();
+            for (Index++; Index < Phase2Objects.Count; Index++) {
+                Phase2Object? LastObject = Index - 1 >= 0 ? Phase2Objects[Index - 1] : null;
+                Phase2Object Object = Phase2Objects[Index];
+                Phase2Object? NextObject = Index + 1 < Phase2Objects.Count ? Phase2Objects[Index + 1] : null;
+
+                if (Object is Phase2Token Token) {
+                    if (Token.Type == Phase2TokenType.Dot) {
+                        if (NextTokenCanBeDot) {
+                            NextTokenCanBeVariable = true;
+                            NextTokenCanBeDot = false;
+                            continue;
+                        }
+                        else {
+                            throw new SyntaxErrorException($"{Token.Location}: Expected expression before and after .");
+                        }
+                    }
+                    else if (Token.IsObjectToken || Token.Type == Phase2TokenType.OpenBracket
+                        || Token.Type == Phase2TokenType.SplatOperator || Token.Type == Phase2TokenType.EndOfStatement)
+                    {
+                        break;
+                    }
+                }
+                else if (Object is ObjectTokenExpression ObjectToken) {
+                    if (IsVariableToken(ObjectToken.Token)) {
+                        if (NextTokenCanBeVariable) {
+                            MethodNamePath.Add(ObjectToken.Token);
+                            NextTokenCanBeVariable = false;
+                            NextTokenCanBeDot = true;
+                            continue;
+                        }
+                        else {
+                            break;
+                        }
+                    }
+                }
+                throw new SyntaxErrorException($"{Object.Location}: Unexpected token while parsing method path: {Object.Inspect()}");
+            }
+            // Remove method name path tokens and replace with a path expression
+            ObjectTokenExpression? MethodNamePathExpression = null;
+            if (MethodNamePath.Count == 1) {
+                MethodNamePathExpression = new ObjectTokenExpression(MethodNamePath[0]);
+            }
+            else if (MethodNamePath.Count == 0) {
+                throw new SyntaxErrorException($"{Phase2Objects[Index].Location}: Def keyword must be followed by an identifier (got {Phase2Objects[Index].Inspect()})");
+            }
+            else {
+                for (int i = 0; i < MethodNamePath.Count - 1; i++) {
+                    MethodNamePathExpression = new PathExpression(new ObjectTokenExpression(MethodNamePath[i]), MethodNamePath[i + 1]);
+                }
+            }
+            return MethodNamePathExpression!;
+        }
+        static List<MethodArgumentExpression> GetMethodArguments(List<Phase2Object> Phase2Objects, ref int Index, ObjectTokenExpression MethodName) {
+            List<MethodArgumentExpression> MethodArguments = new();
+            bool WrappedInBrackets = false;
+            bool NextTokenCanBeObject = true;
+            bool NextTokenCanBeComma = false;
+            SplatType? SplatArgumentType = null;
+            int StartIndex = Index;
+            for (; Index < Phase2Objects.Count; Index++) {
+                Phase2Object Object = Phase2Objects[Index];
+
+                if (Object is Phase2Token ObjectToken) {
+                    if (ObjectToken.Type == Phase2TokenType.Comma) {
+                        if (NextTokenCanBeComma) {
+                            NextTokenCanBeObject = true;
+                            NextTokenCanBeComma = false;
+                        }
+                        else {
+                            throw new SyntaxErrorException($"{ObjectToken.Location}: Unexpected comma");
+                        }
+                    }
+                    else if (ObjectToken.Type == Phase2TokenType.SplatOperator) {
+                        if (NextTokenCanBeObject) {
+                            SplatArgumentType = ObjectToken.Value!.Length == 1 ? SplatType.Single : SplatType.Double;
+                        }
+                        else {
+                            throw new SyntaxErrorException($"{ObjectToken.Location}: Unexpected splat operator");
+                        }
+                    }
+                    else if (ObjectToken.Type == Phase2TokenType.AssignmentOperator && ObjectToken.Value == "=") {
+                        if (MethodArguments.Count == 0) {
+                            throw new SyntaxErrorException($"{ObjectToken.Location}: Unexpected '=' when parsing arguments");
+                        }
+                        if (MethodArguments[^1].DefaultValue != null) {
+                            throw new SyntaxErrorException($"{ObjectToken.Location}: Default value already assigned");
+                        }
+                        List<Phase2Object> DefaultValueObjects = new();
+                        for (Index++; Index < Phase2Objects.Count; Index++) {
+                            if (Phase2Objects[Index] is Phase2Token Token
+                                && (Token.Type == Phase2TokenType.Comma || Token.Type == Phase2TokenType.CloseBracket || Token.Type == Phase2TokenType.EndOfStatement))
+                            {
+                                Index--;
+                                break;
+                            }
+                            else {
+                                DefaultValueObjects.Add(Phase2Objects[Index]);
+                            }
+                        }
+                        if (DefaultValueObjects.Count == 0) {
+                            throw new SyntaxErrorException($"{ObjectToken.Location}: Expected value after '='");
+                        }
+                        else {
+                            if (MethodArguments[^1].SplatType != null) {
+                                throw new SyntaxErrorException($"{ObjectToken.Location}: Splat arguments cannot have default values");
+                            }
+                            MethodArguments[^1].DefaultValue = ObjectsToExpression(DefaultValueObjects);
+                        }
+                    }
+                    else if (IsVariableToken(ObjectToken)) {
+                        if (NextTokenCanBeObject) {
+                            MethodArguments.Add(new MethodArgumentExpression(ObjectToken, null, SplatArgumentType));
+                            NextTokenCanBeObject = false;
+                            NextTokenCanBeComma = true;
+                            SplatArgumentType = null;
+                        }
+                        else {
+                            throw new SyntaxErrorException($"{ObjectToken.Location}: Unexpected argument {ObjectToken.Inspect()}");
+                        }
+                    }
+                    else if (ObjectToken.Type == Phase2TokenType.OpenBracket) {
+                        if (Index == StartIndex) {
+                            WrappedInBrackets = true;
+                        }
+                        else {
+                            throw new SyntaxErrorException($"{ObjectToken.Location}: Unexpected open bracket in method arguments");
+                        }
+                    }
+                    else if (ObjectToken.Type == Phase2TokenType.CloseBracket) {
+                        if (WrappedInBrackets) {
+                            break;
+                        }
+                        else {
+                            throw new SyntaxErrorException($"{ObjectToken.Location}: Unexpected close bracket in method arguments");
+                        }
+                    }
+                    else if (ObjectToken.Type == Phase2TokenType.EndOfStatement) {
+                        if (!WrappedInBrackets) {
+                            break;
+                        }
+                    }
+                    else {
+                        throw new SyntaxErrorException($"{ObjectToken.Location}: Expected {(NextTokenCanBeObject ? "argument" : "comma")}, got {ObjectToken.Inspect()}");
+                    }
+                }
+            }
+            if (!NextTokenCanBeComma && NextTokenCanBeObject && MethodArguments.Count != 0) {
+                throw new SyntaxErrorException($"{MethodName.Token.Location.Line}: Expected argument after comma, got nothing");
+            }
+            if (SplatArgumentType != null) {
+                throw new SyntaxErrorException($"{MethodName.Token.Location.Line}: Expected argument after splat operator, got nothing");
+            }
+            return MethodArguments;
+        }
+        static void CheckMethodNameAndArgumentsValidity(List<MethodArgumentExpression> MethodArguments) {
+            {
+                bool HasSingleSplat = false;
+                bool HasDoubleSplat = false;
+                foreach (MethodArgumentExpression MethodArgument in MethodArguments) {
+                    if (HasDoubleSplat) {
+                        throw new SyntaxErrorException($"{MethodArgument.ArgumentName.Location}: Double splat (**) argument must be the last argument");
+                    }
+                    if (MethodArgument.SplatType == SplatType.Double) {
+                        HasDoubleSplat = true;
+                    }
+                    else if (MethodArgument.SplatType == SplatType.Single) {
+                        if (HasSingleSplat) {
+                            throw new SyntaxErrorException($"{MethodArgument.ArgumentName.Location}: Cannot have multiple splat (*) arguments");
+                        }
+                        HasSingleSplat = true;
+                    }
+                }
+            }
+            {
+                HashSet<string> ExistingArgumentNames = new();
+                foreach (MethodArgumentExpression MethodArgument in MethodArguments) {
+                    if (ExistingArgumentNames.Contains(MethodArgument.ArgumentName.Value!)) {
+                        throw new SyntaxErrorException($"{MethodArgument.ArgumentName.Location}: Duplicated argument name ('{MethodArgument.ArgumentName.Value!}')");
+                    }
+                    else {
+                        ExistingArgumentNames.Add(MethodArgument.ArgumentName.Value!);
+                    }
+                }
+            }
+        }
+        static ObjectTokenExpression GetClassName(List<Phase2Object> Phase2Objects, ref int Index, string ObjectType) {
+            bool NextTokenCanBeVariable = true;
+            bool NextTokenCanBeDoubleColon = false;
+            List<Phase2Token> ClassNamePath = new();
+            for (Index++; Index < Phase2Objects.Count; Index++) {
+                Phase2Object Object = Phase2Objects[Index];
+
+                if (Object is Phase2Token ObjectToken) {
+                    if (ObjectToken.Type == Phase2TokenType.DoubleColon) {
+                        if (NextTokenCanBeDoubleColon) {
+                            NextTokenCanBeVariable = true;
+                            NextTokenCanBeDoubleColon = false;
+                        }
+                        else {
+                            throw new SyntaxErrorException($"{ObjectToken.Location}: Expected expression before and after '.'");
+                        }
+                    }
+                    else if (IsVariableToken(ObjectToken)) {
+                        if (NextTokenCanBeVariable) {
+                            ClassNamePath.Add(ObjectToken);
+                            NextTokenCanBeVariable = false;
+                            NextTokenCanBeDoubleColon = true;
+                        }
+                        else {
+                            break;
+                        }
+                    }
+                    else if (ObjectToken.IsObjectToken) {
+                        break;
+                    }
+                    else {
+                        throw new SyntaxErrorException($"{ObjectToken.Location}: Unexpected token while parsing class path: {ObjectToken.Inspect()}");
+                    }
+                }
+            }
+            // Remove class name path tokens and replace with a path expression
+            ObjectTokenExpression? ClassNamePathExpression = null;
+            if (ClassNamePath.Count == 1) {
+                ClassNamePathExpression = new ObjectTokenExpression(ClassNamePath[0]);
+            }
+            else if (ClassNamePath.Count == 0) {
+                throw new SyntaxErrorException($"{Phase2Objects[Index].Location}: Class keyword must be followed by an identifier (got {Phase2Objects[Index].Inspect()})");
+            }
+            else {
+                for (int i = 0; i < ClassNamePath.Count - 1; i++) {
+                    ClassNamePathExpression = new PathExpression(new ObjectTokenExpression(ClassNamePath[i]), ClassNamePath[i + 1]);
+                }
+            }
+
+            // Verify class name is constant
+            if (ClassNamePathExpression!.Token.Type != Phase2TokenType.ConstantOrMethod) {
+                throw new SyntaxErrorException($"{ClassNamePathExpression.Location}: {ObjectType} name must be Constant");
+            }
+
+            return ClassNamePathExpression;
+        }
+        static Expression? EndBlock(Stack<BuildingBlock> CurrentBlocks, bool EndIsCurly) {
+            BuildingBlock Block = CurrentBlocks.Pop();
+
+            // End Method Block
+            if (Block is BuildingMethod MethodBlock) {
+                return new DefineMethodExpression(MethodBlock.MethodName,
+                    new MethodExpression(MethodBlock.Location, MethodBlock.Statements, new IntRange(MethodBlock.MinArgumentsCount, MethodBlock.MaxArgumentsCount), MethodBlock.Arguments)
+                );
+            }
+            // End Class/Module Block
+            else if (Block is BuildingClass ClassBlock) {
+                return new DefineClassExpression(ClassBlock.ClassName, ClassBlock.Statements, ClassBlock.IsModule);
+            }
+            // End Do Block
+            else if (Block is BuildingDo DoBlock) {
+                // Verify end type
+                if (EndIsCurly && !DoBlock.DoIsCurly) {
+                    throw new SyntaxErrorException($"{DoBlock.Location}: Unexpected '}}'; did you mean 'do'?");
+                }
+                else if (!EndIsCurly && DoBlock.DoIsCurly) {
+                    throw new SyntaxErrorException($"{DoBlock.Location}: Unexpected 'do'; did you mean '}}'?");
+                }
+                // Get last block
+                BuildingBlock LastBlock = CurrentBlocks.Peek();
+                if (LastBlock != null && LastBlock.Statements.Count != 0) {
+                    // Get last expression in last statement
+                    Expression LastStatement = LastBlock.Statements[^1];
+
+                    MethodExpression OnYield = new(DoBlock.Location, DoBlock.Statements, null, DoBlock.Arguments);
+
+                    // Set on yield for previously known method call
+                    if (LastStatement is MethodCallExpression LastMethodCallExpression) {
+                        LastMethodCallExpression.OnYield = OnYield;
+                        return null;
+                    }
+                    // Set on yield for LocalVariableOrMethod/ConstantOrMethod which we now know is a method call
+                    else if (LastStatement is ObjectTokenExpression LastObjectTokenExpression) {
+                        if (LastObjectTokenExpression.Token.Type == Phase2TokenType.LocalVariableOrMethod || LastObjectTokenExpression.Token.Type == Phase2TokenType.ConstantOrMethod) {
+                            // Create method call from LocalVariableOrMethod/ConstantOrMethod
+                            MethodCallExpression DeducedMethodCallExpression = new(LastObjectTokenExpression, null, OnYield);
+                            LastBlock.Statements[^1] = DeducedMethodCallExpression;
+                            return null;
+                        }
+                        else {
+                            throw new SyntaxErrorException($"{DoBlock.Location}: Do block must follow method call, not {LastObjectTokenExpression.Token.Type}");
+                        }
+                    }
+                    else {
+                        throw new SyntaxErrorException($"{DoBlock.Location}: Do block must follow method call, not {LastStatement.GetType().Name}");
+                    }
+                }
+                else {
+                    throw new SyntaxErrorException($"{DoBlock.Location}: Do block must follow method call");
+                }
+            }
+            // End If Block
+            else if (Block is BuildingIfBranches IfBranches) {
+                List<IfExpression> IfExpressions = new();
+                for (int i = 0; i < IfBranches.Branches.Count; i++) {
+                    BuildingIf Branch = IfBranches.Branches[i];
+                    if (Branch.Condition == null && i != IfBranches.Branches.Count - 1) {
+                        throw new SyntaxErrorException($"{Branch.Location}: Else must be the last branch in an if statement");
+                    }
+                    IfExpressions.Add(new IfExpression(Branch.Location, Branch.Condition, Branch.Statements));
+                }
+                return new IfBranchesExpression(IfBranches.Location, IfExpressions);
+            }
+            // End Unknown Block (internal error)
+            else {
+                throw new InternalErrorException($"{Block.Location}: End block not handled for type: {Block.GetType().Name}");
+            }
+        }
+
+        public static List<Expression> ObjectsToExpressions(List<Phase2Object> Phase2Objects) {
+            if (Phase2Objects.Count == 0) return new List<Expression>(0);
             List<Phase2Object> ParsedObjects = new(Phase2Objects); // Preserve the original list
 
             // Object Tokens and Self
@@ -673,8 +1005,142 @@ namespace Embers
                 }
             }
 
-            // Method calls (with brackets)
-            void ParseMethodCall(ObjectTokenExpression MethodName, int MethodNameIndex) {
+            // Blocks
+            {
+                Stack<BuildingBlock> CurrentBlocks = new();
+                CurrentBlocks.Push(new BuildingBlock(ParsedObjects[0].Location));
+
+                void AddStatement(Expression Statement) {
+                    CurrentBlocks.Peek().AddStatement(Statement);
+                }
+                void PushBlock(BuildingBlock Block) {
+                    HandlePendingObjects();
+                    CurrentBlocks.Push(Block);
+                }
+                List<Phase2Object> PendingObjects = new();
+                void AddPendingObject(int Index) {
+                    PendingObjects.Add(ParsedObjects[Index]);
+                }
+                void HandlePendingObjects() {
+                    if (PendingObjects.Count != 0) {
+                        AddStatement(ObjectsToExpression(PendingObjects));
+                        PendingObjects.Clear();
+                    }
+                }
+
+                for (int i = 0; i < ParsedObjects.Count; i++) {
+                    Phase2Object UnknownObject = ParsedObjects[i];
+                    DebugLocation Location = UnknownObject.Location;
+
+                    if (UnknownObject is Phase2Token Token) {
+                        switch (Token.Type) {
+                            // Def method
+                            case Phase2TokenType.Def: {
+                                // Get method name
+                                ObjectTokenExpression MethodName = GetMethodName(ParsedObjects, ref i);
+
+                                // Get method arguments
+                                List<MethodArgumentExpression> MethodArguments = GetMethodArguments(ParsedObjects, ref i, MethodName);
+
+                                // Check validity
+                                CheckMethodNameAndArgumentsValidity(MethodArguments);
+
+                                // Open define method block
+                                PushBlock(new BuildingMethod(Location, MethodName, MethodArguments));
+                                break;
+                            }
+                            // Def class/module
+                            case Phase2TokenType.Module:
+                            case Phase2TokenType.Class: {
+                                bool IsModule = Token.Type == Phase2TokenType.Module;
+                                string ObjectType = IsModule ? "Module" : "Class";
+            
+                                // Get class name
+                                ObjectTokenExpression ClassName = GetClassName(ParsedObjects, ref i, ObjectType);
+
+                                // Open define class block
+                                PushBlock(new BuildingClass(Location, ClassName, IsModule));
+                                break;
+                            }
+                            // End
+                            case Phase2TokenType.End: {
+                                if (CurrentBlocks.Count == 1) {
+                                    throw new SyntaxErrorException($"{Token.Location}: Unexpected end statement");
+                                }
+                                EndBlock(CurrentBlocks, false);
+                                break;
+                            }
+                            // Return
+                            case Phase2TokenType.Return: {
+                                AddStatement(ParseReturnOrYield(Token.Location, ParsedObjects, ref i, true));
+                                break;
+                            }
+                            // Yield
+                            case Phase2TokenType.Yield: {
+                                AddStatement(ParseReturnOrYield(Token.Location, ParsedObjects, ref i, false));
+                                break;
+                            }
+                            // Undef
+                            case Phase2TokenType.Undef: {
+                                AddStatement(ParseUndef(Token.Location, ParsedObjects, ref i));
+                                break;
+                            }
+                            // If
+                            case Phase2TokenType.If: {
+                                BuildingIf BuildingIf = ParseStartIf(Token.Location, ParsedObjects, ref i);
+                                PushBlock(new BuildingIfBranches(Token.Location, new List<BuildingIf>() {BuildingIf})); // Open if block
+                                break;
+                            }
+                            // Elsif
+                            case Phase2TokenType.Elsif: {
+                                if (CurrentBlocks.TryPeek(out BuildingBlock? Block) && Block is BuildingIfBranches IfBlock) {
+                                    IfBlock.Branches.Add(ParseStartIf(Token.Location, ParsedObjects, ref i));
+                                }
+                                else {
+                                    throw new SyntaxErrorException($"{Token.Location}: Elsif must follow if");
+                                }
+                                break;
+                            }
+                            // Else
+                            case Phase2TokenType.Else: {
+                                if (CurrentBlocks.TryPeek(out BuildingBlock? Block) && Block is BuildingIfBranches IfBlock) {
+                                    IfBlock.Branches.Add(new BuildingIf(Token.Location, null));
+                                }
+                                else {
+                                    throw new SyntaxErrorException($"{Token.Location}: Else must follow if");
+                                }
+                                break;
+                            }
+                            // EndOfStatement
+                            case Phase2TokenType.EndOfStatement: {
+                                HandlePendingObjects();
+                                break;
+                            }
+                            // Other
+                            default: {
+                                AddPendingObject(i);
+                                break;
+                            }
+                        }
+                    }
+                    else {
+                        AddPendingObject(i);
+                    }
+                }
+
+                if (CurrentBlocks.Count != 1) {
+                    throw new SyntaxErrorException($"{CurrentBlocks.Peek().Location}: Block was never closed with an end statement");
+                }
+
+                BuildingBlock TopBlock = CurrentBlocks.Pop();
+                ParsedObjects = TopBlock.Statements.Cast<Phase2Object>().ToList();
+
+                // Add PendingObjects to current objects
+                ParsedObjects.AddRange(PendingObjects);
+            }
+
+            // Method calls (any)
+            void ParseMethodCall(ObjectTokenExpression MethodName, int MethodNameIndex, bool WrappedInBrackets) {
                 // Parse arguments
                 int EndOfArgumentsIndex = MethodNameIndex;
                 List<Expression>? Arguments = ParseArguments(ParsedObjects, ref EndOfArgumentsIndex);
@@ -682,15 +1148,17 @@ namespace Embers
                 // Add method call
                 if (Arguments != null) {
                     ParsedObjects.RemoveIndexRange(MethodNameIndex, EndOfArgumentsIndex);
-                    ParsedObjects.Insert(MethodNameIndex, new MethodCallExpression(MethodName, Arguments));
+                    MethodCallExpression MethodCall = new(MethodName, Arguments);
+                    ParsedObjects.Insert(MethodNameIndex, MethodCall);
                 }
             }
+            // Method calls (with brackets)
             for (int i = 0; i < ParsedObjects.Count; i++) {
                 Phase2Object UnknownObject = ParsedObjects[i];
 
                 if (UnknownObject is ObjectTokenExpression ObjectToken && (ObjectToken.Token.Type == Phase2TokenType.LocalVariableOrMethod || ObjectToken.Token.Type == Phase2TokenType.ConstantOrMethod)) {
                     if (i + 1 < ParsedObjects.Count && ParsedObjects[i + 1] is Phase2Token NextToken && NextToken.Type == Phase2TokenType.OpenBracket) {
-                        ParseMethodCall(ObjectToken, i);
+                        ParseMethodCall(ObjectToken, i, true);
                     }
                 }
             }
@@ -772,6 +1240,20 @@ namespace Embers
                 }
             }
 
+            /*// Curly brackets
+            for (int i = 0; i < ParsedObjects.Count; i++) {
+                Phase2Object UnknownObject = ParsedObjects[i];
+                Phase2Object? LastUnknownObject = i - 1 >= 0 ? ParsedObjects[i - 1] : null;
+
+                if (UnknownObject is Phase2Token Token) {
+                    if (Token.Type == Phase2TokenType.StartCurly) {
+                        if (LastUnknownObject is MethodCallExpression) {
+                            ParsedObjects[i] = new DoExpression(Token.Location, new List<MethodArgumentExpression>());
+                        }
+                    }
+                }
+            }*/
+
             // Operators
             foreach (string[] Operators in OperatorPrecedence) {
                 for (int i = 0; i < ParsedObjects.Count; i++) {
@@ -837,7 +1319,32 @@ namespace Embers
                 Phase2Object UnknownObject = ParsedObjects[i];
 
                 if (UnknownObject is ObjectTokenExpression ObjectToken && (ObjectToken.Token.Type == Phase2TokenType.LocalVariableOrMethod || ObjectToken.Token.Type == Phase2TokenType.ConstantOrMethod)) {
-                    ParseMethodCall(ObjectToken, i);
+                    ParseMethodCall(ObjectToken, i, false);
+                }
+            }
+
+            // Assignment
+            for (int i = 0; i < ParsedObjects.Count; i++) {
+                Phase2Object UnknownObject = ParsedObjects[i];
+                Phase2Object? LastUnknownObject = i - 1 >= 0 ? ParsedObjects[i - 1] : null;
+                Phase2Object? NextUnknownObject = i + 1 < ParsedObjects.Count ? ParsedObjects[i + 1] : null;
+
+                if (UnknownObject is Phase2Token Token) {
+                    if (Token.Type == Phase2TokenType.AssignmentOperator) {
+                        if (LastUnknownObject != null && NextUnknownObject != null && LastUnknownObject is ObjectTokenExpression LastExpression && NextUnknownObject is Expression NextExpression) {
+                            i--;
+                            ParsedObjects.RemoveRange(i, 3);
+
+                            ParsedObjects.Insert(i, new AssignmentExpression(
+                                LastExpression,
+                                Token.Value!,
+                                NextExpression
+                            ));
+                        }
+                        else {
+                            throw new SyntaxErrorException($"{Token.Location}: Assignment operator '{Token.Value}' must be between two expressions (got {LastUnknownObject?.Inspect()} and {NextUnknownObject?.Inspect()})");
+                        }
+                    }
                 }
             }
 
@@ -853,7 +1360,7 @@ namespace Embers
                                 i--;
                                 ParsedObjects.RemoveRange(i, 3);
                                 // Get statement & conditional expression
-                                List<Statement> ConditionalStatement = new() { new ExpressionStatement(Statement) };
+                                List<Expression> ConditionalStatement = new() { Statement };
                                 ConditionalExpression ConditionalExpression;
                                 if (Token.Type == Phase2TokenType.If) {
                                     ConditionalExpression = new IfExpression(Statement.Location, Condition, ConditionalStatement);
@@ -895,7 +1402,7 @@ namespace Embers
                         AcceptComma = true;
                         CommaLocation = null;
                     }
-                    else {
+                    else if (ParsedObject is Phase2Token Token2 && Token2.Type != Phase2TokenType.EndOfStatement) {
                         throw new SyntaxErrorException($"{ParsedObject.Location}: Unexpected '{ParsedObject.Inspect()}'");
                     }
                 }
@@ -905,7 +1412,7 @@ namespace Embers
                 return Expressions;
             }
         }
-        static Expression ObjectsToExpression(List<Phase2Object> Phase2Objects) {
+        public static Expression ObjectsToExpression(List<Phase2Object> Phase2Objects) {
             List<Expression> Expressions = ObjectsToExpressions(Phase2Objects);
             if (Expressions.Count == 0)
                 throw new SyntaxErrorException($"{Phase2Objects.Location()}: Expected an expression, got nothing");
@@ -913,13 +1420,21 @@ namespace Embers
                 throw new SyntaxErrorException($"{Phase2Objects.Location()}: Expected a single expression, got {Expressions.Count} expressions ({Expressions.Inspect()})");
             return Expressions[0];
         }
+        public static List<Expression> ObjectsToExpressions(List<Phase1Token> Phase1Tokens) {
+            List<Phase2Token> Phase2Tokens = TokensToPhase2(Phase1Tokens);
+            return ObjectsToExpressions(Phase2Tokens);
+        }
+        public static List<Expression> ObjectsToExpressions(List<Phase2Token> Phase2Tokens) {
+            List<Phase2Object> Phase2Objects = new(Phase2Tokens);
+            return ObjectsToExpressions(Phase2Objects);
+        }
         /*static Expression TokenListToExpression(List<Phase1Token> Tokens) {
             List<Phase2Object> Phase2Objects = TokensToPhase2(Tokens);
             Expression Expression = ObjectsToExpression(Phase2Objects);
             return Expression;
         }*/
 
-        static AssignmentStatement? ParseAssignmentStatement(List<Phase2Object> StatementTokens) {
+        /*static AssignmentStatement? ParseAssignmentStatement(List<Phase2Object> StatementTokens) {
             List<List<Phase2Object>> Expressions = SplitObjects(StatementTokens, Phase2TokenType.AssignmentOperator, out List<string?> AssignmentOperators, false);
             if (Expressions.Count == 1) return null;
 
@@ -949,31 +1464,27 @@ namespace Embers
             }
 
             return CurrentAssignment;
-        }
-        static BuildingMethod ParseStartDefineMethod(DebugLocation Location, List<Phase2Object> StatementTokens) {
+        }*/
+        static BuildingMethod ParseStartDefineMethod(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index) {
             if (StatementTokens.Count == 1)
                 throw new SyntaxErrorException($"{Location}: Def keyword must be followed by an identifier (got nothing)");
-                                
-            // Get def statement (e.g my_method(arg1, arg2))
-            int EndOfDef = StatementTokens.FindIndex(o => o is Phase2Token tok && tok.Type == Phase2TokenType.CloseBracket);
-            if (EndOfDef == -1) EndOfDef = StatementTokens.Count - 1;
-            List<Phase2Object> DefObjects = StatementTokens.GetIndexRange(1, EndOfDef);
 
-            // Check for remaining arguments (internal error)
-            if (EndOfDef + 1 > StatementTokens.Count) {
-                List<Phase2Object> RemainingArguments = StatementTokens.GetIndexRange(EndOfDef + 1);
-                throw new InternalErrorException($"{RemainingArguments.Location()}: There shouldn't be any remaining arguments after DefObjects (got {RemainingArguments.Inspect()})");
-            }
+            // Get def statement (e.g my_method(arg1, arg2))
+            /*int EndOfDef = StatementTokens.FindIndex(Index + 1, o => o is Phase2Token tok && (tok.Type == Phase2TokenType.CloseBracket || tok.Type == Phase2TokenType.EndOfStatement));
+            List<Phase2Object> DefObjects = StatementTokens.GetIndexRange(Index + 1, EndOfDef);
+            if (DefObjects[^1] is Phase2Token Tok && Tok.Type == Phase2TokenType.EndOfStatement)
+                DefObjects.RemoveAt(DefObjects.Count - 1);*/
 
             // Get method name
+            ObjectTokenExpression MethodName;
             {
                 bool NextTokenCanBeVariable = true;
                 bool NextTokenCanBeDot = false;
                 List<Phase2Token> MethodNamePath = new();
-                for (int i = 0; i < DefObjects.Count; i++) {
-                    Phase2Object? LastObject = i - 1 >= 0 ? DefObjects[i - 1] : null;
-                    Phase2Object Object = DefObjects[i];
-                    Phase2Object? NextObject = i + 1 < DefObjects.Count ? DefObjects[i + 1] : null;
+                for (Index++; Index < StatementTokens.Count; Index++) {
+                    Phase2Object? LastObject = Index - 1 >= 0 ? StatementTokens[Index - 1] : null;
+                    Phase2Object Object = StatementTokens[Index];
+                    Phase2Object? NextObject = Index + 1 < StatementTokens.Count ? StatementTokens[Index + 1] : null;
 
                     if (Object is Phase2Token ObjectToken) {
                         if (ObjectToken.Type == Phase2TokenType.Dot) {
@@ -1004,25 +1515,29 @@ namespace Embers
                         else if (ObjectToken.Type == Phase2TokenType.SplatOperator) {
                             break;
                         }
+                        else if (ObjectToken.Type == Phase2TokenType.EndOfStatement) {
+                            break;
+                        }
                         else {
                             throw new SyntaxErrorException($"{ObjectToken.Location}: Unexpected token while parsing method path: {ObjectToken.Inspect()}");
                         }
                     }
                 }
                 // Remove method name path tokens and replace with a path expression
-                DefObjects.RemoveRange(0, MethodNamePath.Count + MethodNamePath.Count - 1);
                 ObjectTokenExpression? MethodNamePathExpression = null;
                 if (MethodNamePath.Count == 1) {
                     MethodNamePathExpression = new ObjectTokenExpression(MethodNamePath[0]);
+                }
+                else if (MethodNamePath.Count == 0) {
+                    throw new SyntaxErrorException($"{StatementTokens[Index].Location}: Def keyword must be followed by an identifier (got {StatementTokens[Index].Inspect()})");
                 }
                 else {
                     for (int i = 0; i < MethodNamePath.Count - 1; i++) {
                         MethodNamePathExpression = new PathExpression(new ObjectTokenExpression(MethodNamePath[i]), MethodNamePath[i + 1]);
                     }
                 }
-                DefObjects.Insert(0, MethodNamePathExpression!);
+                MethodName = MethodNamePathExpression!;
             }
-            ObjectTokenExpression MethodName = DefObjects[0] as ObjectTokenExpression ?? throw new SyntaxErrorException($"{DefObjects[0].Location}: Def keyword must be followed by an identifier (got {DefObjects[0].Inspect()})");
 
             // Get method arguments
             List<MethodArgumentExpression> MethodArguments = new();
@@ -1031,8 +1546,8 @@ namespace Embers
                 bool NextTokenCanBeObject = true;
                 bool NextTokenCanBeComma = false;
                 SplatType? SplatArgumentType = null;
-                for (int i = 1; i < DefObjects.Count; i++) {
-                    Phase2Object Object = DefObjects[i];
+                for (; Index < StatementTokens.Count; Index++) {
+                    Phase2Object Object = StatementTokens[Index];
 
                     if (Object is Phase2Token ObjectToken) {
                         if (ObjectToken.Type == Phase2TokenType.Comma) {
@@ -1060,15 +1575,15 @@ namespace Embers
                                 throw new SyntaxErrorException($"{ObjectToken.Location}: Default value already assigned");
                             }
                             List<Phase2Object> DefaultValueObjects = new();
-                            for (i++; i < DefObjects.Count; i++) {
-                                if (DefObjects[i] is Phase2Token Token
+                            for (Index++; Index < StatementTokens.Count; Index++) {
+                                if (StatementTokens[Index] is Phase2Token Token
                                     && (Token.Type == Phase2TokenType.Comma || Token.Type == Phase2TokenType.CloseBracket || Token.Type == Phase2TokenType.EndOfStatement))
                                 {
-                                    i--;
+                                    Index--;
                                     break;
                                 }
                                 else {
-                                    DefaultValueObjects.Add(DefObjects[i]);
+                                    DefaultValueObjects.Add(StatementTokens[Index]);
                                 }
                             }
                             if (DefaultValueObjects.Count == 0) {
@@ -1093,7 +1608,7 @@ namespace Embers
                             }
                         }
                         else if (ObjectToken.Type == Phase2TokenType.OpenBracket) {
-                            if (i == 1) {
+                            if (Index == 1) {
                                 WrappedInBrackets = true;
                             }
                             else {
@@ -1108,12 +1623,17 @@ namespace Embers
                                 throw new SyntaxErrorException($"{ObjectToken.Location}: Unexpected close bracket in method arguments");
                             }
                         }
+                        else if (ObjectToken.Type == Phase2TokenType.EndOfStatement) {
+                            if (!WrappedInBrackets) {
+                                break;
+                            }
+                        }
                         else {
                             throw new SyntaxErrorException($"{ObjectToken.Location}: Expected {(NextTokenCanBeObject ? "argument" : "comma")}, got {ObjectToken.Inspect()}");
                         }
                     }
                 }
-                if (!NextTokenCanBeComma && NextTokenCanBeObject && DefObjects.Count != 1) {
+                if (!NextTokenCanBeComma && NextTokenCanBeObject && MethodArguments.Count != 0) {
                     throw new SyntaxErrorException($"{MethodName.Token.Location.Line}: Expected argument after comma, got nothing");
                 }
                 if (SplatArgumentType != null) {
@@ -1155,10 +1675,10 @@ namespace Embers
             // Open define method block
             return new BuildingMethod(Location, MethodName, MethodArguments);
         }
-        static BuildingClass ParseStartDefineClass(DebugLocation Location, List<Phase2Object> StatementTokens, bool IsModule) {
+        static BuildingClass ParseStartDefineClass(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index, bool IsModule) {
             string ObjectType = IsModule ? "Module" : "Class";
 
-            if (StatementTokens.Count == 1)
+            if (StatementTokens[Index + 1] is Phase2Token Tok && Tok.Type == Phase2TokenType.EndOfStatement)
                 throw new SyntaxErrorException($"{Location}: {ObjectType} keyword must be followed by an identifier (got nothing)");
             
             // Get class name
@@ -1166,8 +1686,8 @@ namespace Embers
                 bool NextTokenCanBeVariable = true;
                 bool NextTokenCanBeDoubleColon = false;
                 List<Phase2Token> ClassNamePath = new();
-                for (int i = 1; i < StatementTokens.Count; i++) {
-                    Phase2Object Object = StatementTokens[i];
+                for (Index++; Index < StatementTokens.Count; Index++) {
+                    Phase2Object Object = StatementTokens[Index];
 
                     if (Object is Phase2Token ObjectToken) {
                         if (ObjectToken.Type == Phase2TokenType.DoubleColon) {
@@ -1218,57 +1738,47 @@ namespace Embers
             // Open define class block
             return new BuildingClass(Location, ClassName, IsModule);
         }
-        static Statement? ParseEndStatement(Stack<BuildingBlock> BlockStackInfo) {
+        static Expression? ParseEndStatement(Stack<BuildingBlock> BlockStackInfo, bool EndIsCurly) {
             BuildingBlock Block = BlockStackInfo.Pop();
 
             // End Method Block
             if (Block is BuildingMethod MethodBlock) {
-                return new DefineMethodStatement(MethodBlock.MethodName,
+                return new DefineMethodExpression(MethodBlock.MethodName,
                     new MethodExpression(MethodBlock.Location, MethodBlock.Statements, new IntRange(MethodBlock.MinArgumentsCount, MethodBlock.MaxArgumentsCount), MethodBlock.Arguments)
                 );
             }
             // End Class/Module Block
             else if (Block is BuildingClass ClassBlock) {
-                return new DefineClassStatement(ClassBlock.ClassName, ClassBlock.Statements, ClassBlock.IsModule);
+                return new DefineClassExpression(ClassBlock.ClassName, ClassBlock.Statements, ClassBlock.IsModule);
             }
             // End Do Block
             else if (Block is BuildingDo DoBlock) {
+                // Verify end type
+                if (EndIsCurly && !DoBlock.DoIsCurly) {
+                    throw new SyntaxErrorException($"{DoBlock.Location}: Unexpected '}}'; did you mean 'do'?");
+                }
+                else if (!EndIsCurly && DoBlock.DoIsCurly) {
+                    throw new SyntaxErrorException($"{DoBlock.Location}: Unexpected 'do'; did you mean '}}'?");
+                }
                 // Get last block
                 BuildingBlock LastBlock = BlockStackInfo.Peek();
                 if (LastBlock != null && LastBlock.Statements.Count != 0) {
                     // Get last expression in last statement
-                    Statement LastStatement = LastBlock.Statements[^1];
-                    Expression LastExpression;
-                    {
-                        if (LastStatement is AssignmentStatement LastAssignmentStatement) {
-                            LastExpression = LastAssignmentStatement.Right;
-                        }
-                        else if (LastStatement is ExpressionStatement LastExpressionStatement) {
-                            LastExpression = LastExpressionStatement.Expression;
-                        }
-                        else {
-                            throw new SyntaxErrorException($"{DoBlock.Location}: Do block must follow method call, not {LastStatement.GetType().Name}");
-                        }
-                    }
+                    Expression LastStatement = LastBlock.Statements[^1];
 
                     MethodExpression OnYield = new(DoBlock.Location, DoBlock.Statements, null, DoBlock.Arguments);
 
-                    // Set on yield for already known method call
-                    if (LastExpression is MethodCallExpression LastMethodCallExpression) {
+                    // Set on yield for previously known method call
+                    if (LastStatement is MethodCallExpression LastMethodCallExpression) {
                         LastMethodCallExpression.OnYield = OnYield;
                         return null;
                     }
-                    // Set on yield for LocalVariableOrMethod/ConstantOrMethod which we now know is definitely a method call
-                    else if (LastExpression is ObjectTokenExpression LastObjectTokenExpression) {
+                    // Set on yield for LocalVariableOrMethod/ConstantOrMethod which we now know is a method call
+                    else if (LastStatement is ObjectTokenExpression LastObjectTokenExpression) {
                         if (LastObjectTokenExpression.Token.Type == Phase2TokenType.LocalVariableOrMethod || LastObjectTokenExpression.Token.Type == Phase2TokenType.ConstantOrMethod) {
                             // Create method call from LocalVariableOrMethod/ConstantOrMethod
                             MethodCallExpression DeducedMethodCallExpression = new(LastObjectTokenExpression, null, OnYield);
-                            if (LastStatement is AssignmentStatement LastAssignmentStatement) {
-                                LastAssignmentStatement.Right = DeducedMethodCallExpression;
-                            }
-                            else if (LastStatement is ExpressionStatement LastExpressionStatement) {
-                                LastExpressionStatement.Expression = DeducedMethodCallExpression;
-                            }
+                            LastBlock.Statements[^1] = DeducedMethodCallExpression;
                             return null;
                         }
                         else {
@@ -1276,7 +1786,7 @@ namespace Embers
                         }
                     }
                     else {
-                        throw new SyntaxErrorException($"{DoBlock.Location}: Do block must follow method call, not {LastExpression.GetType().Name}");
+                        throw new SyntaxErrorException($"{DoBlock.Location}: Do block must follow method call, not {LastStatement.GetType().Name}");
                     }
                 }
                 else {
@@ -1293,29 +1803,27 @@ namespace Embers
                     }
                     IfExpressions.Add(new IfExpression(Branch.Location, Branch.Condition, Branch.Statements));
                 }
-                return new IfStatement(IfBranches.Location, IfExpressions);
+                return new IfBranchesExpression(IfBranches.Location, IfExpressions);
             }
             // End Unknown Block (internal error)
             else {
                 throw new InternalErrorException($"{Block.Location}: End block not handled for type: {Block.GetType().Name}");
             }
         }
-        static Statement ParseReturnOrYield(DebugLocation Location, List<Phase2Object> StatementTokens, bool IsReturn) {
+        static Expression ParseReturnOrYield(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index, bool IsReturn) {
             // Get return/yield values
-            int EndOfValuesIndex = 0;
-            List<Expression>? ReturnOrYieldValues = ParseArguments(StatementTokens, ref EndOfValuesIndex);
+            List<Expression>? ReturnOrYieldValues = ParseArguments(StatementTokens, ref Index);
             // Create yield/return statement
-            return IsReturn ? new ReturnStatement(Location, ReturnOrYieldValues) : new YieldStatement(Location, ReturnOrYieldValues);
+            return IsReturn ? new ReturnExpression(Location, ReturnOrYieldValues) : new YieldExpression(Location, ReturnOrYieldValues);
         }
-        static Statement ParseUndef(DebugLocation Location, List<Phase2Object> StatementTokens) {
+        static Expression ParseUndef(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index) {
             // Get undef method name
-            int EndOfValuesIndex = 0;
-            List<Expression>? UndefName = ParseArguments(StatementTokens, ref EndOfValuesIndex);
+            List<Expression>? UndefName = ParseArguments(StatementTokens, ref Index);
             // Get method name
             if (UndefName != null) {
                 // Create undef statement
                 if (UndefName.Count == 1 && UndefName[0] is ObjectTokenExpression MethodName && MethodName is not PathExpression) {
-                    return new UndefineMethodStatement(Location, MethodName);
+                    return new UndefineMethodExpression(Location, MethodName);
                 }
                 else {
                     throw new SyntaxErrorException($"{Location}: Expected local method name after 'undef', got {UndefName.Inspect()}");
@@ -1325,30 +1833,36 @@ namespace Embers
                 throw new SyntaxErrorException($"{Location}: Expected method name after 'undef', got nothing");
             }
         }
-        static BuildingIf ParseStartIf(DebugLocation Location, List<Phase2Object> StatementTokens) {
+        static BuildingIf ParseStartIf(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index) {
             // Get condition
-            int EndConditionIndex;
-            for (EndConditionIndex = 1; EndConditionIndex < StatementTokens.Count; EndConditionIndex++) {
-                if (StatementTokens[EndConditionIndex] is Phase2Token Token) {
+            for (Index++; Index < StatementTokens.Count; Index++) {
+                if (StatementTokens[Index] is Phase2Token Token) {
                     if (Token.Type == Phase2TokenType.EndOfStatement || Token.Type == Phase2TokenType.Then) {
                         break;
                     }
                 }
             }
-            List<Phase2Object> Condition = StatementTokens.GetIndexRange(1, EndConditionIndex - 1);
+            List<Phase2Object> Condition = StatementTokens.GetIndexRange(1, Index - 1);
             Expression ConditionExpression = ObjectsToExpression(Condition);
 
             // Open if block
             return new BuildingIf(Location, ConditionExpression);
         }
+        static BuildingDo ParseStartDo(DebugLocation Location, List<Phase2Object> StatementTokens, int StartIndex, bool DoIsCurly) {
+            // Get |arguments
+            // To-do
+
+            // Open do block
+            return new BuildingDo(Location, new(), DoIsCurly);
+        }
 
         class BuildingBlock {
             public readonly DebugLocation Location;
-            public readonly List<Statement> Statements = new();
+            public readonly List<Expression> Statements = new();
             public BuildingBlock(DebugLocation location) {
                 Location = location;
             }
-            public virtual void AddStatement(Statement Statement) {
+            public virtual void AddStatement(Expression Statement) {
                 Statements.Add(Statement);
             }
         }
@@ -1394,8 +1908,10 @@ namespace Embers
         }
         class BuildingDo : BuildingBlock {
             public readonly List<MethodArgumentExpression> Arguments;
-            public BuildingDo(DebugLocation location, List<MethodArgumentExpression> arguments) : base(location) {
+            public readonly bool DoIsCurly;
+            public BuildingDo(DebugLocation location, List<MethodArgumentExpression> arguments, bool doIsCurly) : base(location) {
                 Arguments = arguments;
+                DoIsCurly = doIsCurly;
             }
         }
         class BuildingIfBranches : BuildingBlock {
@@ -1403,7 +1919,7 @@ namespace Embers
             public BuildingIfBranches(DebugLocation location, List<BuildingIf> branches) : base(location) {
                 Branches = branches;
             }
-            public override void AddStatement(Statement Statement) {
+            public override void AddStatement(Expression Statement) {
                 Branches[^1].Statements.Add(Statement);
             }
         }
@@ -1413,7 +1929,7 @@ namespace Embers
                 Condition = condition;
             }
         }
-        public static List<Statement> GetStatements(List<Phase2Object> Phase2Objects) {
+        /*public static List<Statement> GetStatements(List<Phase2Object> Phase2Objects) {
             // Get statements tokens
             List<List<Phase2Object>> StatementsTokens = SplitObjects(Phase2Objects, Phase2TokenType.EndOfStatement, out _, true);
 
@@ -1438,13 +1954,25 @@ namespace Embers
                             BlockStackInfo.Push(BuildingClass);
                             break;
                         case Phase2TokenType.End:
-                            if (BlockStackInfo.Count == 1) {
-                                throw new SyntaxErrorException($"{Token.Location}: Unexpected end statement");
+                            {
+                                if (BlockStackInfo.Count == 1) {
+                                    throw new SyntaxErrorException($"{Token.Location}: Unexpected end statement");
+                                }
+                                Statement? FinishedStatement = ParseEndStatement(BlockStackInfo);
+                                if (FinishedStatement != null)
+                                    BlockStackInfo.Peek().AddStatement(FinishedStatement);
+                                break;
                             }
-                            Statement? FinishedStatement = ParseEndStatement(BlockStackInfo);
-                            if (FinishedStatement != null)
-                                BlockStackInfo.Peek().AddStatement(FinishedStatement);
-                            break;
+                        case Phase2TokenType.EndCurly:
+                            {
+                                if (BlockStackInfo.Count == 1) {
+                                    throw new SyntaxErrorException($"{Token.Location}: Unexpected '}}'");
+                                }
+                                Statement? FinishedStatement = ParseEndCurlyStatement(BlockStackInfo);
+                                if (FinishedStatement != null)
+                                    BlockStackInfo.Peek().AddStatement(FinishedStatement);
+                                break;
+                            }
                         case Phase2TokenType.Return:
                             BlockStackInfo.Peek().AddStatement(ParseReturnOrYield(Token.Location, StatementTokens, true));
                             break;
@@ -1491,25 +2019,146 @@ namespace Embers
                 if (NoBlockBuilt) {
                     // Find do statement
                     List<Phase2Object> UnlockedStatementTokens = StatementTokens;
+                    bool DoIsCurly = false;
                     int FindDoStatement = StatementTokens.FindIndex(Obj => Obj is Phase2Token Tok && Tok.Type == Phase2TokenType.Do);
+                    if (FindDoStatement == -1) {
+                        DoIsCurly = true;
+                        FindDoStatement = StatementTokens.FindIndex(Obj => Obj is Phase2Token Tok && Tok.Type == Phase2TokenType.StartCurly);
+                    }
                     if (FindDoStatement != -1) {
                         UnlockedStatementTokens = StatementTokens.GetRange(0, FindDoStatement);
                     }
                     // Parse assignment or expression
-                    AssignmentStatement? Assignment = ParseAssignmentStatement(UnlockedStatementTokens);
+                    AssignmentStatement? Assignment = ParseAssignmentStatement(StatementTokens);
                     if (Assignment != null) {
                         BlockStackInfo.Peek().AddStatement(Assignment);
                     }
                     else {
-                        BlockStackInfo.Peek().AddStatement(new ExpressionStatement(ObjectsToExpression(UnlockedStatementTokens)));
+                        BlockStackInfo.Peek().AddStatement(new ExpressionStatement(ObjectsToExpression(StatementTokens)));
                     }
                     // Parse do statement
                     if (FindDoStatement != -1) {
-                        BuildingDo BuildingDo = new(StatementTokens[0].Location, new List<MethodArgumentExpression>()); // TODO: Change nested new() to the actual |arguments|
+                        if (BlockStackInfo.Peek().Statements.Count == 0
+                            || BlockStackInfo.Peek().Statements[^1] is not ExpressionStatement ExpressionStatement
+                            || ExpressionStatement.Expression is not MethodCallExpression)
+                        {
+                            throw new SyntaxErrorException($"{StatementTokens[0].Location}: do ... end must follow method call");
+                        }
+                        BuildingDo BuildingDo = new(StatementTokens[0].Location, new List<MethodArgumentExpression>(), DoIsCurly); // TODO: Change nested new() to the actual |arguments|
                         BlockStackInfo.Push(BuildingDo);
                     }
                 }
             }
+            if (BlockStackInfo.Count != 1) {
+                throw new SyntaxErrorException($"{BlockStackInfo.Peek().Location}: Block was never closed with an end statement");
+            }
+            return BlockStackInfo.Pop().Statements;
+        }*/
+        
+        /*public static List<Statement> GetStatements(List<Phase2Object> Phase2Objects) {
+            Stack<BuildingBlock> BlockStackInfo = new();
+            BlockStackInfo.Push(new BuildingBlock(Phase2Objects.Count != 0 ? Phase2Objects[0].Location : DebugLocation.Unknown));
+
+            void AddStatement(Statement Statement) {
+                BlockStackInfo.Peek().AddStatement(Statement);
+            }
+            void PushBlock(BuildingBlock Block) {
+                HandlePendingObjects();
+                BlockStackInfo.Push(Block);
+            }
+            List<Phase2Object> PendingObjects = new();
+            void AddPendingObject(int Index) {
+                PendingObjects.Add(Phase2Objects[Index]);
+            }
+            void HandlePendingObjects() {
+                if (PendingObjects.Count != 0) {
+                    AddStatement(new ExpressionStatement(ObjectsToExpression(PendingObjects)));
+                    PendingObjects.Clear();
+                }
+            }
+
+            for (int i = 0; i < Phase2Objects.Count; i++) {
+                Phase2Object Object = Phase2Objects[i];
+
+                if (Object is Phase2Token Token) {
+                    switch (Token.Type) {
+                        case Phase2TokenType.Def: {
+                            BuildingMethod BuildingMethod = ParseStartDefineMethod(Token.Location, Phase2Objects, ref i);
+                            PushBlock(BuildingMethod); // Open define method block
+                            break;
+                        }
+                        case Phase2TokenType.Class:
+                        case Phase2TokenType.Module: {
+                            BuildingClass BuildingClass = ParseStartDefineClass(Token.Location, Phase2Objects, ref i, Token.Type == Phase2TokenType.Module);
+                            PushBlock(BuildingClass); // Open define class/module block
+                            break;
+                        }
+                        case Phase2TokenType.Do:
+                        case Phase2TokenType.StartCurly: {
+                            BuildingDo BuildingDo = ParseStartDo(Token.Location, Phase2Objects, i, Token.Type == Phase2TokenType.StartCurly);
+                            PushBlock(BuildingDo); // Open do block
+                            break;
+                        }
+                        case Phase2TokenType.End:
+                        case Phase2TokenType.EndCurly: {
+                            if (BlockStackInfo.Count == 1) {
+                                throw new SyntaxErrorException($"{Token.Location}: Unexpected {(Token.Type != Phase2TokenType.EndCurly ? "end statement" : "'}'")}");
+                            }
+                            Statement? FinishedStatement = ParseEndStatement(BlockStackInfo, Token.Type == Phase2TokenType.EndCurly);
+                            if (FinishedStatement != null)
+                                AddStatement(FinishedStatement);
+                            break;
+                        }
+                        case Phase2TokenType.Return: {
+                            AddStatement(ParseReturnOrYield(Token.Location, Phase2Objects, ref i, true));
+                            break;
+                        }
+                        case Phase2TokenType.Yield: {
+                            AddStatement(ParseReturnOrYield(Token.Location, Phase2Objects, ref i, false));
+                            break;
+                        }
+                        case Phase2TokenType.Undef: {
+                            AddStatement(ParseUndef(Token.Location, Phase2Objects, ref i));
+                            break;
+                        }
+                        case Phase2TokenType.If: {
+                            BuildingIf BuildingIf = ParseStartIf(Token.Location, Phase2Objects, ref i);
+                            PushBlock(new BuildingIfBranches(Token.Location, new List<BuildingIf>() {BuildingIf})); // Open if block
+                            break;
+                        }
+                        case Phase2TokenType.Elsif: {
+                            if (BlockStackInfo.TryPeek(out BuildingBlock? Block) && Block is BuildingIfBranches IfBlock) {
+                                IfBlock.Branches.Add(ParseStartIf(Token.Location, Phase2Objects, ref i));
+                            }
+                            else {
+                                throw new SyntaxErrorException($"{Token.Location}: Elsif must follow if");
+                            }
+                            break;
+                        }
+                        case Phase2TokenType.Else: {
+                            if (BlockStackInfo.TryPeek(out BuildingBlock? Block) && Block is BuildingIfBranches IfBlock) {
+                                IfBlock.Branches.Add(new BuildingIf(Token.Location, null));
+                            }
+                            else {
+                                throw new SyntaxErrorException($"{Token.Location}: Else must follow if");
+                            }
+                            break;
+                        }
+                        case Phase2TokenType.EndOfStatement: {
+                            HandlePendingObjects();
+                            break;
+                        }
+                        default: {
+                            AddPendingObject(i);
+                            break;
+                        }
+                    }
+                }
+                else {
+                    AddPendingObject(i);
+                }
+            }
+
             if (BlockStackInfo.Count != 1) {
                 throw new SyntaxErrorException($"{BlockStackInfo.Peek().Location}: Block was never closed with an end statement");
             }
@@ -1522,7 +2171,7 @@ namespace Embers
         public static List<Statement> GetStatements(List<Phase2Token> Phase2Tokens) {
             List<Phase2Object> Phase2Objects = new(Phase2Tokens);
             return GetStatements(Phase2Objects);
-        }
+        }*/
     }
     public static class Extensions {
         public static List<T> GetIndexRange<T>(this List<T> List, int StartIndex, int EndIndex) {

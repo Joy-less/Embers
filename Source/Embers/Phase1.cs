@@ -21,6 +21,8 @@
             Comma,
             SplatOperator,
             Colon,
+            StartCurly,
+            EndCurly,
         }
         public class Phase1Token {
             public readonly DebugLocation Location;
@@ -492,7 +494,6 @@
                                 throw new SyntaxErrorException($"{Location}: '?' is only valid at the end of a method name identifier");
                             }
                         case '!':
-                            RemoveEndOfStatement();
                             if (NextChara == '=') {
                                 Tokens.Add(new(Location, Phase1TokenType.Operator, "!=", FollowsWhitespace));
                                 i++;
@@ -500,6 +501,12 @@
                             else {
                                 Tokens.Add(new(Location, Phase1TokenType.Operator, "!", FollowsWhitespace));
                             }
+                            break;
+                        case '{':
+                            Tokens.Add(new(Location, Phase1TokenType.StartCurly, "{", FollowsWhitespace));
+                            break;
+                        case '}':
+                            Tokens.Add(new(Location, Phase1TokenType.EndCurly, "{", FollowsWhitespace));
                             break;
                         default:
                             // Skip whitespace

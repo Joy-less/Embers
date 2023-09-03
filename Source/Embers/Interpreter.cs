@@ -923,6 +923,48 @@ namespace Embers
                         throw new InternalErrorException($"Unhandled logical expression type: '{LogicalExpression.LogicType}'");
                 }
             }
+            // Assignment
+            else if (Expression is AssignmentExpression AssignmentExpression) {
+                async Task AssignToVariable(VariableReference Variable, Instance Value) {
+                    switch (Variable.Token.Type) {
+                        case Phase2TokenType.LocalVariableOrMethod:
+                            CurrentBlock.LocalVariables[Variable.Token.Value!] = Value;
+                            break;
+                        case Phase2TokenType.GlobalVariable:
+                            GlobalVariables[Variable.Token.Value!] = Value;
+                            break;
+                        case Phase2TokenType.ConstantOrMethod:
+                            if (CurrentBlock.Constants.ContainsKey(Variable.Token.Value!))
+                                await Warn($"Already initialized constant '{Variable.Token.Value!}'");
+                            CurrentBlock.Constants[Variable.Token.Value!] = Value;
+                            break;
+                        case Phase2TokenType.InstanceVariable:
+                            CurrentInstance.InstanceVariables[Variable.Token.Value!] = Value;
+                            break;
+                        case Phase2TokenType.ClassVariable:
+                            CurrentModule.ClassVariables[Variable.Token.Value!] = Value;
+                            break;
+                        default:
+                            throw new InternalErrorException($"{Variable.Token.Location}: Assignment variable token is not a variable type (got {Variable.Token.Type})");
+                    }
+                }
+
+                Instance Right = await InterpretExpressionAsync(AssignmentExpression.Right);
+
+                Instance Left = await InterpretExpressionAsync(AssignmentExpression.Left, ReturnType.HypotheticalVariable);
+                if (Left is VariableReference LeftVariable) {
+                    if (Right is Instance RightInstance) {
+                        await AssignToVariable(LeftVariable, RightInstance);
+                        return Left;
+                    }
+                    else {
+                        throw new InternalErrorException($"{LeftVariable.Token.Location}: Assignment value should be an instance, but got {Right.GetType().Name}");
+                    }
+                }
+                else {
+                    throw new RuntimeException($"{AssignmentExpression.Left.Location}: {Left.GetType()} cannot be the target of an assignment");
+                }
+            }
             // Defined?
             else if (Expression is DefinedExpression DefinedExpression) {
                 if (DefinedExpression.Expression is MethodCallExpression || DefinedExpression.Expression is PathExpression) {
@@ -980,36 +1022,14 @@ namespace Embers
             }
             return Results;
         }
-        public async Task<Instances> InterpretAsync(List<Statement> Statements, Func<Instances, Task>? OnYield = null) {
+        public async Task<Instances> InterpretAsync(List<Expression> Statements, Func<Instances, Task>? OnYield = null) {
             Instance LastExpression = Nil;
             for (int Index = 0; Index < Statements.Count; Index++) {
-                Statement Statement = Statements[Index];
+                Expression Statement = Statements[Index];
 
-                async Task AssignToVariable(VariableReference Variable, Instance Value) {
-                    switch (Variable.Token.Type) {
-                        case Phase2TokenType.LocalVariableOrMethod:
-                            CurrentBlock.LocalVariables[Variable.Token.Value!] = Value;
-                            break;
-                        case Phase2TokenType.GlobalVariable:
-                            GlobalVariables[Variable.Token.Value!] = Value;
-                            break;
-                        case Phase2TokenType.ConstantOrMethod:
-                            if (CurrentBlock.Constants.ContainsKey(Variable.Token.Value!))
-                                await Warn($"Already initialized constant '{Variable.Token.Value!}'");
-                            CurrentBlock.Constants[Variable.Token.Value!] = Value;
-                            break;
-                        case Phase2TokenType.InstanceVariable:
-                            CurrentInstance.InstanceVariables[Variable.Token.Value!] = Value;
-                            break;
-                        case Phase2TokenType.ClassVariable:
-                            CurrentModule.ClassVariables[Variable.Token.Value!] = Value;
-                            break;
-                        default:
-                            throw new InternalErrorException($"{Variable.Token.Location}: Assignment variable token is not a variable type (got {Variable.Token.Type})");
-                    }
-                }
-                
-                if (Statement is ExpressionStatement ExpressionStatement) {
+                LastExpression = await InterpretExpressionAsync(Statement);
+
+                /*if (Statement is ExpressionStatement ExpressionStatement) {
                     LastExpression = await InterpretExpressionAsync(ExpressionStatement.Expression);
                 }
                 else if (Statement is AssignmentStatement AssignmentStatement) {
@@ -1034,11 +1054,11 @@ namespace Embers
                     if (MethodNameObject is VariableReference MethodName) {
                         // Define static method
                         if (MethodName.Block != null) {
-                            ((Module)MethodName.Block).Methods[MethodName.Token.Value!] = DefineMethodStatement.Method.Method;
+                            ((Module)MethodName.Block).Methods[MethodName.Token.Value!] = DefineMethodStatement.MethodExpression.Method;
                         }
                         // Define instance method
                         else {
-                            MethodName.Instance!.AddOrUpdateInstanceMethod(MethodName.Token.Value!, DefineMethodStatement.Method.Method);
+                            (MethodName.Instance ?? CurrentInstance).AddOrUpdateInstanceMethod(MethodName.Token.Value!, DefineMethodStatement.MethodExpression.Method);
                         }
                     }
                     else {
@@ -1048,10 +1068,10 @@ namespace Embers
                 else if (Statement is DefineClassStatement DefineClassStatement) {
                     Instance ClassNameObject = await InterpretExpressionAsync(DefineClassStatement.ClassName, ReturnType.HypotheticalVariable);
                     if (ClassNameObject is VariableReference ClassName) {
-                        /*// Replace this with monkey patching.
-                        if (CurrentClass.Constants.ContainsKey(ClassName.Token.Value!)) {
-                            await Warn($"Already initialized constant '{ClassName.Token.Value!}'");
-                        }*/
+                        // Replace this with monkey patching.
+                        // if (CurrentClass.Constants.ContainsKey(ClassName.Token.Value!)) {
+                        //     await Warn($"Already initialized constant '{ClassName.Token.Value!}'");
+                        // }
                         // Create class
                         Module NewModule;
                         if (DefineClassStatement.IsModule) {
@@ -1128,16 +1148,20 @@ namespace Embers
                 }
                 else {
                     throw new InternalErrorException($"{Statement.Location}: Not sure how to interpret statement {Statement.GetType().Name}");
-                }
+                }*/
             }
             return LastExpression;
         }
-        public Instances Interpret(List<Statement> Statements, Func<Instances, Task>? OnYield = null) {
+        public Instances Interpret(List<Expression> Statements, Func<Instances, Task>? OnYield = null) {
             return InterpretAsync(Statements, OnYield).Result;
         }
         public async Task<Instances> EvaluateAsync(string Code) {
             List<Phase1.Phase1Token> Tokens = Phase1.GetPhase1Tokens(Code);
-            List<Statement> Statements = GetStatements(Tokens);
+            List<Expression> Statements = ObjectsToExpressions(Tokens);
+
+            Console.WriteLine(Statements.Inspect());
+            Console.Write("Press enter to continue.");
+            Console.ReadLine();
 
             return await InterpretAsync(Statements);
         }
@@ -1146,7 +1170,7 @@ namespace Embers
         }
         public static string Serialise(string Code) {
             List<Phase1.Phase1Token> Tokens = Phase1.GetPhase1Tokens(Code);
-            List<Statement> Statements = GetStatements(Tokens);
+            List<Expression> Statements = ObjectsToExpressions(Tokens);
 
             return Statements.Serialise();
         }
