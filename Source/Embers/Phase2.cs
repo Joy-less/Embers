@@ -175,7 +175,7 @@ namespace Embers
                 OnYield = onYield;
             }
             public override string Inspect() {
-                return $"{MethodPath.Inspect()}({Arguments.Inspect()})";
+                return $"{MethodPath.Inspect()}({Arguments.Inspect()})" + (OnYield != null ? $"{{yield: {OnYield.Inspect()}}}" : "");
             }
             public override string Serialise() {
                 return $"new MethodCallExpression({MethodPath.Serialise()}, {Arguments.Serialise()}, {(OnYield != null ? OnYield.Serialise() : "null")})";
@@ -466,6 +466,10 @@ namespace Embers
             CommaSeparatedExpressions,
             SingleExpression
         }
+        enum BlockPriority {
+            First,
+            Second,
+        }
 
         static Phase2Token IdentifierToPhase2(Phase1Token Token) {
             if (Token.Type != Phase1TokenType.Identifier)
@@ -515,7 +519,7 @@ namespace Embers
 
             return new Phase2Token(Token.Location, IdentifierType, Identifier, Token);
         }
-        static List<List<Phase2Object>> SplitObjects(List<Phase2Object> Objects, Phase2TokenType SplitToken, out List<string?> SplitCharas, bool CanStartWithHaveMultipleInARow) {
+        /*static List<List<Phase2Object>> SplitObjects(List<Phase2Object> Objects, Phase2TokenType SplitToken, out List<string?> SplitCharas, bool CanStartWithHaveMultipleInARow) {
             List<List<Phase2Object>> SplitObjects = new();
             List<Phase2Object> CurrentObjects = new();
 
@@ -540,7 +544,7 @@ namespace Embers
                 SplitObjects.Add(CurrentObjects);
             }
             return SplitObjects;
-        }
+        }*/
         public static bool IsObjectToken(Phase2TokenType? Type) {
             return Type == Phase2TokenType.Nil
                 || Type == Phase2TokenType.True
@@ -563,6 +567,18 @@ namespace Embers
         }
         public static bool IsVariableToken(Phase2Token? Token) {
             return Token != null && IsVariableToken(Token.Type);
+        }
+        public static bool IsStartBlockToken(Phase2TokenType? Type) {
+            return Type == Phase2TokenType.Def
+                || Type == Phase2TokenType.Module
+                || Type == Phase2TokenType.Class
+                || Type == Phase2TokenType.Do
+                || Type == Phase2TokenType.StartCurly
+                || Type == Phase2TokenType.If
+                || Type == Phase2TokenType.While;
+        }
+        public static bool IsStartBlockToken(Phase2Token? Token) {
+            return Token != null && IsStartBlockToken(Token.Type);
         }
 
         static List<Phase2Token> TokensToPhase2(List<Phase1Token> Tokens) {
@@ -621,12 +637,12 @@ namespace Embers
             // Brackets e.g. puts("hi")
             if (WrappedInBrackets) {
                 int OpenBracketDepth = 0;
-                ArgumentObjects = GetObjectsUntil(Objects, ref Index, obj => {
-                    if (obj is Phase2Token tok) {
-                        if (tok.Type == Phase2TokenType.OpenBracket) {
+                ArgumentObjects = GetObjectsUntil(Objects, ref Index, Obj => {
+                    if (Obj is Phase2Token Tok) {
+                        if (Tok.Type == Phase2TokenType.OpenBracket) {
                             OpenBracketDepth++;
                         }
-                        else if (tok.Type == Phase2TokenType.CloseBracket) {
+                        else if (Tok.Type == Phase2TokenType.CloseBracket) {
                             if (OpenBracketDepth == 0) return true;
                             OpenBracketDepth--;
                         }
@@ -637,7 +653,7 @@ namespace Embers
             // No brackets e.g. puts "hi"
             else {
                 ArgumentObjects = GetObjectsUntil(Objects, ref Index, Object => 
-                    (Object is Phase2Token Token && (Token.Type == Phase2TokenType.EndOfStatement || Token.Type == Phase2TokenType.Do || Token.Type == Phase2TokenType.If))
+                    (Object is Phase2Token Token && (Token.Type == Phase2TokenType.EndOfStatement || IsStartBlockToken(Token)))
                     || Object is Statement);
                 Index--;
             }
@@ -679,9 +695,7 @@ namespace Embers
             bool NextTokenCanBeDot = false;
             List<Phase2Token> MethodNamePath = new();
             for (Index++; Index < Phase2Objects.Count; Index++) {
-                Phase2Object? LastObject = Index - 1 >= 0 ? Phase2Objects[Index - 1] : null;
                 Phase2Object Object = Phase2Objects[Index];
-                Phase2Object? NextObject = Index + 1 < Phase2Objects.Count ? Phase2Objects[Index + 1] : null;
 
                 if (Object is Phase2Token Token) {
                     if (Token.Type == Phase2TokenType.Dot) {
@@ -919,7 +933,7 @@ namespace Embers
 
             return ClassNamePathExpression;
         }
-        static Expression? EndBlock(Stack<BuildingBlock> CurrentBlocks, bool EndIsCurly) {
+        static Expression? EndBlock(Stack<BuildingBlock> CurrentBlocks, BlockPriority BlockPriority) {
             BuildingBlock Block = CurrentBlocks.Pop();
 
             // End Method Block
@@ -935,10 +949,10 @@ namespace Embers
             // End Do Block
             else if (Block is BuildingDo DoBlock) {
                 // Verify end type
-                if (EndIsCurly && !DoBlock.DoIsCurly) {
+                if (BlockPriority == BlockPriority.First && !DoBlock.DoIsCurly) {
                     throw new SyntaxErrorException($"{DoBlock.Location}: Unexpected '}}'; did you mean 'do'?");
                 }
-                else if (!EndIsCurly && DoBlock.DoIsCurly) {
+                else if (BlockPriority == BlockPriority.Second && DoBlock.DoIsCurly) {
                     throw new SyntaxErrorException($"{DoBlock.Location}: Unexpected 'do'; did you mean '}}'?");
                 }
                 // Get last block
@@ -988,7 +1002,12 @@ namespace Embers
             }
             // End Unknown Block (internal error)
             else {
-                throw new InternalErrorException($"{Block.Location}: End block not handled for type: {Block.GetType().Name}");
+                if (BlockPriority == BlockPriority.Second) {
+                    throw new InternalErrorException($"{Block.Location}: End block not handled for type: {Block.GetType().Name}");
+                }
+                else {
+                    return null;
+                }
             }
         }
         static Expression ParseReturnOrYield(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index, bool IsReturn) {
@@ -1014,7 +1033,8 @@ namespace Embers
                 throw new SyntaxErrorException($"{Location}: Expected method name after 'undef', got nothing");
             }
         }
-        static BuildingIf ParseIf(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index) {
+        static BuildingIf ParseIf(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index)
+        {
             // Get condition
             for (Index++; Index < StatementTokens.Count; Index++) {
                 if (StatementTokens[Index] is Phase2Token Token) {
@@ -1029,55 +1049,59 @@ namespace Embers
             // Open if block
             return new BuildingIf(Location, ConditionExpression);
         }
+        static List<Phase2Object> HandleBlocks(List<Phase2Object> ParsedObjects, BlockPriority BlockPriority) {
+            if (ParsedObjects.Count == 0) return ParsedObjects;
+            Stack<BuildingBlock> CurrentBlocks = new();
+            CurrentBlocks.Push(new BuildingBlock(ParsedObjects[0].Location));
 
-        public static List<Expression> ObjectsToExpressions(List<Phase2Object> Phase2Objects, ExpressionsType ExpressionsType) {
-            if (Phase2Objects.Count == 0) return new List<Expression>(0);
-            List<Phase2Object> ParsedObjects = new(Phase2Objects); // Preserve the original list
-
-            // Object Tokens and Self
-            for (int i = 0; i < ParsedObjects.Count; i++) {
-                if (ParsedObjects[i] is Phase2Token Token) {
-                    // self
-                    if (Token.Type == Phase2TokenType.Self) {
-                        ParsedObjects[i] = new SelfExpression(Token.Location);
+            void AddStatement(Expression Statement) {
+                CurrentBlocks.Peek().AddStatement(Statement);
+            }
+            void PushBlock(BuildingBlock Block) {
+                ResolvePendingObjects();
+                CurrentBlocks.Push(Block);
+            }
+            List<Phase2Object> PendingObjects = new();
+            void AddPendingObject(int Index) {
+                PendingObjects.Add(ParsedObjects[Index]);
+            }
+            void ResolvePendingObjects() {
+                if (PendingObjects.Count != 0) {
+                    List<Expression> Statements = ObjectsToExpressions(PendingObjects, ExpressionsType.Statements);
+                    foreach (Expression Statement in Statements) {
+                        AddStatement(Statement);
                     }
-                    // Token -> ObjectTokenExpression
-                    else if (IsVariableToken(Token) || Token.IsObjectToken) {
-                        ParsedObjects[i] = new ObjectTokenExpression(Token);
-                    }
+                    PendingObjects.Clear();
                 }
             }
 
-            // Blocks
-            {
-                Stack<BuildingBlock> CurrentBlocks = new();
-                CurrentBlocks.Push(new BuildingBlock(ParsedObjects[0].Location));
+            for (int i = 0; i < ParsedObjects.Count; i++) {
+                Phase2Object UnknownObject = ParsedObjects[i];
+                DebugLocation Location = UnknownObject.Location;
 
-                void AddStatement(Expression Statement) {
-                    CurrentBlocks.Peek().AddStatement(Statement);
-                }
-                void PushBlock(BuildingBlock Block) {
-                    HandlePendingObjects();
-                    CurrentBlocks.Push(Block);
-                }
-                List<Phase2Object> PendingObjects = new();
-                void AddPendingObject(int Index) {
-                    PendingObjects.Add(ParsedObjects[Index]);
-                }
-                void HandlePendingObjects() {
-                    if (PendingObjects.Count != 0) {
-                        AddStatement(ObjectsToExpression(PendingObjects));
-                        PendingObjects.Clear();
-                    }
-                }
-
-                for (int i = 0; i < ParsedObjects.Count; i++) {
-                    Phase2Object UnknownObject = ParsedObjects[i];
-                    DebugLocation Location = UnknownObject.Location;
-
-                    if (UnknownObject is Phase2Token Token) {
+                if (UnknownObject is Phase2Token Token) {
+                    // High priority
+                    if (BlockPriority == BlockPriority.First) {
                         switch (Token.Type) {
-                            // Def method
+                            // {
+                            case Phase2TokenType.StartCurly: {
+                                // Get do |arguments|
+                                // To-do
+
+                                // Open do block
+                                PushBlock(new BuildingDo(Location, new(), true));
+                                break;
+                            }
+                            // }
+                            case Phase2TokenType.EndCurly: {
+                                if (CurrentBlocks.Count == 1) {
+                                    throw new SyntaxErrorException($"{Token.Location}: Unexpected '}}'");
+                                }
+                                Expression? EndedExpression = EndBlock(CurrentBlocks, BlockPriority);
+                                if (EndedExpression != null) AddStatement(EndedExpression);
+                                break;
+                            }
+                            // Def
                             case Phase2TokenType.Def: {
                                 // Get method name
                                 ObjectTokenExpression MethodName = GetMethodName(ParsedObjects, ref i);
@@ -1092,7 +1116,7 @@ namespace Embers
                                 PushBlock(new BuildingMethod(Location, MethodName, MethodArguments));
                                 break;
                             }
-                            // Def class/module
+                            // Class/Module
                             case Phase2TokenType.Module:
                             case Phase2TokenType.Class: {
                                 bool IsModule = Token.Type == Phase2TokenType.Module;
@@ -1107,19 +1131,20 @@ namespace Embers
                             }
                             // Do
                             case Phase2TokenType.Do: {
-                                // Get do |arguments|
-                                // To-do
-
-                                // Open do block
-                                PushBlock(new BuildingDo(Location, new(), false));
+                                PushBlock(new BuildingBlock(DebugLocation.Unknown));
                                 break;
                             }
                             // End
                             case Phase2TokenType.End: {
                                 if (CurrentBlocks.Count == 1) {
-                                    throw new SyntaxErrorException($"{Token.Location}: Unexpected end statement");
+                                    // throw new SyntaxErrorException($"{Token.Location}: Unexpected end statement");
+                                    break;
                                 }
-                                Expression? EndedExpression = EndBlock(CurrentBlocks, false);
+                                else if (CurrentBlocks.Peek().GetType() == typeof(BuildingBlock)) {
+                                    CurrentBlocks.Pop();
+                                    break;
+                                }
+                                Expression? EndedExpression = EndBlock(CurrentBlocks, BlockPriority);
                                 if (EndedExpression != null) AddStatement(EndedExpression);
                                 break;
                             }
@@ -1166,7 +1191,12 @@ namespace Embers
                             }
                             // EndOfStatement
                             case Phase2TokenType.EndOfStatement: {
-                                HandlePendingObjects();
+                                if (CurrentBlocks.Count == 1) {
+                                    AddPendingObject(i);
+                                }
+                                else {
+                                    ResolvePendingObjects();
+                                }
                                 break;
                             }
                             // Other
@@ -1176,21 +1206,78 @@ namespace Embers
                             }
                         }
                     }
+                    // Low priority
                     else {
-                        AddPendingObject(i);
+                        switch (Token.Type) {
+                            // Do
+                            case Phase2TokenType.Do: {
+                                // Get do |arguments|
+                                // To-do
+
+                                // Open do block
+                                PushBlock(new BuildingDo(Location, new(), false));
+                                break;
+                            }
+                            // End
+                            case Phase2TokenType.End: {
+                                if (CurrentBlocks.Count == 1) {
+                                    throw new SyntaxErrorException($"{Token.Location}: Unexpected end statement");
+                                }
+                                Expression? EndedExpression = EndBlock(CurrentBlocks, BlockPriority);
+                                if (EndedExpression != null) AddStatement(EndedExpression);
+                                break;
+                            }
+                            // EndOfStatement
+                            case Phase2TokenType.EndOfStatement: {
+                                ResolvePendingObjects();
+                                break;
+                            }
+                            // Other
+                            default: {
+                                AddPendingObject(i);
+                                break;
+                            }
+                        }
                     }
                 }
-
-                if (CurrentBlocks.Count != 1) {
-                    throw new SyntaxErrorException($"{CurrentBlocks.Peek().Location}: Block was never closed with an end statement");
+                else {
+                    AddPendingObject(i);
                 }
-
-                BuildingBlock TopBlock = CurrentBlocks.Pop();
-                ParsedObjects = new List<Phase2Object>(TopBlock.Statements);
-
-                // Add remaining PendingObjects to current objects
-                ParsedObjects.AddRange(PendingObjects);
             }
+
+            if (CurrentBlocks.Count != 1) {
+                throw new SyntaxErrorException($"{CurrentBlocks.Peek().Location}: Block was never closed with an end statement");
+            }
+
+            BuildingBlock TopBlock = CurrentBlocks.Pop();
+            ParsedObjects = new List<Phase2Object>(TopBlock.Statements);
+
+            // Add remaining PendingObjects to current objects
+            ParsedObjects.AddRange(PendingObjects);
+
+            return ParsedObjects;
+        }
+
+        public static List<Expression> ObjectsToExpressions(List<Phase2Object> Phase2Objects, ExpressionsType ExpressionsType) {
+            if (Phase2Objects.Count == 0) return new List<Expression>(0);
+            List<Phase2Object> ParsedObjects = new(Phase2Objects); // Preserve the original list
+
+            // Object Tokens and Self
+            for (int i = 0; i < ParsedObjects.Count; i++) {
+                if (ParsedObjects[i] is Phase2Token Token) {
+                    // self
+                    if (Token.Type == Phase2TokenType.Self) {
+                        ParsedObjects[i] = new SelfExpression(Token.Location);
+                    }
+                    // Token -> ObjectTokenExpression
+                    else if (IsVariableToken(Token) || Token.IsObjectToken) {
+                        ParsedObjects[i] = new ObjectTokenExpression(Token);
+                    }
+                }
+            }
+
+            // High Priority Blocks
+            ParsedObjects = HandleBlocks(ParsedObjects, BlockPriority.First);
 
             // Method calls (any)
             void ParseMethodCall(ObjectTokenExpression MethodName, int MethodNameIndex, bool WrappedInBrackets) {
@@ -1293,20 +1380,6 @@ namespace Embers
                 }
             }
 
-            /*// Curly brackets
-            for (int i = 0; i < ParsedObjects.Count; i++) {
-                Phase2Object UnknownObject = ParsedObjects[i];
-                Phase2Object? LastUnknownObject = i - 1 >= 0 ? ParsedObjects[i - 1] : null;
-
-                if (UnknownObject is Phase2Token Token) {
-                    if (Token.Type == Phase2TokenType.StartCurly) {
-                        if (LastUnknownObject is MethodCallExpression) {
-                            ParsedObjects[i] = new DoExpression(Token.Location, new List<MethodArgumentExpression>());
-                        }
-                    }
-                }
-            }*/
-
             // Operators
             foreach (string[] Operators in OperatorPrecedence) {
                 for (int i = 0; i < ParsedObjects.Count; i++) {
@@ -1376,6 +1449,9 @@ namespace Embers
                 }
             }
 
+            // Low Priority Blocks
+            ParsedObjects = HandleBlocks(ParsedObjects, BlockPriority.Second);
+
             // Assignment
             for (int i = 0; i < ParsedObjects.Count; i++) {
                 Phase2Object UnknownObject = ParsedObjects[i];
@@ -1439,6 +1515,9 @@ namespace Embers
             {
                 List<Expression> Expressions = new();
 
+                // Remove EndOfStatements
+                // ParsedObjects = ParsedObjects.Where(Object => !(Object is Phase2Token Tok && Tok.Type == Phase2TokenType.EndOfStatement)).ToList();
+
                 // Single expression
                 if (ExpressionsType == ExpressionsType.SingleExpression) {
                     // ParsedObjects.RemoveFromEnd(Item => Item is Phase2Token Tok && Tok.Type == Phase2TokenType.EndOfStatement);
@@ -1461,7 +1540,7 @@ namespace Embers
                             Expressions.Add(ParsedExpression);
                         }
                         else {
-                            throw new SyntaxErrorException($"{ParsedObject.Location}: Expected expression, got {ParsedObject.Inspect()}");
+                            throw new SyntaxErrorException($"{ParsedObject.Location}: Expected expression, got {ParsedObject.Inspect()} (in {ParsedObjects.Inspect()})");
                         }
                     }
                 }
@@ -1474,7 +1553,7 @@ namespace Embers
                         Phase2Object ParsedObject = ParsedObjects[i];
 
                         if (ParsedObject is Statement ParsedStatement) {
-                            throw new SyntaxErrorException($"{ParsedObject.Location}: Unexpected statement: {ParsedObject.Inspect()}");
+                            throw new SyntaxErrorException($"{ParsedObject.Location}: Unexpected statement: {ParsedStatement.Inspect()}");
                         }
                         else if (ParsedObject is Expression ParsedExpression && !AcceptComma) {
                             Expressions.Add(ParsedExpression);

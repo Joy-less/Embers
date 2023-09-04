@@ -506,7 +506,11 @@
                             Tokens.Add(new(Location, Phase1TokenType.StartCurly, "{", FollowsWhitespace));
                             break;
                         case '}':
-                            Tokens.Add(new(Location, Phase1TokenType.EndCurly, "{", FollowsWhitespace));
+                            // Add EndOfStatement before }
+                            if (!LastTokenWas(Phase1TokenType.EndOfStatement))
+                                Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
+                            // Add end curly bracket
+                            Tokens.Add(new(Location, Phase1TokenType.EndCurly, "}", FollowsWhitespace));
                             break;
                         default:
                             // Skip whitespace
