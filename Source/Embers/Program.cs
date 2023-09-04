@@ -8,13 +8,14 @@ namespace Embers
         static void Main() {
             {
                 string Code = @"
-def a()
+def a
     yield
+    5
 end
 
-puts a {
-    puts 'hi'
-}
+puts a do
+    puts('hi')
+end
 ";
                 Benchmark(() => new Interpreter().Evaluate(Code));
 

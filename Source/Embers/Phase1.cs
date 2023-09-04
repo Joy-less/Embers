@@ -333,6 +333,20 @@
                                 break;
                             }
                             goto case ';';
+                        case ';':
+                            // Add EndOfStatement if there isn't already one
+                            if (!LastTokenWas(Phase1TokenType.EndOfStatement))
+                                Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, Chara.ToString(), FollowsWhitespace));
+                            // \r + \n --> \r\n
+                            else if (Chara == '\n' && Tokens[^1].Value == "\r")
+                                Tokens[^1].Value += "\n";
+                            
+                            // Increment line if \n
+                            if (Chara == '\n') {
+                                CurrentLine++;
+                                IndexOfLastNewline = i;
+                            }
+                            break;
                         case ':':
                             if (NextChara == ':') {
                                 Tokens.Add(new(Location, Phase1TokenType.DoubleColon, "::", FollowsWhitespace));
@@ -340,14 +354,6 @@
                             }
                             else {
                                 Tokens.Add(new(Location, Phase1TokenType.Colon, ":", FollowsWhitespace));
-                            }
-                            break;
-                        case ';':
-                            if (!LastTokenWas(Phase1TokenType.EndOfStatement))
-                                Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, Chara.ToString(), FollowsWhitespace));
-                            if (Chara == '\n') {
-                                CurrentLine++;
-                                IndexOfLastNewline = i;
                             }
                             break;
                         case '=':
