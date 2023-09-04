@@ -8,21 +8,21 @@ namespace Embers
         static void Main() {
             {
                 string Code = @"
+puts 2
 def say
-    yield ""hi""
+    yield
 end
 # puts say { |k| puts k }
 # say {; puts 'k'; }
 # puts say do; puts 'k'; end
 # say do; puts 'hi'; end
-
-puts 'hi'
-
-def say
-    ""hey""
+say do
+    puts 'hiya'
 end
 
-puts say
+5.times do
+    puts 'Countdown'
+end
 ";
                 Benchmark(() => new Interpreter().Evaluate(Code));
 

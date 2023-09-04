@@ -603,7 +603,7 @@ namespace Embers
             FoundVariable,
             HypotheticalVariable,
         }
-        public async Task<Instances> InterpretExpressionAsync(Expression Expression, ReturnType ReturnType = ReturnType.InterpretResult) {
+        public async Task<Instances> InterpretExpressionAsync(Expression Expression, ReturnType ReturnType = ReturnType.InterpretResult, Method? OnYield = null) {
             // Method call
             if (Expression is MethodCallExpression MethodCallExpression) {
                 Instance MethodPath = await InterpretExpressionAsync(MethodCallExpression.MethodPath, ReturnType.FoundVariable);
@@ -881,14 +881,12 @@ namespace Embers
                 if (IfExpression.Condition == null || (await InterpretExpressionAsync(IfExpression.Condition))[0].IsTruthy) {
                     return await InterpretAsync(IfExpression.Statements);
                 }
-                else return Nil;
             }
             // While
             else if (Expression is WhileExpression WhileExpression) {
                 while ((await InterpretExpressionAsync(WhileExpression.Condition!))[0].IsTruthy) {
                     await InterpretAsync(WhileExpression.Statements);
                 }
-                return Nil;
             }
             // Self
             else if (Expression is SelfExpression) {
@@ -921,6 +919,109 @@ namespace Embers
                             return False;
                     default:
                         throw new InternalErrorException($"Unhandled logical expression type: '{LogicalExpression.LogicType}'");
+                }
+            }
+            // Define method
+            else if (Expression is DefineMethodStatement DefineMethodStatement) {
+                Instance MethodNameObject = await InterpretExpressionAsync(DefineMethodStatement.MethodName, ReturnType.HypotheticalVariable);
+                if (MethodNameObject is VariableReference MethodName) {
+                    // Define static method
+                    if (MethodName.Block != null) {
+                        ((Module)MethodName.Block).Methods[MethodName.Token.Value!] = DefineMethodStatement.MethodExpression.Method;
+                    }
+                    // Define instance method
+                    else {
+                        (MethodName.Instance ?? CurrentInstance).AddOrUpdateInstanceMethod(MethodName.Token.Value!, DefineMethodStatement.MethodExpression.Method);
+                    }
+                }
+                else {
+                    throw new InternalErrorException($"{DefineMethodStatement.Location}: Invalid method name: {MethodNameObject}");
+                }
+            }
+            // Define class
+            else if (Expression is DefineClassStatement DefineClassStatement) {
+                Instance ClassNameObject = await InterpretExpressionAsync(DefineClassStatement.ClassName, ReturnType.HypotheticalVariable);
+                if (ClassNameObject is VariableReference ClassName) {
+                    // Replace this with monkey patching.
+                    // if (CurrentClass.Constants.ContainsKey(ClassName.Token.Value!)) {
+                    //     await Warn($"Already initialized constant '{ClassName.Token.Value!}'");
+                    // }
+                    // Create class
+                    Module NewModule;
+                    if (DefineClassStatement.IsModule) {
+                        NewModule = new Module(ClassName.Token.Value!, ClassName.Module);
+                    }
+                    else {
+                        NewModule = new Class(ClassName.Token.Value!, ClassName.Module);
+                    }
+
+                    // Interpret class statements
+                    await CreateTemporaryClassScope(NewModule, async () => {
+                        await CreateTemporaryInstanceScope(new Instance(NewModule), async () => {
+                            await InterpretAsync(DefineClassStatement.BlockStatements);
+                        });
+                    });
+
+                    // Store class/module constant
+                    if (ClassName.Block != null) {
+                        // Path
+                        ((Module)ClassName.Block).Constants[ClassName.Token.Value!] = new ModuleReference(NewModule);
+                    }
+                    else if (ClassName.Instance == CurrentInstance) {
+                        // Local
+                        CurrentInstance.Module.Constants[ClassName.Token.Value!] = new ModuleReference(NewModule);
+                    }
+                    else {
+                        throw new RuntimeException($"{ClassName.Inspect()} is not a class/module");
+                    }
+                }
+                else {
+                    throw new InternalErrorException($"{DefineClassStatement.Location}: Invalid class/module name: {ClassNameObject}");
+                }
+            }
+            // Return
+            else if (Expression is ReturnStatement ReturnStatement) {
+                return ReturnStatement.ReturnValues != null
+                    ? await InterpretExpressionsAsync(ReturnStatement.ReturnValues)
+                    : Nil;
+            }
+            // Yield
+            else if (Expression is YieldStatement YieldStatement) {
+                if (OnYield != null) {
+                    List<Instance> YieldArgs = YieldStatement.YieldValues != null
+                        ? await InterpretExpressionsAsync(YieldStatement.YieldValues)
+                        : new();
+                    await OnYield.Call(this, null, YieldArgs);
+                }
+                else {
+                    throw new RuntimeException($"{YieldStatement.Location}: No block given to yield to");
+                }
+            }
+            // Undefine method
+            else if (Expression is UndefineMethodStatement UndefineMethodStatement) {
+                string MethodName = UndefineMethodStatement.MethodName.Token.Value!;
+                if (MethodName == "initialize") {
+                    await Warn("undefining 'initialize' may cause serious problems");
+                }
+                if (!CurrentModule.InstanceMethods.Remove(MethodName)) {
+                    throw new RuntimeException($"{UndefineMethodStatement.MethodName.Token.Location}: Undefined method '{MethodName}' for {CurrentModule.Name}");
+                }
+            }
+            // If branches
+            else if (Expression is IfBranchesStatement IfStatement) {
+                for (int i = 0; i < IfStatement.Branches.Count; i++) {
+                    IfExpression Branch = IfStatement.Branches[i];
+                    if (Branch.Condition != null) {
+                        Instance ConditionResult = await InterpretExpressionAsync(Branch.Condition);
+                        if (ConditionResult.IsTruthy) {
+                            await InterpretAsync(Branch.Statements);
+                            break;
+                        }
+                    }
+                    else {
+                        await InterpretAsync(Branch.Statements);
+                        break;
+                    }
                 }
             }
             // Assignment
@@ -1013,7 +1114,10 @@ namespace Embers
                 }
             }
             // Unknown
-            throw new InternalErrorException($"{Expression.Location}: Not sure how to interpret expression {Expression.GetType().Name} ({Expression.Inspect()})");
+            else {
+                throw new InternalErrorException($"{Expression.Location}: Not sure how to interpret expression {Expression.GetType().Name} ({Expression.Inspect()})");
+            }
+            return Nil;
         }
         public async Task<List<Instance>> InterpretExpressionsAsync(List<Expression> Expressions) {
             List<Instance> Results = new();
@@ -1022,12 +1126,12 @@ namespace Embers
             }
             return Results;
         }
-        public async Task<Instances> InterpretAsync(List<Expression> Statements, Func<Instances, Task>? OnYield = null) {
+        public async Task<Instances> InterpretAsync(List<Expression> Statements, Method? OnYield = null) {
             Instance LastExpression = Nil;
             for (int Index = 0; Index < Statements.Count; Index++) {
                 Expression Statement = Statements[Index];
 
-                LastExpression = await InterpretExpressionAsync(Statement);
+                LastExpression = await InterpretExpressionAsync(Statement, OnYield: OnYield);
 
                 /*if (Statement is ExpressionStatement ExpressionStatement) {
                     LastExpression = await InterpretExpressionAsync(ExpressionStatement.Expression);
@@ -1152,12 +1256,12 @@ namespace Embers
             }
             return LastExpression;
         }
-        public Instances Interpret(List<Expression> Statements, Func<Instances, Task>? OnYield = null) {
-            return InterpretAsync(Statements, OnYield).Result;
+        public Instances Interpret(List<Expression> Statements) {
+            return InterpretAsync(Statements).Result;
         }
         public async Task<Instances> EvaluateAsync(string Code) {
             List<Phase1.Phase1Token> Tokens = Phase1.GetPhase1Tokens(Code);
-            List<Expression> Statements = ObjectsToExpressions(Tokens);
+            List<Expression> Statements = ObjectsToExpressions(Tokens, ExpressionsType.Statements);
 
             Console.WriteLine(Statements.Inspect());
             Console.Write("Press enter to continue.");
@@ -1170,7 +1274,7 @@ namespace Embers
         }
         public static string Serialise(string Code) {
             List<Phase1.Phase1Token> Tokens = Phase1.GetPhase1Tokens(Code);
-            List<Expression> Statements = ObjectsToExpressions(Tokens);
+            List<Expression> Statements = ObjectsToExpressions(Tokens, ExpressionsType.Statements);
 
             return Statements.Serialise();
         }
