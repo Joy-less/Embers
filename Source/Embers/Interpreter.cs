@@ -892,6 +892,10 @@ namespace Embers
                     await InterpretAsync(WhileExpression.Statements);
                 }
             }
+            // While Statement
+            else if (Expression is WhileStatement WhileStatement) {
+                await InterpretExpressionAsync(WhileStatement.WhileExpression);
+            }
             // Self
             else if (Expression is SelfExpression) {
                 return new ModuleReference(CurrentModule);
@@ -1001,16 +1005,6 @@ namespace Embers
                     throw new RuntimeException($"{YieldStatement.Location}: No block given to yield to");
                 }
             }
-            // Undefine method
-            else if (Expression is UndefineMethodStatement UndefineMethodStatement) {
-                string MethodName = UndefineMethodStatement.MethodName.Token.Value!;
-                if (MethodName == "initialize") {
-                    await Warn("undefining 'initialize' may cause serious problems");
-                }
-                if (!CurrentModule.InstanceMethods.Remove(MethodName)) {
-                    throw new RuntimeException($"{UndefineMethodStatement.MethodName.Token.Location}: Undefined method '{MethodName}' for {CurrentModule.Name}");
-                }
-            }
             // If branches
             else if (Expression is IfBranchesStatement IfStatement) {
                 for (int i = 0; i < IfStatement.Branches.Count; i++) {
@@ -1018,13 +1012,11 @@ namespace Embers
                     if (Branch.Condition != null) {
                         Instance ConditionResult = await InterpretExpressionAsync(Branch.Condition);
                         if (ConditionResult.IsTruthy) {
-                            await InterpretAsync(Branch.Statements);
-                            break;
+                            return await InterpretAsync(Branch.Statements);
                         }
                     }
                     else {
-                        await InterpretAsync(Branch.Statements);
-                        break;
+                        return await InterpretAsync(Branch.Statements);
                     }
                 }
             }
@@ -1076,6 +1068,16 @@ namespace Embers
                 }
                 else {
                     throw new RuntimeException($"{AssignmentExpression.Left.Location}: {Left.GetType()} cannot be the target of an assignment");
+                }
+            }
+            // Undefine method
+            else if (Expression is UndefineMethodStatement UndefineMethodStatement) {
+                string MethodName = UndefineMethodStatement.MethodName.Token.Value!;
+                if (MethodName == "initialize") {
+                    await Warn("undefining 'initialize' may cause serious problems");
+                }
+                if (!CurrentModule.InstanceMethods.Remove(MethodName)) {
+                    throw new RuntimeException($"{UndefineMethodStatement.MethodName.Token.Location}: Undefined method '{MethodName}' for {CurrentModule.Name}");
                 }
             }
             // Defined?

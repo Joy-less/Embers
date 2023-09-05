@@ -22,11 +22,11 @@ namespace Embers_Tests
 
             // Def test
             AssertEqual(@"
-def a
-    return 'hiya'
-end
-a
-", "hiya");
+                def a
+                    return 'hiya'
+                end
+                a
+            ", "hiya");
 
             // Do...end and {...} tests
             AssertEqual(@"
@@ -71,6 +71,31 @@ a
                 c = d = 3.0
                 return a, b, c, d
             ", new object[] {2L, 2L, 3.0d, 3.0d});
+
+            // If statements
+            AssertEqual(@"
+                $result = 0
+                
+                if true then
+                    $result -= 100
+                end
+                
+                if false
+                    $result += 10
+                elsif 0
+                    $result += 1
+                else
+                    $result += 20
+                end
+            ", -99L);
+
+            // Lambdas & always return last expression
+            AssertEqual(@"
+                my_method = lambda do
+                    $return_value = 'hi'
+                end
+                my_method.call
+            ", "hi");
         }
 
 

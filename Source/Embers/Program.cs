@@ -8,7 +8,9 @@ namespace Embers
         static void Main() {
             {
                 string Code = @"
-
+while true
+    break
+end
 ";
                 Benchmark(() => new Interpreter().Evaluate(Code));
 

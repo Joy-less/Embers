@@ -288,10 +288,15 @@ namespace Embers
         public class IfExpression : ConditionalExpression {
             public IfExpression(DebugLocation location, Expression? condition, List<Expression> statements) : base(location, condition, statements) { }
             public override string Inspect() {
-                return (Condition != null ? $"if {Condition.Inspect()} " : "else ") + "{" + Statements.Inspect() + "}";
+                if (Condition != null) {
+                    return $"if {Condition.Inspect()} then {Statements.Inspect()} end";
+                }
+                else {
+                    return $"else {Statements.Inspect()} end";
+                }
             }
             public override string Serialise() {
-                return $"new ShortIfExpression({Location.Serialise()}, {(Condition != null ? Condition.Serialise() : "null")}, {Statements.Serialise()})";
+                return $"new IfExpression({Location.Serialise()}, {(Condition != null ? Condition.Serialise() : "null")}, {Statements.Serialise()})";
             }
         }
         public class WhileExpression : ConditionalExpression {
@@ -432,6 +437,16 @@ namespace Embers
                 return $"new ReturnStatement({Location.Serialise()}, {(ReturnValues != null ? ReturnValues.Serialise() : "null")})";
             }
         }
+        public class BreakStatement : Statement {
+            public BreakStatement(DebugLocation location) : base(location) {
+            }
+            public override string Inspect() {
+                return "break";
+            }
+            public override string Serialise() {
+                return $"new BreakStatement({Location.Serialise()}))";
+            }
+        }
         public class IfBranchesStatement : Statement {
             public List<IfExpression> Branches;
             public IfBranchesStatement(DebugLocation location, List<IfExpression> branches) : base(location) {
@@ -444,23 +459,19 @@ namespace Embers
                 return $"new IfBranchesStatement({Location.Serialise()}, {Branches.Serialise()})";
             }
         }
+        public class WhileStatement : Statement {
+            public WhileExpression WhileExpression;
+            public WhileStatement(WhileExpression whileExpression) : base(whileExpression.Location) {
+                WhileExpression = whileExpression;
+            }
+            public override string Inspect() {
+                return $"while {WhileExpression.Condition!.Inspect()} do " + WhileExpression.Statements.Inspect() + " end";
+            }
+            public override string Serialise() {
+                return $"new WhileStatement({Location.Serialise()}, {WhileExpression.Serialise()})";
+            }
+        }
         
-        /*class Phase2ObjectsSnippet {
-            public readonly List<Phase2Object> Objects;
-            public readonly List<Phase2Object> AllObjects;
-            public int PositionInAllObjects;
-            public Phase2ObjectsSnippet(List<Phase2Object> objects, List<Phase2Object> allObjects, int positionInAllObjects) {
-                Objects = objects;
-                AllObjects = allObjects;
-                PositionInAllObjects = positionInAllObjects;
-            }
-            public static implicit operator List<Phase2Object>(Phase2ObjectsSnippet Snippet) {
-                return Snippet.Objects;
-            }
-            public static implicit operator Phase2ObjectsSnippet(List<Phase2Object> Objects) {
-                return new Phase2ObjectsSnippet(Objects, Objects, 0);
-            }
-        }*/
         public class ListAddress<T> {
             public List<T> List;
             public int Index;
@@ -1022,6 +1033,10 @@ namespace Embers
                 }
                 return new IfBranchesStatement(IfBranches.Location, IfExpressions);
             }
+            // End While Block
+            else if (Block is BuildingWhile WhileBlock) {
+                return new WhileStatement(new WhileExpression(WhileBlock.Location, WhileBlock.Condition!, WhileBlock.Statements));
+            }
             // End Unknown Block (internal error)
             else {
                 throw new InternalErrorException($"{Block.Location}: End block not handled for type: {Block.GetType().Name}");
@@ -1053,14 +1068,15 @@ namespace Embers
         static BuildingIf ParseIf(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index)
         {
             // Get condition
-            for (Index++; Index < StatementTokens.Count; Index++) {
+            int StartIndex = Index + 1;
+            for (; Index < StatementTokens.Count; Index++) {
                 if (StatementTokens[Index] is Phase2Token Token) {
                     if (Token.Type == Phase2TokenType.EndOfStatement || Token.Type == Phase2TokenType.Then) {
                         break;
                     }
                 }
             }
-            List<Phase2Object> Condition = StatementTokens.GetIndexRange(1, Index - 1);
+            List<Phase2Object> Condition = StatementTokens.GetIndexRange(StartIndex, Index - 1);
             Expression ConditionExpression = ObjectsToExpression(Condition);
 
             // Open if block
@@ -1085,10 +1101,19 @@ namespace Embers
             }
             Expression? ResolveEndBlock(bool EndIsCurly) {
                 List<Expression> Statements = ObjectsToExpressions(PendingObjects.Pop(), ExpressionsType.Statements);
+                BuildingBlock CurrentBlock = CurrentBlocks.Peek();
                 foreach (Expression Statement in Statements) {
-                    CurrentBlocks.Peek().AddStatement(Statement);
+                    CurrentBlock.AddStatement(Statement);
                 }
                 return EndBlock(CurrentBlocks, EndIsCurly);
+            }
+            void ResolveStatementsWithoutEndingBlock() {
+                List<Expression> Statements = ObjectsToExpressions(PendingObjects.Peek(), ExpressionsType.Statements);
+                BuildingBlock CurrentBlock = CurrentBlocks.Peek();
+                foreach (Expression Statement in Statements) {
+                    CurrentBlock.AddStatement(Statement);
+                }
+                PendingObjects.Peek().Clear();
             }
 
             for (int i = 0; i < ParsedObjects.Count; i++) {
@@ -1136,6 +1161,16 @@ namespace Embers
                             PushBlock(new BuildingDo(Location, new(), false));
                             break;
                         }
+                        // While
+                        case Phase2TokenType.While: {
+                            i++;
+                            List<Phase2Object> Condition = GetObjectsUntil(ParsedObjects, ref i, Obj =>
+                                Obj is Phase2Token Tok && (Tok.Type == Phase2TokenType.EndOfStatement || Tok.Type == Phase2TokenType.Do));
+
+                            // Open while block
+                            PushBlock(new BuildingWhile(Token.Location, ObjectsToExpression(Condition)));
+                            break;
+                        }
                         // End
                         case Phase2TokenType.End: {
                             if (CurrentBlocks.Count == 1) {
@@ -1173,6 +1208,11 @@ namespace Embers
                             AddPendingObject(ParseReturnOrYield(Token.Location, ParsedObjects, ref i, false));
                             break;
                         }
+                        // Break
+                        case Phase2TokenType.Break: {
+                            AddPendingObject(new BreakStatement(Token.Location));
+                            break;
+                        }
                         // Undef
                         case Phase2TokenType.Undef: {
                             AddPendingObject(ParseUndef(Token.Location, ParsedObjects, ref i));
@@ -1187,6 +1227,7 @@ namespace Embers
                         // Elsif
                         case Phase2TokenType.Elsif: {
                             if (CurrentBlocks.TryPeek(out BuildingBlock? Block) && Block is BuildingIfBranches IfBlock) {
+                                ResolveStatementsWithoutEndingBlock();
                                 IfBlock.Branches.Add(ParseIf(Token.Location, ParsedObjects, ref i));
                             }
                             else {
@@ -1197,6 +1238,7 @@ namespace Embers
                         // Else
                         case Phase2TokenType.Else: {
                             if (CurrentBlocks.TryPeek(out BuildingBlock? Block) && Block is BuildingIfBranches IfBlock) {
+                                ResolveStatementsWithoutEndingBlock();
                                 IfBlock.Branches.Add(new BuildingIf(Token.Location, null));
                             }
                             else {
@@ -1677,6 +1719,18 @@ namespace Embers
                 DoIsCurly = doIsCurly;
             }
         }
+        abstract class BuildingConditional : BuildingBlock {
+            public readonly Expression? Condition;
+            public BuildingConditional(DebugLocation location, Expression? condition) : base(location) {
+                Condition = condition;
+            }
+        }
+        class BuildingIf : BuildingConditional {
+            public BuildingIf(DebugLocation location, Expression? condition) : base(location, condition) { }
+        }
+        class BuildingWhile : BuildingConditional {
+            public BuildingWhile(DebugLocation location, Expression condition) : base(location, condition) { }
+        }
         class BuildingIfBranches : BuildingBlock {
             public readonly List<BuildingIf> Branches;
             public BuildingIfBranches(DebugLocation location, List<BuildingIf> branches) : base(location) {
@@ -1684,12 +1738,6 @@ namespace Embers
             }
             public override void AddStatement(Expression Statement) {
                 Branches[^1].Statements.Add(Statement);
-            }
-        }
-        class BuildingIf : BuildingBlock {
-            public readonly Expression? Condition;
-            public BuildingIf(DebugLocation location, Expression? condition) : base(location) {
-                Condition = condition;
             }
         }
     }

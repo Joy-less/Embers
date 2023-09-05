@@ -147,15 +147,6 @@ namespace Embers
             return Input.Interpreter.Nil;
         }
         static async Task<Instances> lambda(MethodInput Input) {
-            // return new Instance(Input.Interpreter.RootModule.Constants["Proc"].Module);
-
-            /*Instance NewProc = await Input.Interpreter.InterpretExpressionAsync(new MethodCallExpression(
-                new ObjectTokenExpression(new Phase2Token(DebugLocation.Unknown, Phase2TokenType.LocalVariableOrMethod, "new")),
-                null
-            ));
-
-            NewProc.InstanceVariables[""] = null;*/
-
             Method? OnYield = Input.OnYield ?? throw new RuntimeException("No block given for lambda");
 
             Instance NewProc = new ProcInstance(Input.Interpreter.Proc, new Method(
@@ -164,6 +155,9 @@ namespace Embers
             ));
             return NewProc;
         }
+        /*static async Task<Instances> loop(MethodInput Input) {
+            
+        }*/
         static class ClassInstance {
             public static async Task<Instances> _Equals(MethodInput Input) {
                 Instance Left = Input.Instance;
