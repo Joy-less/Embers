@@ -767,35 +767,35 @@ namespace Embers
             for (; Index < Phase2Objects.Count; Index++) {
                 Phase2Object Object = Phase2Objects[Index];
 
-                if (Object is Phase2Token ObjectToken) {
-                    if (ObjectToken.Type == Phase2TokenType.Comma) {
+                if (Object is Phase2Token Token) {
+                    if (Token.Type == Phase2TokenType.Comma) {
                         if (NextTokenCanBeComma) {
                             NextTokenCanBeObject = true;
                             NextTokenCanBeComma = false;
                         }
                         else {
-                            throw new SyntaxErrorException($"{ObjectToken.Location}: Unexpected comma");
+                            throw new SyntaxErrorException($"{Token.Location}: Unexpected comma");
                         }
                     }
-                    else if (ObjectToken.Type == Phase2TokenType.SplatOperator) {
+                    else if (Token.Type == Phase2TokenType.SplatOperator) {
                         if (NextTokenCanBeObject) {
-                            SplatArgumentType = ObjectToken.Value!.Length == 1 ? SplatType.Single : SplatType.Double;
+                            SplatArgumentType = Token.Value!.Length == 1 ? SplatType.Single : SplatType.Double;
                         }
                         else {
-                            throw new SyntaxErrorException($"{ObjectToken.Location}: Unexpected splat operator");
+                            throw new SyntaxErrorException($"{Token.Location}: Unexpected splat operator");
                         }
                     }
-                    else if (ObjectToken.Type == Phase2TokenType.AssignmentOperator && ObjectToken.Value == "=") {
+                    else if (Token.Type == Phase2TokenType.AssignmentOperator && Token.Value == "=") {
                         if (MethodArguments.Count == 0) {
-                            throw new SyntaxErrorException($"{ObjectToken.Location}: Unexpected '=' when parsing arguments");
+                            throw new SyntaxErrorException($"{Token.Location}: Unexpected '=' when parsing arguments");
                         }
                         if (MethodArguments[^1].DefaultValue != null) {
-                            throw new SyntaxErrorException($"{ObjectToken.Location}: Default value already assigned");
+                            throw new SyntaxErrorException($"{Token.Location}: Default value already assigned");
                         }
                         List<Phase2Object> DefaultValueObjects = new();
                         for (Index++; Index < Phase2Objects.Count; Index++) {
-                            if (Phase2Objects[Index] is Phase2Token Token
-                                && (Token.Type == Phase2TokenType.Comma || Token.Type == Phase2TokenType.CloseBracket || Token.Type == Phase2TokenType.EndOfStatement))
+                            if (Phase2Objects[Index] is Phase2Token Tok
+                                && (Tok.Type == Phase2TokenType.Comma || Tok.Type == Phase2TokenType.CloseBracket || Tok.Type == Phase2TokenType.EndOfStatement))
                             {
                                 Index--;
                                 break;
@@ -805,45 +805,50 @@ namespace Embers
                             }
                         }
                         if (DefaultValueObjects.Count == 0) {
-                            throw new SyntaxErrorException($"{ObjectToken.Location}: Expected value after '='");
+                            throw new SyntaxErrorException($"{Token.Location}: Expected value after '='");
                         }
                         else {
                             if (MethodArguments[^1].SplatType != null) {
-                                throw new SyntaxErrorException($"{ObjectToken.Location}: Splat arguments cannot have default values");
+                                throw new SyntaxErrorException($"{Token.Location}: Splat arguments cannot have default values");
                             }
                             MethodArguments[^1].DefaultValue = ObjectsToExpression(DefaultValueObjects);
                         }
                     }
-                    else if (IsVariableToken(ObjectToken)) {
+                    else if (Token.Type == Phase2TokenType.OpenBracket) {
+                        if (Index == StartIndex) {
+                            WrappedInBrackets = true;
+                        }
+                        else {
+                            throw new SyntaxErrorException($"{Token.Location}: Unexpected open bracket in method arguments");
+                        }
+                    }
+                    else if (Token.Type == Phase2TokenType.CloseBracket) {
+                        if (WrappedInBrackets) {
+                            break;
+                        }
+                        else {
+                            throw new SyntaxErrorException($"{Token.Location}: Unexpected close bracket in method arguments");
+                        }
+                    }
+                    else if (Token.Type == Phase2TokenType.EndOfStatement) {
+                        if (!WrappedInBrackets) {
+                            break;
+                        }
+                    }
+                    else {
+                        throw new SyntaxErrorException($"{Token.Location}: Expected {(NextTokenCanBeObject ? "argument" : "comma")}, got {Token.Inspect()}");
+                    }
+                }
+                else if (Object is ObjectTokenExpression ObjectToken) {
+                    if (ObjectToken is not PathExpression && IsVariableToken(ObjectToken.Token)) {
                         if (NextTokenCanBeObject) {
-                            MethodArguments.Add(new MethodArgumentExpression(ObjectToken, null, SplatArgumentType));
+                            MethodArguments.Add(new MethodArgumentExpression(ObjectToken.Token, null, SplatArgumentType));
                             NextTokenCanBeObject = false;
                             NextTokenCanBeComma = true;
                             SplatArgumentType = null;
                         }
                         else {
                             throw new SyntaxErrorException($"{ObjectToken.Location}: Unexpected argument {ObjectToken.Inspect()}");
-                        }
-                    }
-                    else if (ObjectToken.Type == Phase2TokenType.OpenBracket) {
-                        if (Index == StartIndex) {
-                            WrappedInBrackets = true;
-                        }
-                        else {
-                            throw new SyntaxErrorException($"{ObjectToken.Location}: Unexpected open bracket in method arguments");
-                        }
-                    }
-                    else if (ObjectToken.Type == Phase2TokenType.CloseBracket) {
-                        if (WrappedInBrackets) {
-                            break;
-                        }
-                        else {
-                            throw new SyntaxErrorException($"{ObjectToken.Location}: Unexpected close bracket in method arguments");
-                        }
-                    }
-                    else if (ObjectToken.Type == Phase2TokenType.EndOfStatement) {
-                        if (!WrappedInBrackets) {
-                            break;
                         }
                     }
                     else {
@@ -1468,7 +1473,7 @@ namespace Embers
             }
 
             // Assignment
-            for (int i = 0; i < ParsedObjects.Count; i++) {
+            for (int i = ParsedObjects.Count - 1; i >= 0; i--) {
                 Phase2Object UnknownObject = ParsedObjects[i];
                 Phase2Object? LastUnknownObject = i - 1 >= 0 ? ParsedObjects[i - 1] : null;
                 Phase2Object? NextUnknownObject = i + 1 < ParsedObjects.Count ? ParsedObjects[i + 1] : null;

@@ -307,7 +307,7 @@ namespace Embers
             public Phase2Token Token;
             public bool IsLocalReference => Block == null && Instance == null;
             public override string Inspect() {
-                return $"{(Block != null ? Block.GetType().Name : Instance!.Inspect())} var ref in {Token.Inspect()}";
+                return $"{(Block != null ? Block.GetType().Name : (Instance != null ? Instance.Inspect() : Token.Inspect()))} var ref in {Token.Inspect()}";
             }
             public VariableReference(Block block, Phase2Token token) : base(null) {
                 Block = block;
@@ -489,6 +489,10 @@ namespace Embers
                 return new Instances(InstanceList);
             }
             public static implicit operator Instance(Instances Instances) {
+                if (Instances.Count == 0)
+                    throw new RuntimeException($"Cannot implicitly cast Instances to Instance because there are none.");
+                if (Instances.Count != 1)
+                    throw new RuntimeException($"Cannot implicitly cast Instances to Instance because {Instances.Count - 1} instances would be overlooked");
                 return Instances[0];
             }
             public Instance this[int i] => InstanceList != null ? InstanceList[i] : (i == 0 && Instance != null ? Instance : throw new ApiException("Index was outside the range of the instances"));
@@ -1055,8 +1059,16 @@ namespace Embers
                 Instance Left = await InterpretExpressionAsync(AssignmentExpression.Left, ReturnType.HypotheticalVariable);
                 if (Left is VariableReference LeftVariable) {
                     if (Right is Instance RightInstance) {
+                        // LeftVariable = RightInstance
                         await AssignToVariable(LeftVariable, RightInstance);
-                        return Left;
+
+                        // Return left variable reference or value
+                        if (ReturnType == ReturnType.InterpretResult) {
+                            return RightInstance;
+                        }
+                        else {
+                            return Left;
+                        }
                     }
                     else {
                         throw new InternalErrorException($"{LeftVariable.Token.Location}: Assignment value should be an instance, but got {Right.GetType().Name}");
@@ -1127,7 +1139,7 @@ namespace Embers
             return Results;
         }
         public async Task<Instances> InterpretAsync(List<Expression> Statements, Method? OnYield = null) {
-            Instance LastExpression = Nil;
+            Instances LastExpression = Nil;
             for (int Index = 0; Index < Statements.Count; Index++) {
                 Expression Statement = Statements[Index];
                 // Interpret expression and store the result
@@ -1142,9 +1154,9 @@ namespace Embers
             List<Phase1.Phase1Token> Tokens = Phase1.GetPhase1Tokens(Code);
             List<Expression> Statements = ObjectsToExpressions(Tokens, ExpressionsType.Statements);
 
-            Console.WriteLine(Statements.Inspect());
+            /*Console.WriteLine(Statements.Inspect());
             Console.Write("Press enter to continue.");
-            Console.ReadLine();
+            Console.ReadLine();*/
 
             return await InterpretAsync(Statements);
         }
