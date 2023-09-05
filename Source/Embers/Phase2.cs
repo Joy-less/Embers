@@ -666,7 +666,8 @@ namespace Embers
             }
             // No brackets e.g. puts "hi"
             else {
-                ArgumentObjects = GetObjectsUntil(Objects, ref Index, Object => (Object is Phase2Token Token && Token.Type == Phase2TokenType.EndOfStatement) || Object is Statement);
+                ArgumentObjects = GetObjectsUntil(Objects, ref Index, Object => (Object is Phase2Token Token
+                    && Token.Type == Phase2TokenType.EndOfStatement) || Object is Statement || Object is DoExpression);
                 Index--;
             }
 
@@ -696,7 +697,7 @@ namespace Embers
                         }
                     }
                 }
-                else if (NextObject is ObjectTokenExpression) {
+                else if (NextObject is Expression && NextObject is not Statement) {
                     return ParseArgumentsWithoutBrackets(Objects, ref Index);
                 }
             }
@@ -1249,11 +1250,6 @@ namespace Embers
                 // Parse arguments
                 int EndOfArgumentsIndex = MethodNameIndex;
                 List<Expression>? Arguments = ParseArguments(ParsedObjects, ref EndOfArgumentsIndex);
-
-                if (!WrappedInBrackets) {
-                    Console.WriteLine("--> " + ParsedObjects.Inspect());
-                    Console.WriteLine("<--");
-                }
 
                 // Add method call
                 if (Arguments != null) {

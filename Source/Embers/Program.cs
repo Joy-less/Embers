@@ -13,9 +13,15 @@ def a
     5
 end
 
-puts a do
+# Errors:
+# puts a do
+#     puts('hi')
+# end
+
+# Works:
+puts a {
     puts('hi')
-end
+}
 ";
                 Benchmark(() => new Interpreter().Evaluate(Code));
 
