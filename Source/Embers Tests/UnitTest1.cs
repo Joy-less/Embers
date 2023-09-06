@@ -130,6 +130,29 @@ namespace Embers_Tests
                 AssertDoesNotError(CodeB, true);
             }
 
+            // Break & return
+            AssertEqual(@"
+                $return_val = 0
+
+                def z
+                    $return_val += 1
+                    return
+                    $return_val -= 1000
+                end
+
+                $return_val += 4
+                loop do
+                    $return_val *= 3
+                    z
+                    break
+                    $return_val -= 10000
+                end
+                $return_val
+            ", 13L);
+            AssertErrors<SyntaxErrorException>(@"
+                break
+            ");
+
             // Lock script while running
             {
                 bool Success = false;

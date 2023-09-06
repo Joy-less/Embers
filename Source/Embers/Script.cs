@@ -361,7 +361,7 @@ namespace Embers
                 ArgumentNames = argumentNames ?? new();
                 Unsafe = isUnsafe;
             }
-            public async Task<Instances> Call(Script Script, Instance OnInstance, Instances? Arguments = null, Method? OnYield = null) {
+            public async Task<Instances> Call(Script Script, Instance OnInstance, Instances? Arguments = null, Method? OnYield = null, BreakHandleType BreakHandleType = BreakHandleType.Invalid) {
                 if (Unsafe && !Script.AllowUnsafeApi)
                     throw new RuntimeException("This method is unavailable since 'AllowUnsafeApi' is disabled for this script.");
 
@@ -391,9 +391,28 @@ namespace Embers
                         }
                     }
                     // Call method
-                    Instances ReturnValues = await Function(new MethodInput(Script, OnInstance, Arguments, OnYield));
-                    // Step back a scope
-                    Script.CurrentObject.Pop();
+                    Instances ReturnValues;
+                    try {
+                        ReturnValues = await Function(new MethodInput(Script, OnInstance, Arguments, OnYield));
+                    }
+                    catch (BreakException) {
+                        if (BreakHandleType == BreakHandleType.Rethrow) {
+                            throw;
+                        }
+                        else if (BreakHandleType == BreakHandleType.Destroy) {
+                            ReturnValues = Script.Interpreter.Nil;
+                        }
+                        else {
+                            throw new SyntaxErrorException("Invalid break (break must be in a loop)");
+                        }
+                    }
+                    catch (ReturnException Ex) {
+                        ReturnValues = Ex.Instances;
+                    }
+                    finally {
+                        // Step back a scope
+                        Script.CurrentObject.Pop();
+                    }
                     // Return method return value
                     return ReturnValues;
                 }
@@ -596,11 +615,16 @@ namespace Embers
             LocalInstanceMethod = null;
             return false;
         }
-
+        
+        public enum BreakHandleType {
+            Invalid,
+            Rethrow,
+            Destroy
+        }
         public enum ReturnType {
             InterpretResult,
             FoundVariable,
-            HypotheticalVariable,
+            HypotheticalVariable
         }
         async Task<Instances> InterpretExpressionAsync(Expression Expression, ReturnType ReturnType = ReturnType.InterpretResult, Method? OnYield = null) {
             // Method call
@@ -878,13 +902,18 @@ namespace Embers
             // If
             else if (Expression is IfExpression IfExpression) {
                 if (IfExpression.Condition == null || (await InterpretExpressionAsync(IfExpression.Condition))[0].IsTruthy) {
-                    return await InterpretAsync(IfExpression.Statements, OverrideDebounce: true);
+                    return await InternalInterpretAsync(IfExpression.Statements);
                 }
             }
             // While
             else if (Expression is WhileExpression WhileExpression) {
                 while ((await InterpretExpressionAsync(WhileExpression.Condition!))[0].IsTruthy) {
-                    await InterpretAsync(WhileExpression.Statements, OverrideDebounce: true);
+                    try {
+                        await InternalInterpretAsync(WhileExpression.Statements, InterpretType: InternalInterpretType.Loop);
+                    }
+                    catch (BreakException) {
+                        break;
+                    }
                 }
             }
             // While Statement
@@ -980,7 +1009,7 @@ namespace Embers
                     // Interpret class statements
                     await CreateTemporaryClassScope(NewModule, async () => {
                         await CreateTemporaryInstanceScope(new Instance(NewModule), async () => {
-                            await InterpretAsync(DefineClassStatement.BlockStatements, OverrideDebounce: true);
+                            await InternalInterpretAsync(DefineClassStatement.BlockStatements, InterpretType: InternalInterpretType.Method);
                         });
                     });
 
@@ -1004,9 +1033,15 @@ namespace Embers
             }
             // Return
             else if (Expression is ReturnStatement ReturnStatement) {
-                return ReturnStatement.ReturnValues != null
+                throw new ReturnException(
+                    ReturnStatement.ReturnValues != null
                     ? await InterpretExpressionsAsync(ReturnStatement.ReturnValues)
-                    : Interpreter.Nil;
+                    : Interpreter.Nil
+                );
+            }
+            // Break
+            else if (Expression is BreakStatement BreakStatement) {
+                throw new BreakException();
             }
             // Yield
             else if (Expression is YieldStatement YieldStatement) {
@@ -1014,7 +1049,7 @@ namespace Embers
                     List<Instance> YieldArgs = YieldStatement.YieldValues != null
                         ? await InterpretExpressionsAsync(YieldStatement.YieldValues)
                         : new();
-                    await OnYield.Call(this, null, YieldArgs);
+                    await OnYield.Call(this, null, YieldArgs, BreakHandleType: BreakHandleType.Destroy);
                 }
                 else {
                     throw new RuntimeException($"{YieldStatement.Location}: No block given to yield to");
@@ -1027,11 +1062,11 @@ namespace Embers
                     if (Branch.Condition != null) {
                         Instance ConditionResult = await InterpretExpressionAsync(Branch.Condition);
                         if (ConditionResult.IsTruthy) {
-                            return await InterpretAsync(Branch.Statements, OverrideDebounce: true);
+                            return await InternalInterpretAsync(Branch.Statements);
                         }
                     }
                     else {
-                        return await InterpretAsync(Branch.Statements, OverrideDebounce: true);
+                        return await InternalInterpretAsync(Branch.Statements);
                     }
                 }
             }
@@ -1160,28 +1195,43 @@ namespace Embers
             }
             return Results;
         }
-        
-        public async Task<Instances> InterpretAsync(List<Expression> Statements, Method? OnYield = null, bool OverrideDebounce = false) {
-            // Debounce
-            bool DebounceWasOverriden = false;
-            if (Running)
-                if (OverrideDebounce)
-                    DebounceWasOverriden = true;
-                else
-                    throw new ApiException("The script is already running.");
-            else
-                Running = true;
-
+        internal enum InternalInterpretType {
+            Block,
+            Loop,
+            Method
+        }
+        internal async Task<Instances> InternalInterpretAsync(List<Expression> Statements, Method? OnYield = null, InternalInterpretType InterpretType = InternalInterpretType.Block, bool IsRootInterpret = false) {
             // Interpret statements
             Instances LastExpression = Interpreter.Nil;
             for (int Index = 0; Index < Statements.Count; Index++) {
-                Expression Statement = Statements[Index];
                 // Interpret expression and store the result
+                Expression Statement = Statements[Index];
                 LastExpression = await InterpretExpressionAsync(Statement, OnYield: OnYield);
             }
+            // Return last expression
+            return LastExpression;
+        }
+        
+        public async Task<Instances> InterpretAsync(List<Expression> Statements, Method? OnYield = null) {
+            // Debounce
+            if (Running) throw new ApiException("The script is already running.");
+            Running = true;
 
-            // Deactivate debounce
-            if (!DebounceWasOverriden) Running = false;
+            // Interpret statements and store the result
+            Instances LastExpression;
+            try {
+                LastExpression = await InternalInterpretAsync(Statements, OnYield, InternalInterpretType.Method, IsRootInterpret: true);
+            }
+            catch (BreakException) {
+                throw new SyntaxErrorException("Invalid break (break must be in a loop)");
+            }
+            catch (ReturnException Ex) {
+                return Ex.Instances;
+            }
+            finally {
+                // Deactivate debounce
+                Running = false;
+            }
             return LastExpression;
         }
         public Instances Interpret(List<Expression> Statements) {

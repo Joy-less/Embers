@@ -5,7 +5,7 @@ Its minimalistic design should be suitable for use in game engines or modding sc
 
 ## Advantages
 - Easy to embed, sandbox, and control in your C# application or game.
-- Source code is much easier to understand, with everything in one place.
+- Source code is easier to understand, with everything in one place.
 - Each interpreter can have multiple scripts which can each run on their own thread and communicate.
 - Fully compatible with Unity.
 - Obsolete functionality, such as interpreting numbers starting with 0 as octal, is removed.

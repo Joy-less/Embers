@@ -24,6 +24,7 @@ namespace Embers
             Interpreter.RootInstance.InstanceMethods["catch"] = new Method(@catch, 1);
             Interpreter.RootInstance.InstanceMethods["lambda"] = new Method(lambda, 0);
             Interpreter.RootInstance.InstanceMethods["rand"] = new Method(rand, 1);
+            Interpreter.RootInstance.InstanceMethods["loop"] = new Method(loop, 0);
 
             // String
             Interpreter.String.InstanceMethods["+"] = new Method(String._Add, 1);
@@ -165,9 +166,19 @@ namespace Embers
             int RandomNumber = Random.Shared.Next((int)ExcludingMax);
             return new IntegerInstance(Input.Interpreter.Integer, RandomNumber);
         }
-        /*static async Task<Instances> loop(MethodInput Input) {
-            
-        }*/
+        static async Task<Instances> loop(MethodInput Input) {
+            Method? OnYield = Input.OnYield ?? throw new RuntimeException("No block given for loop");
+
+            while (true) {
+                try {
+                    await OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow);
+                }
+                catch (BreakException) {
+                    break;
+                }
+            }
+            return Input.Interpreter.Nil;
+        }
         static class ClassInstance {
             public static async Task<Instances> _Equals(MethodInput Input) {
                 Instance Left = Input.Instance;

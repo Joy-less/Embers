@@ -10,9 +10,9 @@ namespace Embers
             {
                 Interpreter Interpret = new();
                 Script Script = new(Interpret);
-                Benchmark(() => {
-                    Script.Evaluate("250000000.times do \n end");
-                });
+                Benchmark(() => 
+                    Script.Evaluate("250000000.times do \n end")
+                );
                 Console.ReadLine();
             }
         }

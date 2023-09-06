@@ -2,6 +2,7 @@
 {
     public abstract class EmbersException : Exception {
         public EmbersException(string Message) : base(Message) { }
+        public EmbersException() : base() { }
     }
     public class SyntaxErrorException : EmbersException {
         public SyntaxErrorException(string Message) : base(Message) { }
@@ -23,6 +24,15 @@
         }
         private ThrowException(string Message, string identifier) : base(Message) {
             Identifier = identifier;
+        }
+    }
+    public class BreakException : EmbersException {
+        public BreakException() : base() { }
+    }
+    public class ReturnException : EmbersException {
+        public readonly Script.Instances Instances;
+        public ReturnException(Script.Instances instances) : base() {
+            Instances = instances;
         }
     }
 

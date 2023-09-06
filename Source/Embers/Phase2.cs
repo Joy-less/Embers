@@ -243,7 +243,7 @@ namespace Embers
             }
             Method ToMethod() {
                 return new Method(async Input => {
-                    return await Input.Script.InterpretAsync(Statements, Input.OnYield, OverrideDebounce: true);
+                    return await Input.Script.InternalInterpretAsync(Statements, Input.OnYield, InternalInterpretType.Method);
                 }, ArgumentCount, Arguments);
             }
         }
