@@ -58,6 +58,7 @@ namespace Embers
                 // Default class and instance methods
                 Api.DefaultClassAndInstanceMethods.CopyTo(InstanceMethods);
                 Api.DefaultClassAndInstanceMethods.CopyTo(Methods);
+                Api.DefaultInstanceMethods.CopyTo(InstanceMethods);
             }
         }
         public class Class : Module {
@@ -102,7 +103,7 @@ namespace Embers
             public virtual Module ModuleRef { get { throw new ApiException("Instance is not a class/module reference"); } }
             public virtual Method MethodRef { get { throw new ApiException("Instance is not a method reference"); } }
             public virtual string Inspect() {
-                return ToString()!;
+                return $"Instance of {Module.Name}";
             }
             public virtual string LightInspect() {
                 return Inspect();
@@ -790,7 +791,7 @@ namespace Embers
                                     else if (TryGetLocalInstanceMethod(ObjectTokenExpression.Token.Value!, out Method? Method)) {
                                         // Call local method
                                         if (ReturnType == ReturnType.InterpretResult) {
-                                            return await Method!.Call(this, new ScopeReference(CurrentScope));
+                                            return await Method!.Call(this, CurrentInstance);
                                         }
                                         // Return method reference
                                         else {
@@ -835,7 +836,7 @@ namespace Embers
                                     else if (TryGetLocalInstanceMethod(ObjectTokenExpression.Token.Value!, out Method? Method)) {
                                         // Call local method
                                         if (ReturnType == ReturnType.InterpretResult) {
-                                            return await Method!.Call(this, new ScopeReference(CurrentScope));
+                                            return await Method!.Call(this, CurrentInstance);
                                         }
                                         // Return method reference
                                         else {

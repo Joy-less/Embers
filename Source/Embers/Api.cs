@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using System.Xml.Linq;
 using static Embers.Script;
 
 #pragma warning disable CS1998
@@ -80,6 +81,10 @@ namespace Embers
             {"!=", new Method(ClassInstance._NotEquals, 1)},
             {"inspect", new Method(ClassInstance.inspect, 0)},
             {"to_s", new Method(ClassInstance.to_s, 0)},
+            {"method", new Method(ClassInstance.method, 1)},
+        };
+        public static readonly IReadOnlyDictionary<string, Method> DefaultInstanceMethods = new Dictionary<string, Method>() {
+            {"attr_reader", new Method(ClassInstance.attr_reader, 1)},
         };
 
         // API
@@ -200,6 +205,41 @@ namespace Embers
             }
             public static async Task<Instances> to_s(MethodInput Input) {
                 return new StringInstance(Input.Interpreter.String, Input.Instance.LightInspect());
+            }
+            public static async Task<Instances> method(MethodInput Input) {
+                // Find method
+                string MethodName = Input.Arguments[0].String;
+                Method? FindMethod;
+                bool Found;
+                if (Input.Instance is PseudoInstance) {
+                    Found = Input.Instance.Module.Methods.TryGetValue(MethodName, out FindMethod);
+                }
+                else {
+                    Found = Input.Instance.InstanceMethods.TryGetValue(MethodName, out FindMethod);
+                }
+                // Return method if found
+                if (Found) {
+                    if (!Input.Script.AllowUnsafeApi && FindMethod!.Unsafe) {
+                        throw new RuntimeException($"The method '{MethodName}' is unavailable since 'AllowUnsafeApi' is disabled for this script.");
+                    }
+                    return new ProcInstance(Input.Interpreter.Proc, FindMethod!);
+                }
+                else {
+                    throw new RuntimeException($"Undefined method '{MethodName}' for {Input.Instance.LightInspect()}");
+                }
+            }
+            public static async Task<Instances> attr_reader(MethodInput Input) {
+                string VariableName = Input.Arguments[0].String;
+                // Prevent redefining unsafe API methods
+                if (!Input.Script.AllowUnsafeApi && Input.Instance.InstanceMethods.TryGetValue(VariableName, out Method? ExistingMethod) && ExistingMethod.Unsafe) {
+                    throw new RuntimeException($"The instance method '{VariableName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
+                }
+                // Create or overwrite instance method
+                Input.Instance.AddOrUpdateInstanceMethod(VariableName, new Method(async Input2 => {
+                    return Input2.Instance.InstanceVariables[VariableName];
+                }, 0));
+
+                return Input.Interpreter.Nil;
             }
         }
         static class String {

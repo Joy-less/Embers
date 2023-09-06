@@ -64,6 +64,12 @@ namespace Embers_Tests
 
                 return $result
             ");
+            AssertEqual(@"
+                def a
+                    5
+                end
+                return a{}.to_s
+            ", "5");
 
             // Assignment
             AssertEqual(@"
@@ -167,6 +173,19 @@ namespace Embers_Tests
                 }
                 Assert.IsTrue(Success);
             }
+
+            // attr_reader
+            AssertEqual(@"
+                class A
+                    attr_reader :b
+                    def a
+                        @b = 5
+                    end
+                end
+                c = A.new
+                c.a
+                return c.b
+            ", 5L);
         }
 
 

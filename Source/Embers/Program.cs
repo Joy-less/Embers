@@ -6,6 +6,20 @@ namespace Embers
     internal class Program
     {
         static void Main() {
+            // Test
+            {
+                Interpreter Interpret = new();
+                Script Script = new(Interpret);
+                Benchmark(() => 
+                    Script.Evaluate(@"
+def a
+    5
+end
+return a{}.to_s
+                    ")
+                );
+                Console.ReadLine();
+            }
             // Benchmark
             {
                 Interpreter Interpret = new();

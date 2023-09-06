@@ -45,6 +45,8 @@
             }
         }
 
+        static readonly IReadOnlyList<char> ValidIdentifierCharacters = new List<char>() {'.', ',', '(', ')', '"', '\'', '\n', ';'
+            , '=', '+', '-', '*', '/', '%', '#', '?', '{', '}'};
         public static List<Phase1Token> GetPhase1Tokens(string Code) {
             Code += "\n";
 
@@ -226,9 +228,9 @@
                     }
                     return false;
                 }
+                
                 static bool IsValidIdentifierCharacter(char Chara) {
-                    if (Chara == '.' || Chara == ',' || Chara == '(' || Chara == ')' || Chara == '"' || Chara == '\'' || Chara == '\n' || Chara == ';'
-                        || Chara == '=' || Chara == '+' || Chara == '-' || Chara == '*' || Chara == '/' || Chara == '%' || Chara == '#' || Chara == '?')
+                    if (ValidIdentifierCharacters.Contains(Chara))
                         return false;
                     if (char.IsWhiteSpace(Chara)) return false;
                     return true;
