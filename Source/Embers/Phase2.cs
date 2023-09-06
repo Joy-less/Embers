@@ -1,5 +1,5 @@
-﻿using static Embers.Interpreter;
-using static Embers.Phase1;
+﻿using static Embers.Phase1;
+using static Embers.Script;
 
 namespace Embers
 {
@@ -243,7 +243,7 @@ namespace Embers
             }
             Method ToMethod() {
                 return new Method(async Input => {
-                    return await Input.Interpreter.InterpretAsync(Statements, Input.OnYield);
+                    return await Input.Script.InterpretAsync(Statements, Input.OnYield, OverrideDebounce: true);
                 }, ArgumentCount, Arguments);
             }
         }
@@ -715,6 +715,7 @@ namespace Embers
             return null;
         }
         static ObjectTokenExpression GetMethodName(List<Phase2Object> Phase2Objects, ref int Index) {
+            SelfExpression? StartsWithSelf = null;
             bool NextTokenCanBeVariable = true;
             bool NextTokenCanBeDot = false;
             List<Phase2Token> MethodNamePath = new();
@@ -751,19 +752,43 @@ namespace Embers
                         }
                     }
                 }
+                else if (Object is SelfExpression SelfExpression) {
+                    if (MethodNamePath.Count == 0 && StartsWithSelf == null) {
+                        StartsWithSelf = SelfExpression;
+                        NextTokenCanBeVariable = false;
+                        NextTokenCanBeDot = true;
+                        continue;
+                    }
+                }
                 throw new SyntaxErrorException($"{Object.Location}: Unexpected token while parsing method path: {Object.Inspect()}");
             }
+
             // Remove method name path tokens and replace with a path expression
             ObjectTokenExpression? MethodNamePathExpression = null;
             if (MethodNamePath.Count == 1) {
-                MethodNamePathExpression = new ObjectTokenExpression(MethodNamePath[0]);
+                if (StartsWithSelf == null) {
+                    MethodNamePathExpression = new ObjectTokenExpression(MethodNamePath[0]);
+                }
+                else {
+                    MethodNamePathExpression = new PathExpression(StartsWithSelf, MethodNamePath[0]);
+                }
             }
             else if (MethodNamePath.Count == 0) {
                 throw new SyntaxErrorException($"{Phase2Objects[Index].Location}: Def keyword must be followed by an identifier (got {Phase2Objects[Index].Inspect()})");
             }
             else {
-                for (int i = 0; i < MethodNamePath.Count - 1; i++) {
-                    MethodNamePathExpression = new PathExpression(new ObjectTokenExpression(MethodNamePath[i]), MethodNamePath[i + 1]);
+                int StartLoopIndex = 0;
+                if (StartsWithSelf != null) {
+                    StartLoopIndex++;
+                    MethodNamePathExpression = new PathExpression(StartsWithSelf, MethodNamePath[0]);
+                }
+                for (int i = StartLoopIndex; i < MethodNamePath.Count - 1; i++) {
+                    if (MethodNamePathExpression == null) {
+                        MethodNamePathExpression = new ObjectTokenExpression(MethodNamePath[i]);
+                    }
+                    else {
+                        MethodNamePathExpression = new PathExpression(MethodNamePathExpression, MethodNamePath[i]);
+                    }
                 }
             }
             return MethodNamePathExpression!;
@@ -907,51 +932,78 @@ namespace Embers
             }
         }
         static ObjectTokenExpression GetClassName(List<Phase2Object> Phase2Objects, ref int Index, string ObjectType) {
+            SelfExpression? StartsWithSelf = null;
             bool NextTokenCanBeVariable = true;
             bool NextTokenCanBeDoubleColon = false;
             List<Phase2Token> ClassNamePath = new();
             for (Index++; Index < Phase2Objects.Count; Index++) {
                 Phase2Object Object = Phase2Objects[Index];
 
-                if (Object is Phase2Token ObjectToken) {
-                    if (ObjectToken.Type == Phase2TokenType.DoubleColon) {
+                if (Object is Phase2Token Token) {
+                    if (Token.Type == Phase2TokenType.DoubleColon) {
                         if (NextTokenCanBeDoubleColon) {
                             NextTokenCanBeVariable = true;
                             NextTokenCanBeDoubleColon = false;
+                            continue;
                         }
                         else {
-                            throw new SyntaxErrorException($"{ObjectToken.Location}: Expected expression before and after '.'");
+                            throw new SyntaxErrorException($"{Token.Location}: Expected expression before and after '.'");
                         }
                     }
-                    else if (IsVariableToken(ObjectToken)) {
+                    else if (Token.Type == Phase2TokenType.EndOfStatement || Token.IsObjectToken) {
+                        break;
+                    }
+                }
+                else if (Object is ObjectTokenExpression ObjectToken) {
+                    if (IsVariableToken(ObjectToken.Token)) {
                         if (NextTokenCanBeVariable) {
-                            ClassNamePath.Add(ObjectToken);
+                            ClassNamePath.Add(ObjectToken.Token);
                             NextTokenCanBeVariable = false;
                             NextTokenCanBeDoubleColon = true;
+                            continue;
                         }
                         else {
                             break;
                         }
                     }
-                    else if (ObjectToken.IsObjectToken) {
-                        break;
-                    }
-                    else {
-                        throw new SyntaxErrorException($"{ObjectToken.Location}: Unexpected token while parsing class path: {ObjectToken.Inspect()}");
+                }
+                else if (Object is SelfExpression SelfExpression) {
+                    if (ClassNamePath.Count == 0 && StartsWithSelf == null) {
+                        StartsWithSelf = SelfExpression;
+                        NextTokenCanBeVariable = false;
+                        NextTokenCanBeDoubleColon = true;
+                        continue;
                     }
                 }
+                throw new SyntaxErrorException($"{Object.Location}: Unexpected token while parsing class path: {Object.Inspect()}");
             }
+
             // Remove class name path tokens and replace with a path expression
             ObjectTokenExpression? ClassNamePathExpression = null;
             if (ClassNamePath.Count == 1) {
-                ClassNamePathExpression = new ObjectTokenExpression(ClassNamePath[0]);
+                if (StartsWithSelf == null) {
+                    ClassNamePathExpression = new ObjectTokenExpression(ClassNamePath[0]);
+                }
+                else {
+                    ClassNamePathExpression = new PathExpression(StartsWithSelf, ClassNamePath[0]);
+                }
             }
             else if (ClassNamePath.Count == 0) {
                 throw new SyntaxErrorException($"{Phase2Objects[Index].Location}: Class keyword must be followed by an identifier (got {Phase2Objects[Index].Inspect()})");
             }
             else {
-                for (int i = 0; i < ClassNamePath.Count - 1; i++) {
-                    ClassNamePathExpression = new PathExpression(new ObjectTokenExpression(ClassNamePath[i]), ClassNamePath[i + 1]);
+                int StartLoopIndex = 0;
+                if (StartsWithSelf != null) {
+                    StartLoopIndex++;
+                    ClassNamePathExpression = new PathExpression(StartsWithSelf, ClassNamePath[0]);
+                }
+                for (int i = StartLoopIndex; i < ClassNamePath.Count - 1; i++) {
+                    if (ClassNamePathExpression == null) {
+                        ClassNamePathExpression = new ObjectTokenExpression(ClassNamePath[i]);
+                    }
+                    else {
+                        ClassNamePathExpression = new PathExpression(ClassNamePathExpression, ClassNamePath[i]);
+                    }
                 }
             }
 

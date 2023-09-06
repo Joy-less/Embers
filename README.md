@@ -6,6 +6,7 @@ Its minimalistic design should be suitable for use in game engines or modding sc
 ## Advantages
 - Easy to embed, sandbox, and control in your C# application or game.
 - Source code is much easier to understand, with everything in one place.
+- Each interpreter can have multiple scripts which can each run on their own thread and communicate.
 - Fully compatible with Unity.
 - Obsolete functionality, such as interpreting numbers starting with 0 as octal, is removed.
 
@@ -19,31 +20,134 @@ Ruby is a very flexible language that is often likened to a set of sharp knives.
 ## Usage
 ### Basic example
 ```csharp
-using static Embers.Interpreter;
-
-// ...
-
 Interpreter MyInterpreter = new();
-MyInterpreter.Evaluate("puts 'hi!'");
+Script MyScript = new(MyInterpreter);
+MyScript.Evaluate("puts 'hi!'");
 ```
 ### Returning values
 ```csharp
-Instances Result = MyInterpreter.Evaluate("3 + 2");
+using static Embers.Script;
+
+// ...
+
+Instances Result = MyScript.Evaluate("3 + 2");
 Console.WriteLine(Result[0].Integer); // 5
 ```
-### Asynchronously
+### Asynchronous operation
 ```csharp
-await MyInterpreter.EvaluateAsync("sleep(2)");
+await MyScript.EvaluateAsync("sleep(2)");
 ```
+#### Several scripts example
+```csharp
+string CodeA = @"
+sleep(2)
+puts $my_global
+";
+string CodeB = @"
+$my_global = 3
+";
+Interpreter Interpreter = new();
+Script ScriptA = new(Interpreter);
+Script ScriptB = new(Interpreter);
+
+Task.Run(async () => await ScriptA.EvaluateAsync(CodeA));
+Thread.Sleep(1000);
+Task.Run(async () => await ScriptB.EvaluateAsync(CodeB));
+
+Thread.Sleep(2000);
+Console.WriteLine("Done");
+Console.ReadLine();
+```
+### Parallelisation
+You can also run code on multiple cores.
+
+Note that code running on a single thread will be faster if they are accessing the same variables.
+
+<details><summary>Benchmark</summary>
+
+```csharp
+const string BenchmarkCode = @"
+$i = 0
+while $i < 550000
+    # Random equations
+    r1 = rand 20
+    r2 = rand 20
+    r1 - (r2 % r1 + r1) * r2 - (r1 ** r2)
+    r2 *= r1 - r2
+    r1 = r2 + r2 + 2 * (r1 - r2)
+    
+    # Increment counter
+    $i += 1
+end
+";
+{
+    Console.WriteLine("Single thread benchmark:");
+
+    Interpreter SingleThreadInterpreter = new();
+    Script SingleThreadScript = new(SingleThreadInterpreter);
+
+    Benchmark(() => SingleThreadScript.Evaluate(BenchmarkCode));
+}
+
+{
+    Console.WriteLine("Multi-threading benchmark:");
+
+    Interpreter MultiThreadInterpreter = new();
+    Script MultiThreadScriptA = new(MultiThreadInterpreter);
+    Script MultiThreadScriptB = new(MultiThreadInterpreter);
+    Script MultiThreadScriptC = new(MultiThreadInterpreter);
+    Script MultiThreadScriptD = new(MultiThreadInterpreter);
+
+    Task.WaitAll(
+        Task.Run(() => Benchmark(() => MultiThreadScriptA.Evaluate(BenchmarkCode))),
+        Task.Run(() => Benchmark(() => MultiThreadScriptB.Evaluate(BenchmarkCode))),
+        Task.Run(() => Benchmark(() => MultiThreadScriptC.Evaluate(BenchmarkCode))),
+        Task.Run(() => Benchmark(() => MultiThreadScriptD.Evaluate(BenchmarkCode)))
+    );
+}
+
+{
+    Console.WriteLine("Parallel benchmark:");
+
+    Interpreter ParallelInterpreter = new();
+    Script ParallelScriptA = new(ParallelInterpreter);
+    Script ParallelScriptB = new(ParallelInterpreter);
+    Script ParallelScriptC = new(ParallelInterpreter);
+    Script ParallelScriptD = new(ParallelInterpreter);
+
+    Parallel.Invoke(
+        () => Benchmark(() => ParallelScriptA.Evaluate(BenchmarkCode)),
+        () => Benchmark(() => ParallelScriptB.Evaluate(BenchmarkCode)),
+        () => Benchmark(() => ParallelScriptC.Evaluate(BenchmarkCode)),
+        () => Benchmark(() => ParallelScriptD.Evaluate(BenchmarkCode))
+    );
+}
+```
+```
+Single thread benchmark:
+Took 16.356 seconds
+Multi-threading benchmark:
+Took 10.334 seconds
+Took 10.335 seconds
+Took 10.335 seconds
+Took 10.335 seconds
+Parallel benchmark:
+Took 10.398 seconds
+Took 10.398 seconds
+Took 10.398 seconds
+Took 10.398 seconds
+```
+</details>
+
 ### Custom methods
 ```csharp
-MyInterpreter.Integer.InstanceMethods.Add("double_number", new Method(async Input => {
+MyScript.Integer.InstanceMethods.Add("double_number", new Method(async Input => {
     return new IntegerInstance(Input.Interpreter.Integer, Input.Instance.Integer * 2);
 }, 0));
-MyInterpreter.Evaluate("puts 3.double_number"); // 6
+MyScript.Evaluate("puts 3.double_number"); // 6
 ```
 ```csharp
-MyInterpreter.Integer.InstanceMethods.Add("catify", new Method(async Input => {
+MyScript.Integer.InstanceMethods.Add("catify", new Method(async Input => {
     // Get target string
     Instance OnNumber = Input.Instance;
     Instance OnString = (await OnNumber.InstanceMethods["to_s"].Call(Input.Interpreter, OnNumber))[0];
@@ -56,11 +160,11 @@ MyInterpreter.Integer.InstanceMethods.Add("catify", new Method(async Input => {
     // Return result
     return new StringInstance(Input.Interpreter.String, CatifiedString);
 }, 1));
-MyInterpreter.Evaluate("puts 3.catify 2"); // 3 ~nya ~nya
+MyScript.Evaluate("puts 3.catify 2"); // 3 ~nya ~nya
 ```
 ### Custom classes
 ```csharp
-Class Vector2 = MyInterpreter.CreateClass("Vector2");
+Class Vector2 = MyScript.CreateClass("Vector2");
 Vector2.InstanceMethods["initialize"] = new Method(async Input => {
     Input.Instance.InstanceVariables["X"] = Input.Arguments[0];
     Input.Instance.InstanceVariables["Y"] = Input.Arguments[1];
@@ -72,11 +176,11 @@ Vector2.InstanceMethods["x"] = new Method(async Input => {
 Vector2.InstanceMethods["y"] = new Method(async Input => {
     return Input.Instance.InstanceVariables["Y"];
 }, 0);
-MyInterpreter.Evaluate("pos = Vector2.new 1, 2; puts(\"{#{pos.x}, #{pos.y}}\")"); // {1, 2}
+MyScript.Evaluate("pos = Vector2.new 1, 2; puts(\"{#{pos.x}, #{pos.y}}\")"); // {1, 2}
 ```
 which is the same as the following:
 ```csharp
-MyInterpreter.Evaluate(@"
+MyScript.Evaluate(@"
 class Vector2
     def initialize(x, y)
         @X = x
@@ -93,8 +197,8 @@ pos = Vector2.new 1, 2; puts(""{#{pos.x}, #{pos.y}}"") # {1, 2}
 ");
 ```
 ### Sandboxing
-If you don't trust the Ruby code that will be run, you can remove access to dangerous APIs by passing `false` when creating the interpreter:
+If you don't trust the Ruby code that will be run, you can remove access to dangerous methods by passing `false` when creating the script:
 ```csharp
-Interpreter MyInterpreter = new(false);
+Script MyScript = new(MyInterpreter, false);
 ```
 You can see which APIs can still be accessed in [`Api.cs`](Source/Embers/Api.cs).

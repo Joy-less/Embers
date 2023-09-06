@@ -1,6 +1,5 @@
 ﻿using System.Text;
-using static Embers.Phase2;
-using static Embers.Interpreter;
+using static Embers.Script;
 
 #pragma warning disable CS1998
 #pragma warning disable IDE1006
@@ -9,7 +8,9 @@ namespace Embers
 {
     public static class Api
     {
-        public static void Setup(Interpreter Interpreter) {
+        public static void Setup(Script Script) {
+            Interpreter Interpreter = Script.Interpreter;
+
             // Global methods
             Interpreter.RootInstance.InstanceMethods["puts"] = new Method(puts, null);
             Interpreter.RootInstance.InstanceMethods["print"] = new Method(print, null);
@@ -22,6 +23,7 @@ namespace Embers
             Interpreter.RootInstance.InstanceMethods["throw"] = new Method(@throw, 1);
             Interpreter.RootInstance.InstanceMethods["catch"] = new Method(@catch, 1);
             Interpreter.RootInstance.InstanceMethods["lambda"] = new Method(lambda, 0);
+            Interpreter.RootInstance.InstanceMethods["rand"] = new Method(rand, 1);
 
             // String
             Interpreter.String.InstanceMethods["+"] = new Method(String._Add, 1);
@@ -42,6 +44,8 @@ namespace Embers
             Interpreter.Integer.InstanceMethods["%"] = new Method(Integer._Modulo, 1);
             Interpreter.Integer.InstanceMethods["**"] = new Method(Integer._Exponentiate, 1);
             Interpreter.Integer.InstanceMethods["=="] = new Method(Integer._Equals, 1);
+            Interpreter.Integer.InstanceMethods["<"] = new Method(Integer._LessThan, 1);
+            Interpreter.Integer.InstanceMethods[">"] = new Method(Integer._GreaterThan, 1);
             Interpreter.Integer.InstanceMethods["to_i"] = new Method(Integer.to_i, 0);
             Interpreter.Integer.InstanceMethods["to_f"] = new Method(Integer.to_f, 0);
             Interpreter.Integer.InstanceMethods["times"] = new Method(Integer.times, 0);
@@ -60,13 +64,14 @@ namespace Embers
             // Proc
             Interpreter.Proc.InstanceMethods.Add("call", new Method(Proc.call, null));
 
-            // Unsafe Api
-            if (Interpreter.AllowUnsafeApi) {
-                // File
-                Module FileModule = Interpreter.CreateModule("File");
-                FileModule.Methods.Add("read", new Method(File.read, 1));
-                FileModule.Methods.Add("write", new Method(File.write, 2));
-            }
+            //
+            // Unsafe Apis
+            //
+
+            // File
+            Module FileModule = Script.CreateModule("File");
+            FileModule.Methods.Add("read", new Method(File.read, 1, isUnsafe: true));
+            FileModule.Methods.Add("write", new Method(File.write, 2, isUnsafe: true));
         }
 
         public static readonly IReadOnlyDictionary<string, Method> DefaultClassAndInstanceMethods = new Dictionary<string, Method>() {
@@ -138,7 +143,7 @@ namespace Embers
 
             string CatchIdentifier = Input.Arguments[0].String;
             try {
-                await OnYield.Call(Input.Interpreter, Input.Instance);
+                await OnYield.Call(Input.Script, Input.Instance);
             }
             catch (ThrowException Ex) {
                 if (Ex.Identifier != CatchIdentifier)
@@ -150,10 +155,15 @@ namespace Embers
             Method? OnYield = Input.OnYield ?? throw new RuntimeException("No block given for lambda");
 
             Instance NewProc = new ProcInstance(Input.Interpreter.Proc, new Method(
-                async Input => await OnYield.Call(Input.Interpreter, Input.Instance, Input.Arguments, Input.OnYield),
+                async Input => await OnYield.Call(Input.Script, Input.Instance, Input.Arguments, Input.OnYield),
                 null
             ));
             return NewProc;
+        }
+        static async Task<Instances> rand(MethodInput Input) {
+            long ExcludingMax = Input.Arguments[0].Integer;
+            int RandomNumber = Random.Shared.Next((int)ExcludingMax);
+            return new IntegerInstance(Input.Interpreter.Integer, RandomNumber);
         }
         /*static async Task<Instances> loop(MethodInput Input) {
             
@@ -172,7 +182,7 @@ namespace Embers
             public static async Task<Instances> _NotEquals(MethodInput Input) {
                 Instance Left = Input.Instance;
                 Instance Right = Input.Arguments[0];
-                return (await Left.TryCallInstanceMethod(Input.Interpreter, "==", Right)).SingleInstance().IsTruthy ? Input.Interpreter.False : Input.Interpreter.True;
+                return (await Left.TryCallInstanceMethod(Input.Script, "==", Right)).SingleInstance().IsTruthy ? Input.Interpreter.False : Input.Interpreter.True;
             }
             public static async Task<Instances> inspect(MethodInput Input) {
                 return new StringInstance(Input.Interpreter.String, Input.Instance.Inspect());
@@ -323,6 +333,32 @@ namespace Embers
                     return Input.Interpreter.False;
                 }
             }
+            public static async Task<Instances> _LessThan(MethodInput Input) {
+                Instance Left = Input.Instance;
+                Instance Right = Input.Arguments[0];
+                if (Right is IntegerInstance RightInteger && Left.Integer < RightInteger.Integer) {
+                    return Input.Interpreter.True;
+                }
+                else if (Right is FloatInstance RightFloat && Left.Float < RightFloat.Float) {
+                    return Input.Interpreter.True;
+                }
+                else {
+                    return Input.Interpreter.False;
+                }
+            }
+            public static async Task<Instances> _GreaterThan(MethodInput Input) {
+                Instance Left = Input.Instance;
+                Instance Right = Input.Arguments[0];
+                if (Right is IntegerInstance RightInteger && Left.Integer > RightInteger.Integer) {
+                    return Input.Interpreter.True;
+                }
+                else if (Right is FloatInstance RightFloat && Left.Float > RightFloat.Float) {
+                    return Input.Interpreter.True;
+                }
+                else {
+                    return Input.Interpreter.False;
+                }
+            }
             public static async Task<Instances> to_i(MethodInput Input) {
                 return Input.Instance;
             }
@@ -333,7 +369,7 @@ namespace Embers
                 if (Input.OnYield != null) {
                     long Times = Input.Instance.Integer;
                     for (long i = 0; i < Times; i++) {
-                        await Input.OnYield.Call(Input.Interpreter, Input.Instance);
+                        await Input.OnYield.Call(Input.Script, Input.Instance);
                     }
                 }
                 return Input.Interpreter.Nil;
@@ -412,7 +448,7 @@ namespace Embers
         }
         static class Proc {
             public static async Task<Instances> call(MethodInput Input) {
-                return await Input.Instance.Proc.Call(Input.Interpreter, Input.Instance, Input.Arguments, Input.OnYield);
+                return await Input.Instance.Proc.Call(Input.Script, Input.Instance, Input.Arguments, Input.OnYield);
             }
         }
     }

@@ -1,27 +1,17 @@
 ﻿using System.Diagnostics;
-using static Embers.Interpreter;
+using static Embers.Script;
 
 namespace Embers
 {
     internal class Program
     {
         static void Main() {
-            {
-                string Code = @"
-while true
-    break
-end
-";
-                Benchmark(() => new Interpreter().Evaluate(Code));
-
-                Console.ReadLine();
-            }
-
             // Benchmark
             {
                 Interpreter Interpret = new();
+                Script Script = new(Interpret);
                 Benchmark(() => {
-                    Interpret.Evaluate("250000000.times do \n end");
+                    Script.Evaluate("250000000.times do \n end");
                 });
                 Console.ReadLine();
             }

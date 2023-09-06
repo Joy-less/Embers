@@ -1,5 +1,5 @@
 using Embers;
-using static Embers.Interpreter;
+using static Embers.Script;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Embers_Tests
@@ -96,12 +96,60 @@ namespace Embers_Tests
                 end
                 my_method.call
             ", "hi");
+
+            // Monkey patching
+            AssertEqual(@"
+                class MyClass
+                    def a
+                        5
+                    end
+                end
+                class MyClass
+                    def b
+                        6
+                    end
+                end
+                my_instance = MyClass.new
+                my_instance.a + my_instance.b
+            ", 11L);
+
+            // Unsafe API
+            {
+                string CodeA = @"
+                    File.read('dummy')
+                ";
+                string CodeB = @"
+                    class File
+                        def self.read
+
+                        end
+                    end
+                ";
+                AssertErrors<RuntimeException>(CodeA, false);
+                AssertErrors<RuntimeException>(CodeB, false);
+                AssertDoesNotError(CodeB, true);
+            }
+
+            // Lock script while running
+            {
+                bool Success = false;
+                try {
+                    Interpreter Interpreter = new();
+                    Script Script = new(Interpreter);
+                    _ = Script.EvaluateAsync("sleep(2)");
+                    Script.Evaluate("puts 'hi'");
+                }
+                catch (Exception) {
+                    Success = true;
+                }
+                Assert.IsTrue(Success);
+            }
         }
 
 
         // Helper methods
-        public static void AssertEqual(string Code, object[] ExpectedResults) {
-            Instances Results = new Interpreter().Evaluate(Code);
+        public static void AssertEqual(string Code, object[] ExpectedResults, bool AllowUnsafeApi = true) {
+            Instances Results = new Script(new Interpreter(), allowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
 
             Assert.AreEqual(ExpectedResults.Length, Results.Count);
 
@@ -109,23 +157,23 @@ namespace Embers_Tests
                 Assert.AreEqual(ExpectedResults[i], Results[i].Object);
             }
         }
-        public static void AssertEqual(string Code, object ExpectedResult) {
-            Instances Results = new Interpreter().Evaluate(Code);
+        public static void AssertEqual(string Code, object ExpectedResult, bool AllowUnsafeApi = true) {
+            Instances Results = new Script(new Interpreter(), allowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
 
             Assert.AreEqual(1, Results.Count);
 
             Assert.AreEqual(ExpectedResult, Results[0].Object);
         }
-        public static void AssertEqualToNull(string Code) {
-            Instances Results = new Interpreter().Evaluate(Code);
+        public static void AssertEqualToNull(string Code, bool AllowUnsafeApi = true) {
+            Instances Results = new Script(new Interpreter(), allowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
 
             Assert.AreEqual(1, Results.Count);
 
             Assert.AreEqual(null, Results[0].Object);
         }
-        public static void AssertErrors<TError>(string Code) {
+        public static void AssertErrors<TError>(string Code, bool AllowUnsafeApi = true) {
             try {
-                new Interpreter().Evaluate(Code);
+                new Script(new Interpreter(), allowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
             }
             catch (Exception Ex) {
                 if (Ex.InnerException == null) {
@@ -139,7 +187,15 @@ namespace Embers_Tests
             Assert.Fail("Code did not error.");
         }
         public static void AssertErrors(string Code) {
-            AssertErrors<Exception>(Code);
+            AssertErrors<EmbersException>(Code);
+        }
+        public static void AssertDoesNotError(string Code, bool AllowUnsafeApi = true) {
+            try {
+                new Script(new Interpreter(), allowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
+            }
+            catch (Exception Ex) {
+                Assert.Fail($"Code errored ({Ex.GetType().Name}): {Ex.Message}.");
+            }
         }
     }
 }

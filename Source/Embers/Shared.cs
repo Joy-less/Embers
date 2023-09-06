@@ -17,7 +17,7 @@
     }
     public class ThrowException : EmbersException {
         public readonly string Identifier;
-        public static ThrowException New(Interpreter.Instance Identifier) {
+        public static ThrowException New(Script.Instance Identifier) {
             string Message = $"uncaught throw {Identifier.Inspect()}";
             return new ThrowException(Message, Identifier.String);
         }
