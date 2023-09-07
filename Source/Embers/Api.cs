@@ -66,6 +66,16 @@ namespace Embers
             // Proc
             Interpreter.Proc.InstanceMethods.Add("call", new Method(Proc.call, null));
 
+            // Array
+            Interpreter.Array.InstanceMethods.Add("[]", new Method(Array._Indexer, 1));
+            Interpreter.Array.InstanceMethods.Add("length", new Method(Array.length, 0));
+            Interpreter.Array.InstanceMethods.Add("count", new Method(Array.count, 0..1));
+            Interpreter.Array.InstanceMethods.Add("first", new Method(Array.first, 0));
+            Interpreter.Array.InstanceMethods.Add("last", new Method(Array.last, 0));
+            Interpreter.Array.InstanceMethods.Add("forty_two", new Method(Array.forty_two, 0));
+            Interpreter.Array.InstanceMethods.Add("sample", new Method(Array.sample, 0));
+            Interpreter.Array.InstanceMethods.Add("insert", new Method(Array.insert, 1..));
+
             // Random
             Class RandomClass = Script.CreateClass("Random");
             RandomClass.Methods.Add("rand", new Method(Random.rand, 0..1));
@@ -88,6 +98,7 @@ namespace Embers
             {"==", new Method(ClassInstance._Equals, 1)},
             {"!=", new Method(ClassInstance._NotEquals, 1)},
             {"inspect", new Method(ClassInstance.inspect, 0)},
+            {"class", new Method(ClassInstance.@class, 0)},
             {"to_s", new Method(ClassInstance.to_s, 0)},
             {"method", new Method(ClassInstance.method, 1)},
         };
@@ -153,7 +164,7 @@ namespace Embers
             throw ThrowException.New(Input.Arguments[0]);
         }
         static async Task<Instances> @catch(MethodInput Input) {
-            Method? OnYield = Input.OnYield ?? throw new RuntimeException("No block given for catch");
+            Method? OnYield = Input.OnYield ?? throw new RuntimeException($"{Input.Location}: No block given for catch");
 
             string CatchIdentifier = Input.Arguments[0].String;
             try {
@@ -166,7 +177,7 @@ namespace Embers
             return Input.Interpreter.Nil;
         }
         static async Task<Instances> lambda(MethodInput Input) {
-            Method? OnYield = Input.OnYield ?? throw new RuntimeException("No block given for lambda");
+            Method? OnYield = Input.OnYield ?? throw new RuntimeException($"{Input.Location}: No block given for lambda");
 
             Instance NewProc = new ProcInstance(Input.Interpreter.Proc, new Method(
                 async Input => await OnYield.Call(Input.Script, Input.Instance, Input.Arguments, Input.OnYield),
@@ -175,7 +186,7 @@ namespace Embers
             return NewProc;
         }
         static async Task<Instances> loop(MethodInput Input) {
-            Method? OnYield = Input.OnYield ?? throw new RuntimeException("No block given for loop");
+            Method? OnYield = Input.OnYield ?? throw new RuntimeException($"{Input.Location}: No block given for loop");
 
             while (true) {
                 try {
@@ -229,10 +240,13 @@ namespace Embers
             public static async Task<Instances> _NotEquals(MethodInput Input) {
                 Instance Left = Input.Instance;
                 Instance Right = Input.Arguments[0];
-                return (await Left.TryCallInstanceMethod(Input.Script, "==", Right)).SingleInstance().IsTruthy ? Input.Interpreter.False : Input.Interpreter.True;
+                return (await Left.TryCallInstanceMethod(Input.Script, "==", Right)).SingleInstance.IsTruthy ? Input.Interpreter.False : Input.Interpreter.True;
             }
             public static async Task<Instances> inspect(MethodInput Input) {
                 return new StringInstance(Input.Interpreter.String, Input.Instance.Inspect());
+            }
+            public static async Task<Instances> @class(MethodInput Input) {
+                return new ModuleReference(Input.Instance.Module);
             }
             public static async Task<Instances> to_s(MethodInput Input) {
                 return new StringInstance(Input.Interpreter.String, Input.Instance.LightInspect());
@@ -251,19 +265,19 @@ namespace Embers
                 // Return method if found
                 if (Found) {
                     if (!Input.Script.AllowUnsafeApi && FindMethod!.Unsafe) {
-                        throw new RuntimeException($"The method '{MethodName}' is unavailable since 'AllowUnsafeApi' is disabled for this script.");
+                        throw new RuntimeException($"{Input.Location}: The method '{MethodName}' is unavailable since 'AllowUnsafeApi' is disabled for this script.");
                     }
                     return new ProcInstance(Input.Interpreter.Proc, FindMethod!);
                 }
                 else {
-                    throw new RuntimeException($"Undefined method '{MethodName}' for {Input.Instance.LightInspect()}");
+                    throw new RuntimeException($"{Input.Location}: Undefined method '{MethodName}' for {Input.Instance.LightInspect()}");
                 }
             }
             public static async Task<Instances> attr_reader(MethodInput Input) {
                 string VariableName = Input.Arguments[0].String;
                 // Prevent redefining unsafe API methods
                 if (!Input.Script.AllowUnsafeApi && Input.Instance.InstanceMethods.TryGetValue(VariableName, out Method? ExistingMethod) && ExistingMethod.Unsafe) {
-                    throw new RuntimeException($"The instance method '{VariableName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
+                    throw new RuntimeException($"{Input.Location}: The instance method '{VariableName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
                 }
                 // Create or overwrite instance method
                 Input.Instance.AddOrUpdateInstanceMethod(VariableName, new Method(async Input2 => {
@@ -375,7 +389,7 @@ namespace Embers
                     return new IntegerInstance(Interpreter.Integer, (long)Result);
                 }
                 else {
-                    return new FloatInstance(Interpreter.Integer, Result);
+                    return new FloatInstance(Interpreter.Float, Result);
                 }
             }
             public static async Task<Instances> _Add(MethodInput Input) {
@@ -496,7 +510,7 @@ namespace Embers
                 }
             }
             public static async Task<Instances> to_i(MethodInput Input) {
-                return new IntegerInstance(Input.Interpreter.Float, Input.Instance.Integer);
+                return new IntegerInstance(Input.Interpreter.Integer, Input.Instance.Integer);
             }
             public static async Task<Instances> to_f(MethodInput Input) {
                 return Input.Instance;
@@ -510,10 +524,10 @@ namespace Embers
                     return new StringInstance(Input.Interpreter.String, FileContents);
                 }
                 catch (FileNotFoundException) {
-                    throw new RuntimeException($"No such file or directory: '{FilePath}'");
+                    throw new RuntimeException($"{Input.Location}: No such file or directory: '{FilePath}'");
                 }
                 catch (Exception Ex) {
-                    throw new RuntimeException($"Error reading file: '{Ex.Message}'");
+                    throw new RuntimeException($"{Input.Location}: Error reading file: '{Ex.Message}'");
                 }
             }
             public static async Task<Instances> write(MethodInput Input) {
@@ -524,13 +538,98 @@ namespace Embers
                     return Input.Interpreter.Nil;
                 }
                 catch (Exception Ex) {
-                    throw new RuntimeException($"Error writing file: '{Ex.Message}'");
+                    throw new RuntimeException($"{Input.Location}: Error writing file: '{Ex.Message}'");
                 }
             }
         }
         static class Proc {
             public static async Task<Instances> call(MethodInput Input) {
                 return await Input.Instance.Proc.Call(Input.Script, Input.Instance, Input.Arguments, Input.OnYield);
+            }
+        }
+        static class Array {
+            private static async Task<Instances> _GetIndex(MethodInput Input, int ArrayIndex) {
+                Instance Index = new IntegerInstance(Input.Interpreter.Integer, ArrayIndex);
+                return await Input.Instance.InstanceMethods["[]"].Call(Input.Script, Input.Instance, new Instances(Index));
+            }
+            private static int _RealisticIndex(MethodInput Input, long RawIndex) {
+                if (RawIndex < int.MinValue || RawIndex > int.MaxValue) {
+                    throw new RuntimeException($"{Input.Script.ApproximateLocation}: Index ({RawIndex}) is too large for array.");
+                }
+                int Index = (int)RawIndex;
+                return Index;
+            }
+            public static async Task<Instances> _Indexer(MethodInput Input) {
+                // Get array and index
+                List<Instance> Array = Input.Instance.Array;
+                int Index = _RealisticIndex(Input, Input.Arguments[0].Integer);
+
+                // Return value at array index or nil
+                if (Index >= 0 && Index < Array.Count) {
+                    return Array[Index];
+                }
+                else if (Index < 0 && Index > -Array.Count) {
+                    return Array[^(-Index)];
+                }
+                else {
+                    return Input.Interpreter.Nil;
+                }
+            }
+            public static async Task<Instances> length(MethodInput Input) {
+                List<Instance> Items = Input.Instance.Array;
+                return new IntegerInstance(Input.Interpreter.Integer, Items.Count);
+            }
+            public static async Task<Instances> count(MethodInput Input) {
+                if (Input.Arguments.Count == 0) {
+                    return await length(Input);
+                }
+                else {
+                    // Get the items and the item to count
+                    List<Instance> Items = Input.Instance.Array;
+                    Instance ItemToCount = Input.Arguments[0];
+
+                    // Count how many times the item appears in the array
+                    int Count = 0;
+                    foreach (Instance Item in Items) {
+                        Instances IsEqual = await Item.InstanceMethods["=="].Call(Input.Script, Item, ItemToCount);
+                        if (IsEqual[0].IsTruthy) {
+                            Count++;
+                        }
+                    }
+
+                    // Return the count
+                    return new IntegerInstance(Input.Interpreter.Integer, Count);
+                }
+            }
+            public static async Task<Instances> first(MethodInput Input) {
+                return await _GetIndex(Input, 0);
+            }
+            public static async Task<Instances> last(MethodInput Input) {
+                return await _GetIndex(Input, -1);
+            }
+            public static async Task<Instances> forty_two(MethodInput Input) {
+                return await _GetIndex(Input, 41);
+            }
+            public static async Task<Instances> sample(MethodInput Input) {
+                List<Instance> Items = Input.Instance.Array;
+                if (Items.Count != 0) {
+                    return Items[Input.Interpreter.InternalRandom.Next(0, Items.Count)];
+                }
+                else {
+                    return Input.Interpreter.Nil;
+                }
+            }
+            public static async Task<Instances> insert(MethodInput Input) {
+                List<Instance> Items = Input.Instance.Array;
+                int Index = _RealisticIndex(Input, Input.Arguments[0].Integer);
+
+                if (Input.Arguments.Count == 1) {
+                    Items.Insert(Index, Input.Arguments[1]);
+                }
+                else {
+                    Items.InsertRange(Index, Input.Arguments.MultiInstance.GetIndexRange(1));
+                }
+                return Input.Instance;
             }
         }
         static class Random {
@@ -553,7 +652,7 @@ namespace Embers
                         ExcludingMax = Input.Arguments[0].Float;
                     }
                     double RandomNumber = Input.Interpreter.Random.NextDouble() * (ExcludingMax - IncludingMin) + IncludingMin;
-                    return new FloatInstance(Input.Interpreter.Integer, RandomNumber);
+                    return new FloatInstance(Input.Interpreter.Float, RandomNumber);
                 }
             }
             public static async Task<Instances> srand(MethodInput Input) {

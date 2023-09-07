@@ -12,11 +12,18 @@ namespace Embers
                 Script Script = new(Interpret);
                 Benchmark(() => 
                     Script.Evaluate(@"
-puts rand 5
-puts rand
-puts srand
-puts rand 2
-puts rand 2.4
+a = [4, 7, 3]
+p a[1] # 7
+p a.count # 3
+p a.length # 3
+p a.count 3 # 1
+p a.first # 4
+p a.last # 3
+p a.sample # ?
+puts '---'
+b = [3, 4, 5]
+p b.insert 1, 'Hi', 'There'
+p b
                     ")
                 );
                 Console.ReadLine();

@@ -41,6 +41,8 @@ namespace Embers
             CloseBracket,
             StartCurly,
             EndCurly,
+            StartSquare,
+            EndSquare,
             EndOfStatement,
         }
         public readonly static Dictionary<string, Phase2TokenType> Keywords = new() {
@@ -165,11 +167,25 @@ namespace Embers
                 return $"new ConstantPathExpression({ParentObject.Serialise()}, {Token.Serialise()})";
             }
         }
+        /*public class IndexerExpression : Expression {
+            public readonly Expression ObjectToIndex;
+            public readonly Expression Index;
+            public IndexerExpression(Expression objectToIndex, Expression index) : base(index.Location) {
+                ObjectToIndex = objectToIndex;
+                Index = index;
+            }
+            public override string Inspect() {
+                return ObjectToIndex.Inspect() + "[" + Index.Inspect() + "]";
+            }
+            public override string Serialise() {
+                return $"new IndexerExpression({ObjectToIndex.Serialise()}, {Index.Serialise()})";
+            }
+        }*/
         public class MethodCallExpression : Expression {
-            public ObjectTokenExpression MethodPath;
+            public Expression MethodPath;
             public readonly List<Expression> Arguments;
             public MethodExpression? OnYield; // do ... end
-            public MethodCallExpression(ObjectTokenExpression methodPath, List<Expression>? arguments, MethodExpression? onYield = null) : base(methodPath.Location) {
+            public MethodCallExpression(Expression methodPath, List<Expression>? arguments, MethodExpression? onYield = null) : base(methodPath.Location) {
                 MethodPath = methodPath;
                 Arguments = arguments ?? new List<Expression>();
                 OnYield = onYield;
@@ -308,9 +324,9 @@ namespace Embers
                 return $"new WhileExpression({Location.Serialise()}, {Condition!.Serialise()}, {Statements.Serialise()})";
             }
         }
-        public class ListExpression : Expression {
+        /*public class ListOfExpressions : Expression {
             public readonly List<Expression> Expressions;
-            public ListExpression(DebugLocation location, List<Expression> expressions) : base(location) {
+            public ListOfExpressions(DebugLocation location, List<Expression> expressions) : base(location) {
                 Expressions = expressions;
             }
             public override string Inspect() {
@@ -319,7 +335,7 @@ namespace Embers
             public override string Serialise() {
                 return $"new ListExpression({Location.Serialise()}, {Expressions.Serialise()})";
             }
-        }
+        }*/
         public class AssignmentExpression : Expression {
             public ObjectTokenExpression Left;
             public Expression Right;
@@ -364,6 +380,18 @@ namespace Embers
             }
             public override string Serialise() {
                 return $"new DoExpression({OnYield.Serialise()})";
+            }
+        }
+        public class ArrayExpression : Expression {
+            public readonly List<Expression> Expressions;
+            public ArrayExpression(DebugLocation location, List<Expression> expressions) : base(location) {
+                Expressions = expressions;
+            }
+            public override string Inspect() {
+                return $"[{Expressions.Inspect()}]";
+            }
+            public override string Serialise() {
+                return $"new ArrayExpression({Location.Serialise()}, {Expressions.Serialise()})";
             }
         }
         public abstract class Statement : Expression {
@@ -472,7 +500,7 @@ namespace Embers
             }
         }
         
-        public class ListAddress<T> {
+        /*public class ListAddress<T> {
             public List<T> List;
             public int Index;
             public ListAddress(List<T> list, int index) {
@@ -481,7 +509,7 @@ namespace Embers
             }
             public T Get => List[Index];
             public T Set(T Value) => List[Index] = Value;
-        }
+        }*/
         public enum SplatType {
             Single,
             Double
@@ -496,13 +524,15 @@ namespace Embers
             Second,
         }
 
-        static Phase2Token IdentifierToPhase2(Phase1Token Token) {
+        static Phase2Token IdentifierToPhase2(Phase1Token Token, bool FollowsDot) {
             if (Token.Type != Phase1TokenType.Identifier)
                 throw new InternalErrorException($"{Token.Location}: Cannot convert identifier to phase 2 for token that is not an identifier");
 
-            foreach (KeyValuePair<string, Phase2TokenType> Keyword in Keywords) {
-                if (Token.Value == Keyword.Key) {
-                    return new Phase2Token(Token.Location, Keyword.Value, null, Token);
+            if (!FollowsDot) {
+                foreach (KeyValuePair<string, Phase2TokenType> Keyword in Keywords) {
+                    if (Token.Value == Keyword.Key) {
+                        return new Phase2Token(Token.Location, Keyword.Value, null, Token);
+                    }
                 }
             }
 
@@ -610,10 +640,11 @@ namespace Embers
             // Phase 1 tokens to phase 2 tokens
             List<Phase2Token> NewTokens = new();
             for (int i = 0; i < Tokens.Count; i++) {
+                Phase1Token? LastToken = i - 1 >= 0 ? Tokens[i - 1] : null;
                 Phase1Token Token = Tokens[i];
 
                 if (Token.Type == Phase1TokenType.Identifier) {
-                    NewTokens.Add(IdentifierToPhase2(Token));
+                    NewTokens.Add(IdentifierToPhase2(Token, LastToken != null && LastToken.Type == Phase1TokenType.Dot));
                 }
                 else if (Token.Type == Phase1TokenType.Integer) {
                     if (i + 2 < Tokens.Count && Tokens[i + 1].Type == Phase1TokenType.Dot && Tokens[i + 2].Type == Phase1TokenType.Integer) {
@@ -637,6 +668,8 @@ namespace Embers
                         Phase1TokenType.CloseBracket => new Phase2Token(Token.Location, Phase2TokenType.CloseBracket, Token.Value, Token),
                         Phase1TokenType.StartCurly => new Phase2Token(Token.Location, Phase2TokenType.StartCurly, Token.Value, Token),
                         Phase1TokenType.EndCurly => new Phase2Token(Token.Location, Phase2TokenType.EndCurly, Token.Value, Token),
+                        Phase1TokenType.StartSquare => new Phase2Token(Token.Location, Phase2TokenType.StartSquare, Token.Value, Token),
+                        Phase1TokenType.EndSquare => new Phase2Token(Token.Location, Phase2TokenType.EndSquare, Token.Value, Token),
                         Phase1TokenType.EndOfStatement => new Phase2Token(Token.Location, Phase2TokenType.EndOfStatement, Token.Value, Token),
                         _ => throw new InternalErrorException($"{Token.Location}: Conversion of {Token.Type} from phase 1 to phase 2 not supported")
                     });
@@ -1324,6 +1357,65 @@ namespace Embers
             // Get Blocks
             ParsedObjects = GetBlocks(ParsedObjects);
 
+            // Arrays
+            {
+                Stack<int> SquareBracketsStack = new();
+                for (int i = 0; i < ParsedObjects.Count; i++) {
+                    Phase2Object Object = ParsedObjects[i];
+
+                    if (Object is Phase2Token Token) {
+                        if (Token.Type == Phase2TokenType.StartSquare) {
+                            SquareBracketsStack.Push(i);
+                        }
+                        else if (Token.Type == Phase2TokenType.EndSquare) {
+                            if (SquareBracketsStack.TryPop(out int OpenBracketIndex)) {
+                                // Check whether [] is array or indexer
+                                Expression? IsIndexer = null;
+                                if (OpenBracketIndex - 1 >= 0) {
+                                    Phase2Object OriginalLastObject = ParsedObjects[OpenBracketIndex - 1];
+                                    if (OriginalLastObject is Expression OriginalLastExpression && OriginalLastObject is not Statement) {
+                                        IsIndexer = OriginalLastExpression;
+                                    }
+                                }
+
+                                // Get objects enclosed in []
+                                List<Phase2Object> EnclosedObjects = ParsedObjects.GetIndexRange(OpenBracketIndex + 1, i - 1);
+                                // Remove objects from objects list
+                                ParsedObjects.RemoveIndexRange(OpenBracketIndex, i);
+
+                                // Indexer
+                                if (IsIndexer != null) {
+                                    // Get index
+                                    Expression Index = ObjectsToExpression(EnclosedObjects);
+                                    // Create indexer expression
+                                    ParsedObjects.Insert(OpenBracketIndex, new MethodCallExpression(
+                                        new PathExpression(IsIndexer, new Phase2Token(ParsedObjects[OpenBracketIndex].Location, Phase2TokenType.LocalVariableOrMethod, "[]")),
+                                        new List<Expression>() {Index}
+                                    ));
+                                    // Remove indexed object
+                                    ParsedObjects.RemoveAt(OpenBracketIndex - 1);
+                                }
+                                // Array
+                                else {
+                                    // Get items to put in array
+                                    List<Expression> ArrayItems = ObjectsToExpressions(EnclosedObjects, ExpressionsType.CommaSeparatedExpressions);
+                                    // Create array expression
+                                    ParsedObjects.Insert(OpenBracketIndex, new ArrayExpression(Token.Location, ArrayItems));
+                                }
+                                // Move on
+                                i = OpenBracketIndex;
+                            }
+                            else {
+                                throw new SyntaxErrorException($"{Token.Location}: Unexpected square close bracket");
+                            }
+                        }
+                    }
+                }
+                if (SquareBracketsStack.TryPop(out int RemainingOpenBracketIndex)) {
+                    throw new SyntaxErrorException($"{ParsedObjects[RemainingOpenBracketIndex].Location}: Unclosed square bracket");
+                }
+            }
+
             // Method calls (any)
             void ParseMethodCall(ObjectTokenExpression MethodName, int MethodNameIndex, bool WrappedInBrackets) {
                 // Parse arguments
@@ -1446,10 +1538,13 @@ namespace Embers
                             // e.g. A + . + b() = A.b()
                             else if (LastObject is Expression LastObjectExpression && NextObject is MethodCallExpression NextMethodCall) {
                                 if (NextMethodCall.MethodPath is PathExpression) {
-                                    throw new InternalErrorException($"Method call name following '.' should not be path expression (got {NextMethodCall.MethodPath.Inspect()})");
+                                    throw new InternalErrorException($"{NextMethodCall.MethodPath.Location}: Method call name following '.' should not be path expression (got {NextMethodCall.MethodPath.Inspect()})");
+                                }
+                                else if (NextMethodCall.MethodPath is not ObjectTokenExpression) {
+                                    throw new RuntimeException($"{NextMethodCall.MethodPath.Location}: Method call name following '.' should be object token expression (got {NextMethodCall.MethodPath.Inspect()})");
                                 }
                                 ParsedObjects.RemoveRange(i - 1, 2);
-                                NextMethodCall.MethodPath = new PathExpression(LastObjectExpression, NextMethodCall.MethodPath.Token);
+                                NextMethodCall.MethodPath = new PathExpression(LastObjectExpression, ((ObjectTokenExpression)NextMethodCall.MethodPath).Token);
                                 i -= 2;
                             }
                             else {
@@ -1672,7 +1767,7 @@ namespace Embers
                         else if (ParsedObject is Phase2Token ParsedToken && ParsedToken.Type == Phase2TokenType.EndOfStatement) {
                         }
                         else {
-                            throw new SyntaxErrorException($"{ParsedObject.Location}: Expected expression, got {ParsedObject.Inspect()} (in {ParsedObjects.Inspect()})");
+                            throw new SyntaxErrorException($"{ParsedObject.Location}: Expected expression, got {ParsedObject.Inspect()}");
                         }
                     }
                 }
@@ -1855,6 +1950,17 @@ namespace Embers
             string ListInspection = "";
             if (List != null) {
                 foreach (Phase2.Phase2Object Object in List) {
+                    if (ListInspection.Length != 0)
+                        ListInspection += Separator;
+                    ListInspection += Object.Inspect();
+                }
+            }
+            return ListInspection;
+        }
+        public static string InspectInstances<T>(this List<T>? List, string Separator = ", ") where T : Instance {
+            string ListInspection = "";
+            if (List != null) {
+                foreach (Instance Object in List) {
                     if (ListInspection.Length != 0)
                         ListInspection += Separator;
                     ListInspection += Object.Inspect();

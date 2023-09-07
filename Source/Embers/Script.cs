@@ -10,14 +10,13 @@ namespace Embers
         public readonly Interpreter Interpreter;
         public readonly bool AllowUnsafeApi;
         public bool Running { get; private set; }
+        public DebugLocation ApproximateLocation { get; private set; } = DebugLocation.Unknown;
 
         readonly Stack<object> CurrentObject = new();
         Block CurrentBlock => (Block)CurrentObject.First(obj => obj is Block);
         Scope CurrentScope => (Scope)CurrentObject.First(obj => obj is Scope);
         Module CurrentModule => (Module)CurrentObject.First(obj => obj is Module);
         Instance CurrentInstance => (Instance)CurrentObject.First(obj => obj is Instance);
-
-        DebugLocation ApproximateLocation = DebugLocation.Unknown;
 
         public Instance CreateInstanceWithNew(Class Class) {
             if (Class == Interpreter.NilClass)
@@ -34,6 +33,10 @@ namespace Embers
                 return new IntegerInstance(Interpreter.Integer, 0);
             else if (Class == Interpreter.Float)
                 return new FloatInstance(Interpreter.Float, 0);
+            else if (Class == Interpreter.Proc)
+                throw new RuntimeException($"{ApproximateLocation}: Tried to create Proc object without a block");
+            else if (Class == Interpreter.Array)
+                return new ArrayInstance(Interpreter.Array, new List<Instance>());
             else
                 return new Instance(Class);
         }
@@ -102,6 +105,7 @@ namespace Embers
             public virtual long Integer { get { throw new RuntimeException("Instance is not an integer"); } }
             public virtual double Float { get { throw new RuntimeException("Instance is not a float"); } }
             public virtual Method Proc { get { throw new RuntimeException("Instance is not a proc"); } }
+            public virtual List<Instance> Array { get { throw new RuntimeException("Instance is not an array"); } }
             public virtual Module ModuleRef { get { throw new ApiException("Instance is not a class/module reference"); } }
             public virtual Method MethodRef { get { throw new ApiException("Instance is not a method reference"); } }
             public virtual string Inspect() {
@@ -285,6 +289,20 @@ namespace Embers
                 Value = value;
             }
         }
+        public class ArrayInstance : Instance {
+            List<Instance> Value;
+            public override object? Object { get { return Value; } }
+            public override List<Instance> Array { get { return Value; } }
+            public override string Inspect() {
+                return $"[{Value.InspectInstances()}]";
+            }
+            public ArrayInstance(Class fromClass, List<Instance> value) : base(fromClass) {
+                Value = value;
+            }
+            public void SetValue(List<Instance> value) {
+                Value = value;
+            }
+        }
         public abstract class PseudoInstance : Instance {
             public override Dictionary<string, Instance> InstanceVariables { get { throw new ApiException($"{GetType().Name} instance does not have instance variables"); } }
             public override Dictionary<string, Method> InstanceMethods { get { throw new ApiException($"{GetType().Name} instance does not have instance methods"); } }
@@ -446,6 +464,7 @@ namespace Embers
                 Arguments = arguments;
                 OnYield = onYield;
             }
+            public DebugLocation Location => Script.ApproximateLocation;
         }
         public class IntRange {
             public readonly int? Min;
@@ -455,8 +474,18 @@ namespace Embers
                 Max = max;
             }
             public IntRange(Range range) {
-                Min = range.Start.Value >= 0 ? range.Start.Value : null;
-                Max = range.End.Value >= 0 ? range.End.Value : null;
+                if (range.Start.IsFromEnd) {
+                    Min = null;
+                    Max = range.End.Value;
+                }
+                else if (range.End.IsFromEnd) {
+                    Min = range.Start.Value;
+                    Max = null;
+                }
+                else {
+                    Min = range.Start.Value;
+                    Max = range.End.Value;
+                }
             }
             public bool IsInRange(int Number) {
                 if (Min != null && Number < Min) return false;
@@ -523,14 +552,25 @@ namespace Embers
                     yield return Instance;
                 }
             }
-            public Instance SingleInstance() {
+            public Instance SingleInstance { get {
                 if (Count == 1) {
                     return this[0];
                 }
                 else {
                     throw new SyntaxErrorException($"Unexpected instances (expected one, got {Count})");
                 }
-            }
+            } }
+            public List<Instance> MultiInstance { get {
+                if (InstanceList != null) {
+                    return InstanceList;
+                }
+                else if (Instance != null) { 
+                    return new List<Instance>() {Instance};
+                }
+                else {
+                    return new List<Instance>();
+                }
+            } }
         }
 
         public async Task Warn(string Message) {
@@ -650,33 +690,50 @@ namespace Embers
                             MethodOwner = new ModuleReference(MethodModule);
                         }
                         // Call class method
-                        return await CreateTemporaryClassScope(MethodModule, async () =>
-                            await MethodModule.Methods[MethodReference.Token.Value!].Call(
-                                this, MethodOwner, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
-                            )
-                        );
+                        bool Found = MethodModule.Methods.TryGetValue(MethodReference.Token.Value!, out Method? StaticMethod);
+                        if (Found) {
+                            return await CreateTemporaryClassScope(MethodModule, async () =>
+                                await StaticMethod!.Call(
+                                    this, MethodOwner, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
+                                )
+                            );
+                        }
+                        else {
+                            throw new RuntimeException($"{MethodReference.Token.Location}: Undefined method '{MethodReference.Token.Value!}' for {CurrentInstance.Module.Name}");
+                        }
                     }
                     // Instance method
                     else {
                         // Local
                         if (MethodReference.IsLocalReference) {
                             // Call local instance method
-                            TryGetLocalInstanceMethod(MethodReference.Token.Value!, out Method? LocalInstanceMethod);
-                            return await CreateTemporaryInstanceScope(CurrentInstance, async () =>
-                                await LocalInstanceMethod!.Call(
-                                    this, CurrentInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
-                                )
-                            );
+                            bool Found = TryGetLocalInstanceMethod(MethodReference.Token.Value!, out Method? LocalInstanceMethod);
+                            if (Found) {
+                                return await CreateTemporaryInstanceScope(CurrentInstance, async () =>
+                                    await LocalInstanceMethod!.Call(
+                                        this, CurrentInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
+                                    )
+                                );
+                            }
+                            else {
+                                throw new RuntimeException($"{MethodReference.Token.Location}: Undefined method '{MethodReference.Token.Value!}'");
+                            }
                         }
                         // Path
                         else {
                             Instance MethodInstance = MethodReference.Instance!;
                             // Call instance method
-                            return await CreateTemporaryInstanceScope(MethodInstance, async () =>
-                                await MethodInstance.InstanceMethods[MethodReference.Token.Value!].Call(
-                                    this, MethodInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
-                                )
-                            );
+                            bool Found = MethodInstance.InstanceMethods.TryGetValue(MethodReference.Token.Value!, out Method? PathInstanceMethod);
+                            if (Found) {
+                                return await CreateTemporaryInstanceScope(MethodInstance, async () =>
+                                    await PathInstanceMethod!.Call(
+                                        this, MethodInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
+                                    )
+                                );
+                            }
+                            else {
+                                throw new RuntimeException($"{MethodReference.Token.Location}: Undefined method '{MethodReference.Token.Value!}' for {CurrentInstance.Module.Name}");
+                            }
                         }
                     }
                 }
@@ -905,6 +962,10 @@ namespace Embers
                     }
                 }
             }
+            /*// Indexer
+            else if (Expression is IndexerExpression IndexerExpression) {
+                
+            }*/
             // If
             else if (Expression is IfExpression IfExpression) {
                 if (IfExpression.Condition == null || (await InterpretExpressionAsync(IfExpression.Condition))[0].IsTruthy) {
@@ -922,6 +983,14 @@ namespace Embers
                     }
                 }
             }
+            // Array
+            else if (Expression is ArrayExpression ArrayExpression) {
+                List<Instance> Items = new();
+                foreach (Expression Item in ArrayExpression.Expressions) {
+                    Items.Add(await InterpretExpressionAsync(Item));
+                }
+                return new ArrayInstance(Interpreter.Array, Items);
+            }
             // While Statement
             else if (Expression is WhileStatement WhileStatement) {
                 await InterpretExpressionAsync(WhileStatement.WhileExpression);
@@ -932,14 +1001,14 @@ namespace Embers
             }
             // Logical operator
             else if (Expression is LogicalExpression LogicalExpression) {
-                Instance Left = (await InterpretExpressionAsync(LogicalExpression.Left)).SingleInstance();
+                Instance Left = (await InterpretExpressionAsync(LogicalExpression.Left)).SingleInstance;
                 switch (LogicalExpression.LogicType) {
                     case LogicalExpression.LogicalExpressionType.And:
                         if (!Left.IsTruthy)
                             return Left;
                         break;
                 }
-                Instance Right = (await InterpretExpressionAsync(LogicalExpression.Right)).SingleInstance();
+                Instance Right = (await InterpretExpressionAsync(LogicalExpression.Right)).SingleInstance;
                 switch (LogicalExpression.LogicType) {
                     case LogicalExpression.LogicalExpressionType.And:
                         return Right;

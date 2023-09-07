@@ -191,6 +191,12 @@ namespace Embers_Tests
             AssertEqual(@"
                 return system('echo %date%').chomp
             ", Obj => Obj is string Str && DateTime.TryParse(Str, out _));
+
+            // Arrays
+            AssertEqual(@"
+                a = [4, 7]
+                return a[1], a.count
+            ", new object[] {7L, 2L});
         }
 
 
@@ -198,7 +204,7 @@ namespace Embers_Tests
         public static void AssertEqual(string Code, object[] ExpectedResults, bool AllowUnsafeApi = true) {
             Instances Results = new Script(new Interpreter(), allowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
 
-            Assert.AreEqual(ExpectedResults.Length, Results.Count);
+            Assert.AreEqual(ExpectedResults.Length, Results.Count, "Wrong number of objects.");
 
             for (int i = 0; i < ExpectedResults.Length; i++) {
                 Assert.AreEqual(ExpectedResults[i], Results[i].Object);
@@ -207,21 +213,21 @@ namespace Embers_Tests
         public static void AssertEqual(string Code, object ExpectedResult, bool AllowUnsafeApi = true) {
             Instances Results = new Script(new Interpreter(), allowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
 
-            Assert.AreEqual(1, Results.Count);
+            Assert.AreEqual(1, Results.Count, "Wrong number of objects.");
 
             Assert.AreEqual(ExpectedResult, Results[0].Object);
         }
         public static void AssertEqualToNull(string Code, bool AllowUnsafeApi = true) {
             Instances Results = new Script(new Interpreter(), allowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
 
-            Assert.AreEqual(1, Results.Count);
+            Assert.AreEqual(1, Results.Count, "Wrong number of objects.");
 
             Assert.AreEqual(null, Results[0].Object);
         }
         public static void AssertEqual(string Code, Func<object?, bool> CheckEquality, bool AllowUnsafeApi = true) {
             Instances Results = new Script(new Interpreter(), allowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
 
-            Assert.AreEqual(1, Results.Count);
+            Assert.AreEqual(1, Results.Count, "Wrong number of objects.");
 
             bool Equal = CheckEquality(Results[0].Object);
             Assert.IsTrue(Equal);

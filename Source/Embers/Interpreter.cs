@@ -19,6 +19,7 @@ namespace Embers
         public readonly Class Integer;
         public readonly Class Float;
         public readonly Class Proc;
+        public readonly Class Array;
 
         public readonly Instance Nil;
         public readonly Instance True;
@@ -43,6 +44,7 @@ namespace Embers
             Integer = MainScript.CreateClass("Integer");
             Float = MainScript.CreateClass("Float");
             Proc = MainScript.CreateClass("Proc");
+            Array = MainScript.CreateClass("Array");
 
             RandomSeed = InternalRandom.NextInt64();
             Random = new Random(RandomSeed.GetHashCode());

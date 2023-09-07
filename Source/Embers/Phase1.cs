@@ -23,6 +23,8 @@
             Colon,
             StartCurly,
             EndCurly,
+            StartSquare,
+            EndSquare,
         }
         public class Phase1Token {
             public readonly DebugLocation Location;
@@ -45,8 +47,8 @@
             }
         }
 
-        static readonly IReadOnlyList<char> ValidIdentifierCharacters = new List<char>() {'.', ',', '(', ')', '"', '\'', '\n', ';'
-            , '=', '+', '-', '*', '/', '%', '#', '?', '{', '}'};
+        static readonly IReadOnlyList<char> InvalidIdentifierCharacters = new List<char>() {'.', ',', '(', ')', '"', '\'', ';',
+            '=', '+', '-', '*', '/', '%', '#', '?', '{', '}', '[', ']'};
         public static List<Phase1Token> GetPhase1Tokens(string Code) {
             Code += "\n";
 
@@ -230,7 +232,7 @@
                 }
                 
                 static bool IsValidIdentifierCharacter(char Chara) {
-                    if (ValidIdentifierCharacters.Contains(Chara))
+                    if (InvalidIdentifierCharacters.Contains(Chara))
                         return false;
                     if (char.IsWhiteSpace(Chara)) return false;
                     return true;
@@ -491,7 +493,7 @@
                         case '#':
                             do {
                                 i++;
-                            } while (Code[i] != '\n');
+                            } while (Code[i] != '\n' && Code[i] != '\r');
                             break;
                         case '?':
                             if (Tokens.Count != 0 && Tokens[^1].Type == Phase1TokenType.Identifier && !Tokens[^1].Value!.EndsWith('?') && !FollowsWhitespace) {
@@ -519,6 +521,12 @@
                                 Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
                             // Add end curly bracket
                             Tokens.Add(new(Location, Phase1TokenType.EndCurly, "}", FollowsWhitespace));
+                            break;
+                        case '[':
+                            Tokens.Add(new(Location, Phase1TokenType.StartSquare, "[", FollowsWhitespace));
+                            break;
+                        case ']':
+                            Tokens.Add(new(Location, Phase1TokenType.EndSquare, "]", FollowsWhitespace));
                             break;
                         default:
                             // Skip whitespace
