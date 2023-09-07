@@ -186,6 +186,11 @@ namespace Embers_Tests
                 c.a
                 return c.b
             ", 5L);
+
+            // system
+            AssertEqual(@"
+                return system('echo %date%').chomp
+            ", Obj => Obj is string Str && DateTime.TryParse(Str, out _));
         }
 
 
@@ -212,6 +217,14 @@ namespace Embers_Tests
             Assert.AreEqual(1, Results.Count);
 
             Assert.AreEqual(null, Results[0].Object);
+        }
+        public static void AssertEqual(string Code, Func<object?, bool> CheckEquality, bool AllowUnsafeApi = true) {
+            Instances Results = new Script(new Interpreter(), allowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
+
+            Assert.AreEqual(1, Results.Count);
+
+            bool Equal = CheckEquality(Results[0].Object);
+            Assert.IsTrue(Equal);
         }
         public static void AssertErrors<TError>(string Code, bool AllowUnsafeApi = true) {
             try {

@@ -1486,7 +1486,7 @@ namespace Embers
                                         "and" or "&&" => LogicalExpression.LogicalExpressionType.And,
                                         "or" or "||" => LogicalExpression.LogicalExpressionType.Or,
                                         "^" => LogicalExpression.LogicalExpressionType.Xor,
-                                        _ => throw new InternalErrorException($"Unhandled logic expression type: '{Token.Value}'")
+                                        _ => throw new InternalErrorException($"{Token.Location}: Unhandled logic expression type: '{Token.Value}'")
                                     };
                                     ParsedObjects.Insert(i, new LogicalExpression(LastExpression.Location, LogicType, LastExpression, NextExpression));
                                 }
@@ -1631,11 +1631,11 @@ namespace Embers
                                 ParsedObjects.Insert(i, ConditionalExpression);
                             }
                             else {
-                                throw new SyntaxErrorException("Expected condition after 'if'");
+                                throw new SyntaxErrorException($"{Statement.Location}: Expected condition after 'if'");
                             }
                         }
                         else {
-                            throw new InternalErrorException("Unhandled 'if' statement");
+                            throw new InternalErrorException($"{Token.Location}: Unhandled 'if' statement");
                         }
                     }
                 }

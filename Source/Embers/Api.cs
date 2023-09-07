@@ -1,5 +1,4 @@
 ﻿using System.Text;
-using System.Xml.Linq;
 using static Embers.Script;
 
 #pragma warning disable CS1998
@@ -24,8 +23,9 @@ namespace Embers
             Interpreter.RootInstance.InstanceMethods["throw"] = new Method(@throw, 1);
             Interpreter.RootInstance.InstanceMethods["catch"] = new Method(@catch, 1);
             Interpreter.RootInstance.InstanceMethods["lambda"] = new Method(lambda, 0);
-            Interpreter.RootInstance.InstanceMethods["rand"] = new Method(rand, 1);
             Interpreter.RootInstance.InstanceMethods["loop"] = new Method(loop, 0);
+            Interpreter.RootInstance.InstanceMethods["rand"] = new Method(Random.rand, 0..1);
+            Interpreter.RootInstance.InstanceMethods["srand"] = new Method(Random.srand, 0..1);
 
             // String
             Interpreter.String.InstanceMethods["+"] = new Method(String._Add, 1);
@@ -66,9 +66,17 @@ namespace Embers
             // Proc
             Interpreter.Proc.InstanceMethods.Add("call", new Method(Proc.call, null));
 
+            // Random
+            Class RandomClass = Script.CreateClass("Random");
+            RandomClass.Methods.Add("rand", new Method(Random.rand, 0..1));
+            RandomClass.Methods.Add("srand", new Method(Random.srand, 0..1));
+
             //
-            // Unsafe Apis
+            // UNSAFE APIS
             //
+
+            // Global methods
+            Interpreter.RootInstance.InstanceMethods["system"] = new Method(system, 1, isUnsafe: true);
 
             // File
             Module FileModule = Script.CreateModule("File");
@@ -166,11 +174,6 @@ namespace Embers
             ));
             return NewProc;
         }
-        static async Task<Instances> rand(MethodInput Input) {
-            long ExcludingMax = Input.Arguments[0].Integer;
-            int RandomNumber = Random.Shared.Next((int)ExcludingMax);
-            return new IntegerInstance(Input.Interpreter.Integer, RandomNumber);
-        }
         static async Task<Instances> loop(MethodInput Input) {
             Method? OnYield = Input.OnYield ?? throw new RuntimeException("No block given for loop");
 
@@ -183,6 +186,34 @@ namespace Embers
                 }
             }
             return Input.Interpreter.Nil;
+        }
+        static async Task<Instances> system(MethodInput Input) {
+            string Command = Input.Arguments[0].String;
+
+            // Start command line process
+            System.Diagnostics.ProcessStartInfo Info = new("cmd.exe") {
+                RedirectStandardOutput = true,
+                RedirectStandardInput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                Arguments = "/c " + Command
+            };
+            System.Diagnostics.Process Process = new() {
+                StartInfo = Info
+            };
+            Process.Start();
+
+            // Close in case it asks for input
+            StreamWriter ProcessInput = Process.StandardInput;
+            StreamReader ProcessOutput = Process.StandardOutput;
+            ProcessInput.Close();
+
+            // Get output
+            await Process.WaitForExitAsync();
+            string Output = await ProcessOutput.ReadToEndAsync();
+
+            // Return output
+            return new StringInstance(Input.Interpreter.String, Output);
         }
         static class ClassInstance {
             public static async Task<Instances> _Equals(MethodInput Input) {
@@ -314,11 +345,11 @@ namespace Embers
             public static async Task<Instances> chomp(MethodInput Input) {
                 string String = Input.Instance.String;
                 if (Input.Arguments.Count == 0) {
-                    if (String.EndsWith('\n') || String.EndsWith('\r')) {
-                        return new StringInstance(Input.Interpreter.String, String[0..^1]);
-                    }
-                    else if (String.EndsWith("\r\n")) {
+                    if (String.EndsWith("\r\n")) {
                         return new StringInstance(Input.Interpreter.String, String[0..^2]);
+                    }
+                    else if (String.EndsWith('\n') || String.EndsWith('\r')) {
+                        return new StringInstance(Input.Interpreter.String, String[0..^1]);
                     }
                 }
                 else {
@@ -500,6 +531,45 @@ namespace Embers
         static class Proc {
             public static async Task<Instances> call(MethodInput Input) {
                 return await Input.Instance.Proc.Call(Input.Script, Input.Instance, Input.Arguments, Input.OnYield);
+            }
+        }
+        static class Random {
+            public static async Task<Instances> rand(MethodInput Input) {
+                // Integer random
+                if (Input.Arguments.Count == 1 && Input.Arguments[0] is IntegerInstance) {
+                    long IncludingMin = 0;
+                    long ExcludingMax = Input.Arguments[0].Integer;
+                    long RandomNumber = Input.Interpreter.Random.NextInt64(IncludingMin, ExcludingMax);
+                    return new IntegerInstance(Input.Interpreter.Integer, RandomNumber);
+                }
+                // Float random
+                else {
+                    double IncludingMin = 0;
+                    double ExcludingMax;
+                    if (Input.Arguments.Count == 0) {
+                        ExcludingMax = 1;
+                    }
+                    else {
+                        ExcludingMax = Input.Arguments[0].Float;
+                    }
+                    double RandomNumber = Input.Interpreter.Random.NextDouble() * (ExcludingMax - IncludingMin) + IncludingMin;
+                    return new FloatInstance(Input.Interpreter.Integer, RandomNumber);
+                }
+            }
+            public static async Task<Instances> srand(MethodInput Input) {
+                long PreviousSeed = Input.Interpreter.RandomSeed;
+                long NewSeed;
+                if (Input.Arguments.Count == 1) {
+                    NewSeed = Input.Arguments[0].Integer;
+                }
+                else {
+                    NewSeed = Input.Interpreter.InternalRandom.NextInt64();
+                }
+
+                Input.Interpreter.RandomSeed = NewSeed;
+                Input.Interpreter.Random = new System.Random(NewSeed.GetHashCode());
+
+                return new IntegerInstance(Input.Interpreter.Integer, PreviousSeed);
             }
         }
     }

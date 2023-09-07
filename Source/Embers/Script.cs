@@ -17,6 +17,8 @@ namespace Embers
         Module CurrentModule => (Module)CurrentObject.First(obj => obj is Module);
         Instance CurrentInstance => (Instance)CurrentObject.First(obj => obj is Instance);
 
+        DebugLocation ApproximateLocation = DebugLocation.Unknown;
+
         public Instance CreateInstanceWithNew(Class Class) {
             if (Class == Interpreter.NilClass)
                 return new NilInstance(Interpreter.NilClass);
@@ -364,7 +366,7 @@ namespace Embers
             }
             public async Task<Instances> Call(Script Script, Instance OnInstance, Instances? Arguments = null, Method? OnYield = null, BreakHandleType BreakHandleType = BreakHandleType.Invalid) {
                 if (Unsafe && !Script.AllowUnsafeApi)
-                    throw new RuntimeException("This method is unavailable since 'AllowUnsafeApi' is disabled for this script.");
+                    throw new RuntimeException($"{Script.ApproximateLocation}: This method is unavailable since 'AllowUnsafeApi' is disabled for this script.");
 
                 Arguments ??= new Instances();
                 if (ArgumentCountRange.IsInRange(Arguments.Count)) {
@@ -404,7 +406,7 @@ namespace Embers
                             ReturnValues = Script.Interpreter.Nil;
                         }
                         else {
-                            throw new SyntaxErrorException("Invalid break (break must be in a loop)");
+                            throw new SyntaxErrorException($"{Script.ApproximateLocation}: Invalid break (break must be in a loop)");
                         }
                     }
                     catch (ReturnException Ex) {
@@ -418,7 +420,7 @@ namespace Embers
                     return ReturnValues;
                 }
                 else {
-                    throw new RuntimeException($"Wrong number of arguments (given {Arguments.Count}, expected {ArgumentCountRange})");
+                    throw new RuntimeException($"{Script.ApproximateLocation}: Wrong number of arguments (given {Arguments.Count}, expected {ArgumentCountRange})");
                 }
             }
             public void ChangeFunction(Func<MethodInput, Task<Instances>> function) {
@@ -628,6 +630,9 @@ namespace Embers
             HypotheticalVariable
         }
         async Task<Instances> InterpretExpressionAsync(Expression Expression, ReturnType ReturnType = ReturnType.InterpretResult, Method? OnYield = null) {
+            // Set approximate location
+            ApproximateLocation = Expression.Location;
+
             // Method call
             if (Expression is MethodCallExpression MethodCallExpression) {
                 Instance MethodPath = await InterpretExpressionAsync(MethodCallExpression.MethodPath, ReturnType.FoundVariable);
@@ -951,7 +956,7 @@ namespace Embers
                         else
                             return Interpreter.False;
                     default:
-                        throw new InternalErrorException($"Unhandled logical expression type: '{LogicalExpression.LogicType}'");
+                        throw new InternalErrorException($"{LogicalExpression.Location}: Unhandled logical expression type: '{LogicalExpression.LogicType}'");
                 }
             }
             // Define method
@@ -964,7 +969,7 @@ namespace Embers
                         Module MethodModule = (Module)MethodNameRef.Block;
                         // Prevent redefining unsafe API methods
                         if (!AllowUnsafeApi && MethodModule.Methods.TryGetValue(MethodName, out Method? ExistingMethod) && ExistingMethod.Unsafe) {
-                            throw new RuntimeException($"The static method '{MethodName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
+                            throw new RuntimeException($"{DefineMethodStatement.Location}: The static method '{MethodName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
                         }
                         // Create or overwrite static method
                         lock (MethodModule.Methods)
@@ -975,7 +980,7 @@ namespace Embers
                         Instance MethodInstance = MethodNameRef.Instance ?? CurrentInstance;
                         // Prevent redefining unsafe API methods
                         if (!AllowUnsafeApi && MethodInstance.InstanceMethods.TryGetValue(MethodName, out Method? ExistingMethod) && ExistingMethod.Unsafe) {
-                            throw new RuntimeException($"The instance method '{MethodName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
+                            throw new RuntimeException($"{DefineMethodStatement.Location}: The instance method '{MethodName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
                         }
                         // Create or overwrite instance method
                         MethodInstance.AddOrUpdateInstanceMethod(MethodName, DefineMethodStatement.MethodExpression.Method);
@@ -1085,7 +1090,7 @@ namespace Embers
                             break;
                         case Phase2TokenType.ConstantOrMethod:
                             if (CurrentBlock.Constants.ContainsKey(Variable.Token.Value!))
-                                await Warn($"Already initialized constant '{Variable.Token.Value!}'");
+                                await Warn($"{Variable.Token.Location}: Already initialized constant '{Variable.Token.Value!}'");
                             lock (CurrentBlock.Constants)
                                 CurrentBlock.Constants[Variable.Token.Value!] = Value;
                             break;
@@ -1130,7 +1135,7 @@ namespace Embers
             else if (Expression is UndefineMethodStatement UndefineMethodStatement) {
                 string MethodName = UndefineMethodStatement.MethodName.Token.Value!;
                 if (MethodName == "initialize") {
-                    await Warn("undefining 'initialize' may cause serious problems");
+                    await Warn($"{UndefineMethodStatement.MethodName.Token.Location}: undefining 'initialize' may cause serious problems");
                 }
                 if (!CurrentModule.InstanceMethods.Remove(MethodName)) {
                     throw new RuntimeException($"{UndefineMethodStatement.MethodName.Token.Location}: Undefined method '{MethodName}' for {CurrentModule.Name}");
@@ -1180,7 +1185,7 @@ namespace Embers
                     }
                 }
                 else {
-                    throw new InternalErrorException($"Unknown expression type for defined?: {DefinedExpression.Expression.GetType().Name}");
+                    throw new InternalErrorException($"{DefinedExpression.Location}: Unknown expression type for defined?: {DefinedExpression.Expression.GetType().Name}");
                 }
             }
             // Unknown
@@ -1224,7 +1229,7 @@ namespace Embers
                 LastExpression = await InternalInterpretAsync(Statements, OnYield, InternalInterpretType.Method, IsRootInterpret: true);
             }
             catch (BreakException) {
-                throw new SyntaxErrorException("Invalid break (break must be in a loop)");
+                throw new SyntaxErrorException($"{ApproximateLocation}: Invalid break (break must be in a loop)");
             }
             catch (ReturnException Ex) {
                 return Ex.Instances;

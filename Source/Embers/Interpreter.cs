@@ -24,6 +24,10 @@ namespace Embers
         public readonly Instance True;
         public readonly Instance False;
 
+        public readonly Random InternalRandom = new();
+        public long RandomSeed;
+        public Random Random;
+
         public Interpreter() {
             RootModule = new("main", null);
             RootInstance = new Instance(RootModule);
@@ -39,6 +43,9 @@ namespace Embers
             Integer = MainScript.CreateClass("Integer");
             Float = MainScript.CreateClass("Float");
             Proc = MainScript.CreateClass("Proc");
+
+            RandomSeed = InternalRandom.NextInt64();
+            Random = new Random(RandomSeed.GetHashCode());
 
             Api.Setup(MainScript);
         }

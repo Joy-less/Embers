@@ -12,10 +12,11 @@ namespace Embers
                 Script Script = new(Interpret);
                 Benchmark(() => 
                     Script.Evaluate(@"
-def a
-    5
-end
-return a{}.to_s
+puts rand 5
+puts rand
+puts srand
+puts rand 2
+puts rand 2.4
                     ")
                 );
                 Console.ReadLine();
