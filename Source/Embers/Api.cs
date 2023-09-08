@@ -26,6 +26,8 @@ namespace Embers
             Interpreter.RootInstance.InstanceMethods["loop"] = new Method(loop, 0);
             Interpreter.RootInstance.InstanceMethods["rand"] = new Method(Random.rand, 0..1);
             Interpreter.RootInstance.InstanceMethods["srand"] = new Method(Random.srand, 0..1);
+            Interpreter.RootInstance.InstanceMethods["exit"] = new Method(exit, 0);
+            Interpreter.RootInstance.InstanceMethods["quit"] = new Method(exit, 0);
 
             // String
             Interpreter.String.InstanceMethods["+"] = new Method(String._Add, 1);
@@ -75,6 +77,9 @@ namespace Embers
             Interpreter.Array.InstanceMethods.Add("forty_two", new Method(Array.forty_two, 0));
             Interpreter.Array.InstanceMethods.Add("sample", new Method(Array.sample, 0));
             Interpreter.Array.InstanceMethods.Add("insert", new Method(Array.insert, 1..));
+            Interpreter.Array.InstanceMethods.Add("each", new Method(Array.each, 0));
+            Interpreter.Array.InstanceMethods.Add("reverse_each", new Method(Array.reverse_each, 0));
+            Interpreter.Array.InstanceMethods.Add("map", new Method(Array.map, 0));
 
             // Random
             Class RandomClass = Script.CreateClass("Random");
@@ -225,6 +230,12 @@ namespace Embers
 
             // Return output
             return new StringInstance(Input.Interpreter.String, Output);
+        }
+        static async Task<Instances> exit(MethodInput Input) {
+            throw new ExitException();
+        }
+        static async Task<Instances> quit(MethodInput Input) {
+            throw new ExitException();
         }
         static class ClassInstance {
             public static async Task<Instances> _Equals(MethodInput Input) {
@@ -465,7 +476,7 @@ namespace Embers
                 if (Input.OnYield != null) {
                     long Times = Input.Instance.Integer;
                     for (long i = 0; i < Times; i++) {
-                        await Input.OnYield.Call(Input.Script, Input.Instance);
+                        await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i));
                     }
                 }
                 return Input.Interpreter.Nil;
@@ -628,6 +639,37 @@ namespace Embers
                 }
                 else {
                     Items.InsertRange(Index, Input.Arguments.MultiInstance.GetIndexRange(1));
+                }
+                return Input.Instance;
+            }
+            public static async Task<Instances> each(MethodInput Input) {
+                if (Input.OnYield != null) {
+                    List<Instance> Array = Input.Instance.Array;
+                    for (int i = 0; i < Array.Count; i++) {
+                        await Input.OnYield.Call(Input.Script, Input.Instance, new List<Instance>() {Array[i], new IntegerInstance(Input.Interpreter.Integer, i)});
+                    }
+                }
+                return Input.Interpreter.Nil;
+            }
+            public static async Task<Instances> reverse_each(MethodInput Input) {
+                if (Input.OnYield != null) {
+                    List<Instance> Array = Input.Instance.Array;
+                    for (int i = Array.Count - 1; i >= 0; i--) {
+                        await Input.OnYield.Call(Input.Script, Input.Instance, Array[i]);
+                    }
+                }
+                return Input.Interpreter.Nil;
+            }
+            public static async Task<Instances> map(MethodInput Input) {
+                if (Input.OnYield != null) {
+                    List<Instance> Array = Input.Instance.Array;
+                    List<Instance> MappedArray = new();
+                    for (int i = 0; i < Array.Count; i++) {
+                        Instance Item = Array[i];
+                        Instance MappedItem = await Input.OnYield.Call(Input.Script, Input.Instance, Item);
+                        MappedArray.Add(MappedItem);
+                    }
+                    return new ArrayInstance(Input.Interpreter.Array, MappedArray);
                 }
                 return Input.Instance;
             }

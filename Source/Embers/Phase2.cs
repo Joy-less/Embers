@@ -43,6 +43,7 @@ namespace Embers
             EndCurly,
             StartSquare,
             EndSquare,
+            Pipe,
             EndOfStatement,
         }
         public readonly static Dictionary<string, Phase2TokenType> Keywords = new() {
@@ -259,7 +260,7 @@ namespace Embers
             }
             Method ToMethod() {
                 return new Method(async Input => {
-                    return await Input.Script.InternalInterpretAsync(Statements, Input.OnYield, InternalInterpretType.Method);
+                    return await Input.Script.InternalInterpretAsync(Statements, Input.OnYield);
                 }, ArgumentCount, Arguments);
             }
         }
@@ -670,6 +671,7 @@ namespace Embers
                         Phase1TokenType.EndCurly => new Phase2Token(Token.Location, Phase2TokenType.EndCurly, Token.Value, Token),
                         Phase1TokenType.StartSquare => new Phase2Token(Token.Location, Phase2TokenType.StartSquare, Token.Value, Token),
                         Phase1TokenType.EndSquare => new Phase2Token(Token.Location, Phase2TokenType.EndSquare, Token.Value, Token),
+                        Phase1TokenType.Pipe => new Phase2Token(Token.Location, Phase2TokenType.Pipe, Token.Value, Token),
                         Phase1TokenType.EndOfStatement => new Phase2Token(Token.Location, Phase2TokenType.EndOfStatement, Token.Value, Token),
                         _ => throw new InternalErrorException($"{Token.Location}: Conversion of {Token.Type} from phase 1 to phase 2 not supported")
                     });
@@ -689,11 +691,11 @@ namespace Embers
             }
             return Tokens;
         }
-        static List<Expression> BuildArguments(List<Phase2Object> Objects, ref int Index, bool WrappedInBrackets) {
+        static List<Expression> BuildArguments(List<Phase2Object> Objects, ref int Index, ArgumentParentheses Parentheses) {
             List<Phase2Object> ArgumentObjects;
 
             // Brackets e.g. puts("hi")
-            if (WrappedInBrackets) {
+            if (Parentheses == ArgumentParentheses.Brackets) {
                 int OpenBracketDepth = 0;
                 ArgumentObjects = GetObjectsUntil(Objects, ref Index, Obj => {
                     if (Obj is Phase2Token Tok) {
@@ -703,6 +705,17 @@ namespace Embers
                         else if (Tok.Type == Phase2TokenType.CloseBracket) {
                             if (OpenBracketDepth == 0) return true;
                             OpenBracketDepth--;
+                        }
+                    }
+                    return false;
+                });
+            }
+            // Pipes e.g. |hi|
+            else if (Parentheses == ArgumentParentheses.Pipes) {
+                ArgumentObjects = GetObjectsUntil(Objects, ref Index, Obj => {
+                    if (Obj is Phase2Token Tok) {
+                        if (Tok.Type == Phase2TokenType.Pipe) {
+                            return true;
                         }
                     }
                     return false;
@@ -720,29 +733,55 @@ namespace Embers
         }
         static List<Expression> ParseArgumentsWithBrackets(List<Phase2Object> Objects, ref int Index) {
             Index += 2;
-            List<Expression> Arguments = BuildArguments(Objects, ref Index, true);
+            List<Expression> Arguments = BuildArguments(Objects, ref Index, ArgumentParentheses.Brackets);
             return Arguments;
         }
         static List<Expression>? ParseArgumentsWithoutBrackets(List<Phase2Object> Objects, ref int Index) {
             Index++;
-            List<Expression> Arguments = BuildArguments(Objects, ref Index, false);
+            List<Expression> Arguments = BuildArguments(Objects, ref Index, ArgumentParentheses.NoBrackets);
             return Arguments;
         }
-        static List<Expression>? ParseArguments(List<Phase2Object> Objects, ref int Index) {
+        static List<Expression> ParseArgumentsWithPipes(List<Phase2Object> Objects, ref int Index) {
+            Index += 2;
+            List<Expression> Arguments = BuildArguments(Objects, ref Index, ArgumentParentheses.Pipes);
+            return Arguments;
+        }
+        enum ArgumentParentheses {
+            Unknown,
+            Brackets,
+            NoBrackets,
+            Pipes
+        }
+        static List<Expression>? ParseArguments(List<Phase2Object> Objects, ref int Index, ArgumentParentheses Parentheses = ArgumentParentheses.Unknown) {
             if (Index + 1 < Objects.Count) {
                 Phase2Object NextObject = Objects[Index + 1];
-                if (NextObject is Phase2Token NextToken) {
-                    if (NextToken.Type == Phase2TokenType.OpenBracket) {
-                        if (!NextToken.FollowsWhitespace) {
-                            return ParseArgumentsWithBrackets(Objects, ref Index);
-                        }
-                        else {
-                            return ParseArgumentsWithoutBrackets(Objects, ref Index);
-                        }
+                switch (Parentheses) {
+                    // Brackets / No Brackets
+                    case ArgumentParentheses.Unknown: {
+                        List<Expression>? Arguments = ParseArguments(Objects, ref Index, ArgumentParentheses.Brackets)
+                            ?? ParseArguments(Objects, ref Index, ArgumentParentheses.NoBrackets);
+                        return Arguments;
                     }
-                }
-                else if (NextObject is Expression && NextObject is not Statement && NextObject is not DoExpression) {
-                    return ParseArgumentsWithoutBrackets(Objects, ref Index);
+                    // Brackets
+                    case ArgumentParentheses.Brackets: {
+                        if (NextObject is Phase2Token NextToken && NextToken.Type == Phase2TokenType.OpenBracket && !NextToken.FollowsWhitespace)
+                            return ParseArgumentsWithBrackets(Objects, ref Index);
+                        else
+                            return null;
+                    }
+                    // No brackets
+                    case ArgumentParentheses.NoBrackets: {
+                        if (NextObject is Expression && NextObject is not Statement && NextObject is not DoExpression)
+                            return ParseArgumentsWithoutBrackets(Objects, ref Index);
+                        else if (NextObject is Phase2Token NextToken && NextToken.Type == Phase2TokenType.OpenBracket && NextToken.FollowsWhitespace)
+                            return ParseArgumentsWithoutBrackets(Objects, ref Index);
+                        else
+                            return null;
+                    }
+                    // Pipes
+                    case ArgumentParentheses.Pipes: {
+                        return ParseArgumentsWithPipes(Objects, ref Index);
+                    }
                 }
             }
             return null;
@@ -826,7 +865,7 @@ namespace Embers
             }
             return MethodNamePathExpression!;
         }
-        static List<MethodArgumentExpression> GetMethodArguments(List<Phase2Object> Phase2Objects, ref int Index, ObjectTokenExpression MethodName) {
+        static List<MethodArgumentExpression> GetMethodArguments(List<Phase2Object> Phase2Objects, ref int Index, bool IsPipes, DebugLocation Location) {
             List<MethodArgumentExpression> MethodArguments = new();
             bool WrappedInBrackets = false;
             bool NextTokenCanBeObject = true;
@@ -864,7 +903,7 @@ namespace Embers
                         List<Phase2Object> DefaultValueObjects = new();
                         for (Index++; Index < Phase2Objects.Count; Index++) {
                             if (Phase2Objects[Index] is Phase2Token Tok
-                                && (Tok.Type == Phase2TokenType.Comma || Tok.Type == Phase2TokenType.CloseBracket || Tok.Type == Phase2TokenType.EndOfStatement))
+                                && (Tok.Type == Phase2TokenType.Comma || Tok.Type == Phase2TokenType.CloseBracket || Tok.Type == Phase2TokenType.Pipe || Tok.Type == Phase2TokenType.EndOfStatement))
                             {
                                 Index--;
                                 break;
@@ -883,7 +922,7 @@ namespace Embers
                             MethodArguments[^1].DefaultValue = ObjectsToExpression(DefaultValueObjects);
                         }
                     }
-                    else if (Token.Type == Phase2TokenType.OpenBracket) {
+                    else if (!IsPipes && Token.Type == Phase2TokenType.OpenBracket) {
                         if (Index == StartIndex) {
                             WrappedInBrackets = true;
                         }
@@ -891,12 +930,17 @@ namespace Embers
                             throw new SyntaxErrorException($"{Token.Location}: Unexpected open bracket in method arguments");
                         }
                     }
-                    else if (Token.Type == Phase2TokenType.CloseBracket) {
+                    else if (!IsPipes && Token.Type == Phase2TokenType.CloseBracket) {
                         if (WrappedInBrackets) {
                             break;
                         }
                         else {
                             throw new SyntaxErrorException($"{Token.Location}: Unexpected close bracket in method arguments");
+                        }
+                    }
+                    else if (IsPipes && Token.Type == Phase2TokenType.Pipe) {
+                        if (Index != StartIndex) {
+                            break;
                         }
                     }
                     else if (Token.Type == Phase2TokenType.EndOfStatement) {
@@ -926,10 +970,10 @@ namespace Embers
                 }
             }
             if (!NextTokenCanBeComma && NextTokenCanBeObject && MethodArguments.Count != 0) {
-                throw new SyntaxErrorException($"{MethodName.Token.Location.Line}: Expected argument after comma, got nothing");
+                throw new SyntaxErrorException($"{Location.Line}: Expected argument after comma, got nothing");
             }
             if (SplatArgumentType != null) {
-                throw new SyntaxErrorException($"{MethodName.Token.Location.Line}: Expected argument after splat operator, got nothing");
+                throw new SyntaxErrorException($"{Location.Line}: Expected argument after splat operator, got nothing");
             }
             return MethodArguments;
         }
@@ -1213,7 +1257,7 @@ namespace Embers
                             ObjectTokenExpression MethodName = GetMethodName(ParsedObjects, ref i);
 
                             // Get method arguments
-                            List<MethodArgumentExpression> MethodArguments = GetMethodArguments(ParsedObjects, ref i, MethodName);
+                            List<MethodArgumentExpression> MethodArguments = GetMethodArguments(ParsedObjects, ref i, false, MethodName.Location);
 
                             // Check validity
                             CheckMethodNameAndArgumentsValidity(MethodArguments);
@@ -1237,13 +1281,13 @@ namespace Embers
                         }
                         // Do
                         case Phase2TokenType.Do: {
-                            // ResolveAllPending();
+                            i++;
 
                             // Get do |arguments|
-                            // To-do
+                            List<MethodArgumentExpression> DoArguments = GetMethodArguments(ParsedObjects, ref i, true, Token.Location);
 
                             // Open do block
-                            PushBlock(new BuildingDo(Location, new(), false));
+                            PushBlock(new BuildingDo(Location, DoArguments, false));
                             break;
                         }
                         // While
@@ -1267,11 +1311,13 @@ namespace Embers
                         }
                         // {
                         case Phase2TokenType.StartCurly: {
+                            i++;
+
                             // Get do |arguments|
-                            // To-do
+                            List<MethodArgumentExpression> DoArguments = GetMethodArguments(ParsedObjects, ref i, true, Token.Location);
 
                             // Open do block
-                            PushBlock(new BuildingDo(Location, new(), true));
+                            PushBlock(new BuildingDo(Location, DoArguments, true));
                             break;
                         }
                         // }
@@ -1420,7 +1466,7 @@ namespace Embers
             void ParseMethodCall(ObjectTokenExpression MethodName, int MethodNameIndex, bool WrappedInBrackets) {
                 // Parse arguments
                 int EndOfArgumentsIndex = MethodNameIndex;
-                List<Expression>? Arguments = ParseArguments(ParsedObjects, ref EndOfArgumentsIndex);
+                List<Expression>? Arguments = ParseArguments(ParsedObjects, ref EndOfArgumentsIndex, WrappedInBrackets ? ArgumentParentheses.Brackets : ArgumentParentheses.NoBrackets);
 
                 // Add method call
                 if (Arguments != null) {

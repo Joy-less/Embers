@@ -131,7 +131,7 @@ namespace Embers
                                 string ToFormat = String[(StartPosition + 2)..i];
                                 string SecondHalf = String[(i + 1)..];
 
-                                string Formatted = (await Script.EvaluateAsync(ToFormat))[0].LightInspect();
+                                string Formatted = (await Script.InternalEvaluateAsync(ToFormat))[0].LightInspect();
                                 String = FirstHalf + Formatted + SecondHalf;
                                 i = FirstHalf.Length - 1;
                             }
@@ -408,7 +408,15 @@ namespace Embers
                             throw new NotImplementedException("Double splat arguments not implemented yet");
                         }
                         else {
-                            Script.CurrentScope.LocalVariables.Add(Argument.ArgumentName.Value!, Arguments[i]);
+                            // Declare argument as variable in local scope
+                            if (i < Arguments.Count) {
+                                Script.CurrentScope.LocalVariables.Add(Argument.ArgumentName.Value!, Arguments[i]);
+                            }
+                            // Optional argument not given
+                            else {
+                                Instance DefaultValue = Argument.DefaultValue != null ? (await Script.InterpretExpressionAsync(Argument.DefaultValue)) : Script.Interpreter.Nil;
+                                Script.CurrentScope.LocalVariables.Add(Argument.ArgumentName.Value!, DefaultValue);
+                            }
                         }
                     }
                     // Call method
@@ -976,7 +984,7 @@ namespace Embers
             else if (Expression is WhileExpression WhileExpression) {
                 while ((await InterpretExpressionAsync(WhileExpression.Condition!))[0].IsTruthy) {
                     try {
-                        await InternalInterpretAsync(WhileExpression.Statements, InterpretType: InternalInterpretType.Loop);
+                        await InternalInterpretAsync(WhileExpression.Statements);
                     }
                     catch (BreakException) {
                         break;
@@ -1084,7 +1092,7 @@ namespace Embers
                     // Interpret class statements
                     await CreateTemporaryClassScope(NewModule, async () => {
                         await CreateTemporaryInstanceScope(new Instance(NewModule), async () => {
-                            await InternalInterpretAsync(DefineClassStatement.BlockStatements, InterpretType: InternalInterpretType.Method);
+                            await InternalInterpretAsync(DefineClassStatement.BlockStatements);
                         });
                     });
 
@@ -1270,12 +1278,7 @@ namespace Embers
             }
             return Results;
         }
-        internal enum InternalInterpretType {
-            Block,
-            Loop,
-            Method
-        }
-        internal async Task<Instances> InternalInterpretAsync(List<Expression> Statements, Method? OnYield = null, InternalInterpretType InterpretType = InternalInterpretType.Block, bool IsRootInterpret = false) {
+        internal async Task<Instances> InternalInterpretAsync(List<Expression> Statements, Method? OnYield = null) {
             // Interpret statements
             Instances LastExpression = Interpreter.Nil;
             for (int Index = 0; Index < Statements.Count; Index++) {
@@ -1286,6 +1289,14 @@ namespace Embers
             // Return last expression
             return LastExpression;
         }
+        internal async Task<Instances> InternalEvaluateAsync(string Code) {
+            // Get statements from code
+            List<Phase1.Phase1Token> Tokens = Phase1.GetPhase1Tokens(Code);
+            List<Expression> Statements = ObjectsToExpressions(Tokens, ExpressionsType.Statements);
+
+            // Interpret statements
+            return await InternalInterpretAsync(Statements);
+        }
         
         public async Task<Instances> InterpretAsync(List<Expression> Statements, Method? OnYield = null) {
             // Debounce
@@ -1295,13 +1306,16 @@ namespace Embers
             // Interpret statements and store the result
             Instances LastExpression;
             try {
-                LastExpression = await InternalInterpretAsync(Statements, OnYield, InternalInterpretType.Method, IsRootInterpret: true);
+                LastExpression = await InternalInterpretAsync(Statements, OnYield);
             }
             catch (BreakException) {
                 throw new SyntaxErrorException($"{ApproximateLocation}: Invalid break (break must be in a loop)");
             }
             catch (ReturnException Ex) {
                 return Ex.Instances;
+            }
+            catch (ExitException) {
+                return Interpreter.Nil;
             }
             finally {
                 // Deactivate debounce

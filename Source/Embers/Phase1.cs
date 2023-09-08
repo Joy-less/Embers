@@ -25,6 +25,7 @@
             EndCurly,
             StartSquare,
             EndSquare,
+            Pipe,
         }
         public class Phase1Token {
             public readonly DebugLocation Location;
@@ -47,8 +48,8 @@
             }
         }
 
-        static readonly IReadOnlyList<char> InvalidIdentifierCharacters = new List<char>() {'.', ',', '(', ')', '"', '\'', ';',
-            '=', '+', '-', '*', '/', '%', '#', '?', '{', '}', '[', ']'};
+        static readonly IReadOnlyList<char> InvalidIdentifierCharacters = new List<char>() {'.', ',', '(', ')', '"', '\'', ';', ':',
+            '=', '+', '-', '*', '/', '%', '#', '?', '!', '{', '}', '[', ']', '|', '^', '&', '~', '<', '>', '\\'};
         public static List<Phase1Token> GetPhase1Tokens(string Code) {
             Code += "\n";
 
@@ -226,6 +227,24 @@
                         }
                         else if (Tokens[i2].Type == Phase1TokenType.Identifier && Tokens[i2].Value == DefKeyword) {
                             return true;
+                        }
+                    }
+                    return false;
+                }
+                bool IsPipeStatement() {
+                    // Start pipe
+                    if ((LastTokenWas(Phase1TokenType.Identifier) && Tokens[^1].Value == "do") || LastTokenWas(Phase1TokenType.StartCurly)) {
+                        return true;
+                    }
+                    // End pipe
+                    else {
+                        for (int i2 = Tokens.Count - 1; i2 >= 0; i2--) {
+                            if (Tokens[i2].Type == Phase1TokenType.EndOfStatement) {
+                                break;
+                            }
+                            else if (Tokens[i2].Type == Phase1TokenType.Pipe) {
+                                return true;
+                            }
                         }
                     }
                     return false;
@@ -481,6 +500,9 @@
                             if (NextChara == '|') {
                                 Tokens.Add(new(Location, Phase1TokenType.Operator, "||", FollowsWhitespace));
                                 i++;
+                            }
+                            else if (IsPipeStatement()) {
+                                Tokens.Add(new(Location, Phase1TokenType.Pipe, "|", FollowsWhitespace));
                             }
                             else {
                                 Tokens.Add(new(Location, Phase1TokenType.Operator, "|", FollowsWhitespace));

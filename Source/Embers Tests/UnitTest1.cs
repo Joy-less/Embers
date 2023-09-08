@@ -197,6 +197,10 @@ namespace Embers_Tests
                 a = [4, 7]
                 return a[1], a.count
             ", new object[] {7L, 2L});
+            AssertEqual(@"
+                arr = [1, 2, 3, 4, 5]
+                arr.map {|a| 2*a}
+            ", Obj => Obj is List<Instance> Arr && Arr.Count == 5 && Arr[0].Integer == 2L && Arr[1].Integer == 4L && Arr[2].Integer == 6L && Arr[3].Integer == 8L && Arr[4].Integer == 10L);
         }
 
 

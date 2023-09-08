@@ -35,6 +35,9 @@
             Instances = instances;
         }
     }
+    public class ExitException : EmbersException {
+        public ExitException() : base() { }
+    }
 
     public readonly struct DebugLocation {
         public readonly int Line;

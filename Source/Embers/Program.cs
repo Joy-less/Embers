@@ -12,18 +12,34 @@ namespace Embers
                 Script Script = new(Interpret);
                 Benchmark(() => 
                     Script.Evaluate(@"
-a = [4, 7, 3]
-p a[1] # 7
-p a.count # 3
-p a.length # 3
-p a.count 3 # 1
-p a.first # 4
-p a.last # 3
-p a.sample # ?
+5.times do |n = 'bruh', m = 'lol'|
+    puts n, m
+end
+
 puts '---'
-b = [3, 4, 5]
-p b.insert 1, 'Hi', 'There'
-p b
+
+[4, 2, 5].each do |n, m|
+    print n, ' ', m, ""\n""
+end
+
+puts '---'
+
+arr = [1, 2, 3, 4, 5]
+puts arr.map {|a| 2*a}
+
+puts '---'
+
+# Find three numbers that multiply to make 1230.
+Num = 1230
+loop do
+    num1 = rand(Num)
+    num2 = rand(Num)
+    num3 = rand(Num)
+    if num1 * num2 * num3 == Num
+        puts ""The numbers #{num1}, #{num2} and #{num3} work.""
+        break
+    end
+end
                     ")
                 );
                 Console.ReadLine();
