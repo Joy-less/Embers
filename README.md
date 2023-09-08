@@ -202,3 +202,15 @@ If you don't trust the Ruby code that will be run, you can remove access to dang
 Script MyScript = new(MyInterpreter, false);
 ```
 You can see which APIs can still be accessed in [`Api.cs`](Source/Embers/Api.cs).
+
+### Serialisation
+If you don't want to parse your code every time it's run, and want it to be obfuscated in memory, you can serialise it ahead of time.
+```csharp
+Console.WriteLine(Interpreter.Serialise("puts 'Hello there!'"));
+Console.ReadLine();
+```
+This will output some C# code, which you can then run directly by wrapping it in `MyScript.Interpret(...);`:
+```csharp
+MyScript.Interpret(new List<Embers.Phase2.Expression>() {new Embers.Phase2.MethodCallExpression(new Embers.Phase2.ObjectTokenExpression(new Embers.Phase2.Phase2Token(new DebugLocation(1, 0), Embers.Phase2.Phase2TokenType.LocalVariableOrMethod, "puts", new Embers.Phase1.Phase1Token(new DebugLocation(1, 0), Embers.Phase1.Phase1TokenType.Identifier, "puts", false, false))), new List<Embers.Phase2.Expression>() {new Embers.Phase2.ObjectTokenExpression(new Embers.Phase2.Phase2Token(new DebugLocation(1, 5), Embers.Phase2.Phase2TokenType.String, "Hello there!", new Embers.Phase1.Phase1Token(new DebugLocation(1, 5), Embers.Phase1.Phase1TokenType.String, "Hello there!", true, false)))}, null)});
+```
+Please note that pre-parsed code will not be compatible between different versions of Embers. It should be done just before building your project.

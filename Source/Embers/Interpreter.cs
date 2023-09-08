@@ -1,4 +1,5 @@
-﻿using static Embers.Script;
+﻿using static Embers.Phase2;
+using static Embers.Script;
 
 namespace Embers
 {
@@ -28,6 +29,13 @@ namespace Embers
         public readonly Random InternalRandom = new();
         public long RandomSeed;
         public Random Random;
+        
+        public static string Serialise(string Code) {
+            List<Phase1.Phase1Token> Tokens = Phase1.GetPhase1Tokens(Code);
+            List<Expression> Statements = ObjectsToExpressions(Tokens, ExpressionsType.Statements);
+
+            return Statements.Serialise();
+        }
 
         public Interpreter() {
             RootModule = new("main", null);

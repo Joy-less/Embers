@@ -1,5 +1,4 @@
-﻿using System.Threading;
-using static Embers.Phase2;
+﻿using static Embers.Phase2;
 
 #pragma warning disable CS1998
 
@@ -519,7 +518,7 @@ namespace Embers
                 }
             }
             public string Serialise() {
-                return $"new IntRange({(Min != null ? Min : "null")}, {(Max != null ? Max : "null")})";
+                return $"new {typeof(IntRange).PathTo()}({(Min != null ? Min : "null")}, {(Max != null ? Max : "null")})";
             }
         }
         public class Instances {
@@ -1332,12 +1331,6 @@ namespace Embers
         }
         public Instances Evaluate(string Code) {
             return EvaluateAsync(Code).Result;
-        }
-        public static string Serialise(string Code) {
-            List<Phase1.Phase1Token> Tokens = Phase1.GetPhase1Tokens(Code);
-            List<Expression> Statements = ObjectsToExpressions(Tokens, ExpressionsType.Statements);
-
-            return Statements.Serialise();
         }
 
         public Script(Interpreter interpreter, bool allowUnsafeApi = true) {

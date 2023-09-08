@@ -12,6 +12,7 @@ namespace Embers
             }
             public abstract string Inspect();
             public abstract string Serialise();
+            public string PathToSelf => (GetType().FullName ?? "").Replace('+', '.');
         }
 
         public enum Phase2TokenType {
@@ -108,10 +109,13 @@ namespace Embers
             public readonly long ValueAsLong;
             public readonly double ValueAsDouble;
 
+            private readonly Phase1Token? FromPhase1Token;
+
             public Phase2Token(DebugLocation location, Phase2TokenType type, string? value, Phase1Token? fromPhase1Token = null) : base(location) {
                 Type = type;
                 Value = value;
                 if (fromPhase1Token != null) {
+                    FromPhase1Token = fromPhase1Token;
                     FollowsWhitespace = fromPhase1Token.FollowsWhitespace;
                     ProcessFormatting = fromPhase1Token.ProcessFormatting;
                 }
@@ -124,7 +128,7 @@ namespace Embers
                 return Type + (Value != null ? ":" : "") + Value;
             }
             public override string Serialise() {
-                return $"new Phase2Token({Location.Serialise()}, Phase2TokenType.{Type}, \"{Value}\", {(FollowsWhitespace ? "true" : "false")})";
+                return $"new {PathToSelf}({Location.Serialise()}, {typeof(Phase2TokenType).PathTo()}.{Type}, \"{Value}\", {(FromPhase1Token != null ? FromPhase1Token.Serialise() : "")})";
             }
         }
 
@@ -141,7 +145,7 @@ namespace Embers
                 return Token.Inspect();
             }
             public override string Serialise() {
-                return $"new ObjectTokenExpression({Token.Serialise()})";
+                return $"new {PathToSelf}({Token.Serialise()})";
             }
         }
         public class PathExpression : ObjectTokenExpression {
@@ -153,7 +157,7 @@ namespace Embers
                 return ParentObject.Inspect() + "." + Token.Inspect();
             }
             public override string Serialise() {
-                return $"new PathExpression({ParentObject.Serialise()}, {Token.Serialise()})";
+                return $"new {PathToSelf}({ParentObject.Serialise()}, {Token.Serialise()})";
             }
         }
         public class ConstantPathExpression : ObjectTokenExpression {
@@ -165,7 +169,7 @@ namespace Embers
                 return ParentObject.Inspect() + "." + ParentObject.Inspect();
             }
             public override string Serialise() {
-                return $"new ConstantPathExpression({ParentObject.Serialise()}, {Token.Serialise()})";
+                return $"new {PathToSelf}({ParentObject.Serialise()}, {Token.Serialise()})";
             }
         }
         public class MethodCallExpression : Expression {
@@ -181,7 +185,7 @@ namespace Embers
                 return $"{MethodPath.Inspect()}({Arguments.Inspect()})" + (OnYield != null ? $"{{yield: {OnYield.Inspect()}}}" : "");
             }
             public override string Serialise() {
-                return $"new MethodCallExpression({MethodPath.Serialise()}, {Arguments.Serialise()}, {(OnYield != null ? OnYield.Serialise() : "null")})";
+                return $"new {PathToSelf}({MethodPath.Serialise()}, {Arguments.Serialise()}, {(OnYield != null ? OnYield.Serialise() : "null")})";
             }
         }
         public class DefinedExpression : Expression {
@@ -193,7 +197,7 @@ namespace Embers
                 return "defined? (" + Expression.Inspect() + ")";
             }
             public override string Serialise() {
-                return $"new DefinedExpression({Expression.Serialise()})";
+                return $"new {PathToSelf}({Expression.Serialise()})";
             }
         }
         public class MethodArgumentExpression : Expression {
@@ -214,7 +218,7 @@ namespace Embers
                 }
             }
             public override string Serialise() {
-                return $"new MethodArgumentExpression({ArgumentName.Serialise()}, {(DefaultValue != null ? DefaultValue.Serialise() : "null")})";
+                return $"new {PathToSelf}({ArgumentName.Serialise()}, {(DefaultValue != null ? DefaultValue.Serialise() : "null")})";
             }
         }
         public class MethodExpression : Expression {
@@ -242,7 +246,7 @@ namespace Embers
                 return $"method with {ArgumentCount} arguments";
             }
             public override string Serialise() {
-                return $"new MethodExpression({Location.Serialise()}, {Statements.Serialise()}, {ArgumentCount.Serialise()}, {Arguments.Serialise()})";
+                return $"new {PathToSelf}({Location.Serialise()}, {Statements.Serialise()}, {ArgumentCount.Serialise()}, {Arguments.Serialise()})";
             }
             Method ToMethod() {
                 return new Method(async Input => {
@@ -256,7 +260,7 @@ namespace Embers
                 return "self";
             }
             public override string Serialise() {
-                return $"new SelfExpression({Location.Serialise()})";
+                return $"new {PathToSelf}({Location.Serialise()})";
             }
         }
         public class LogicalExpression : Expression {
@@ -272,7 +276,7 @@ namespace Embers
                 return $"({Left.Inspect()} {LogicType} {Right.Inspect()})";
             }
             public override string Serialise() {
-                return $"new LogicalExpression({Location.Serialise()}, {Left.Serialise()}, {Right.Serialise()})";
+                return $"new {PathToSelf}({Location.Serialise()}, {Left.Serialise()}, {Right.Serialise()})";
             }
             public enum LogicalExpressionType {
                 And,
@@ -306,7 +310,7 @@ namespace Embers
                 }
             }
             public override string Serialise() {
-                return $"new IfExpression({Location.Serialise()}, {(Condition != null ? Condition.Serialise() : "null")}, {Statements.Serialise()})";
+                return $"new {PathToSelf}({Location.Serialise()}, {(Condition != null ? Condition.Serialise() : "null")}, {Statements.Serialise()})";
             }
         }
         public class WhileExpression : ConditionalExpression {
@@ -320,7 +324,7 @@ namespace Embers
                 }
             }
             public override string Serialise() {
-                return $"new WhileExpression({Location.Serialise()}, {Condition!.Serialise()}, {Statements.Serialise()})";
+                return $"new {PathToSelf}({Location.Serialise()}, {Condition!.Serialise()}, {Statements.Serialise()})";
             }
         }
         public class AssignmentExpression : Expression {
@@ -352,7 +356,7 @@ namespace Embers
                 return Left.Inspect() + " " + Operator + " " + Right.Inspect();
             }
             public override string Serialise() {
-                return $"new AssignmentExpression({Left.Serialise()}, \"{Operator}\", {Right.Serialise()})";
+                return $"new {PathToSelf}({Left.Serialise()}, \"{Operator}\", {Right.Serialise()})";
             }
         }
         public class DoExpression : Expression {
@@ -366,7 +370,7 @@ namespace Embers
                 return $"do {OnYield.Inspect()} end";
             }
             public override string Serialise() {
-                return $"new DoExpression({OnYield.Serialise()})";
+                return $"new {PathToSelf}({OnYield.Serialise()})";
             }
         }
         public class ArrayExpression : Expression {
@@ -378,23 +382,9 @@ namespace Embers
                 return $"[{Expressions.Inspect()}]";
             }
             public override string Serialise() {
-                return $"new ArrayExpression({Location.Serialise()}, {Expressions.Serialise()})";
+                return $"new {PathToSelf}({Location.Serialise()}, {Expressions.Serialise()})";
             }
         }
-        /*public class UnaryExpression : Expression {
-            public readonly bool IsAdd;
-            public readonly Expression Expression;
-            public UnaryExpression(bool isAdd, Expression expression) : base(expression.Location) {
-                IsAdd = isAdd;
-                Expression = expression;
-            }
-            public override string Inspect() {
-                return $"{(IsAdd ? "+" : "-")}{Expression.Inspect()}";
-            }
-            public override string Serialise() {
-                return $"new UnaryExpression({(IsAdd ? "true" : "false")}, {Expression.Serialise()})";
-            }
-        }*/
         public abstract class Statement : Expression {
             public Statement(DebugLocation location) : base(location) { }
         }
@@ -409,7 +399,7 @@ namespace Embers
                 return $"def {MethodName.Inspect()}({MethodExpression.Inspect()})";
             }
             public override string Serialise() {
-                return $"new DefineMethodStatement({MethodName.Serialise()}, {MethodExpression.Serialise()})";
+                return $"new {PathToSelf}({MethodName.Serialise()}, {MethodExpression.Serialise()})";
             }
         }
         public class UndefineMethodStatement : Statement {
@@ -421,7 +411,7 @@ namespace Embers
                 return "undef " + MethodName.Inspect();
             }
             public override string Serialise() {
-                return $"new UndefineMethodStatement({Location.Serialise()}, {MethodName.Serialise()})";
+                return $"new {PathToSelf}({Location.Serialise()}, {MethodName.Serialise()})";
             }
         }
         public class DefineClassStatement : Statement {
@@ -437,7 +427,7 @@ namespace Embers
                 return "class " + ClassName.Inspect();
             }
             public override string Serialise() {
-                return $"new DefineClassStatement({ClassName.Serialise()}, {BlockStatements.Serialise()})";
+                return $"new {PathToSelf}({ClassName.Serialise()}, {BlockStatements.Serialise()})";
             }
         }
         public class YieldStatement : Statement {
@@ -450,7 +440,7 @@ namespace Embers
                 else return "yield";
             }
             public override string Serialise() {
-                return $"new YieldStatement({Location.Serialise()}, {(YieldValues != null ? YieldValues.Serialise() : "null")})";
+                return $"new {PathToSelf}({Location.Serialise()}, {(YieldValues != null ? YieldValues.Serialise() : "null")})";
             }
         }
         public class ReturnStatement : Statement {
@@ -463,7 +453,7 @@ namespace Embers
                 else return "return";
             }
             public override string Serialise() {
-                return $"new ReturnStatement({Location.Serialise()}, {(ReturnValues != null ? ReturnValues.Serialise() : "null")})";
+                return $"new {PathToSelf}({Location.Serialise()}, {(ReturnValues != null ? ReturnValues.Serialise() : "null")})";
             }
         }
         public class BreakStatement : Statement {
@@ -473,7 +463,7 @@ namespace Embers
                 return "break";
             }
             public override string Serialise() {
-                return $"new BreakStatement({Location.Serialise()}))";
+                return $"new {PathToSelf}({Location.Serialise()}))";
             }
         }
         public class IfBranchesStatement : Statement {
@@ -485,7 +475,7 @@ namespace Embers
                 return Branches.Inspect(" ");
             }
             public override string Serialise() {
-                return $"new IfBranchesStatement({Location.Serialise()}, {Branches.Serialise()})";
+                return $"new {PathToSelf}({Location.Serialise()}, {Branches.Serialise()})";
             }
         }
         public class WhileStatement : Statement {
@@ -497,7 +487,7 @@ namespace Embers
                 return $"while {WhileExpression.Condition!.Inspect()} do " + WhileExpression.Statements.Inspect() + " end";
             }
             public override string Serialise() {
-                return $"new WhileStatement({Location.Serialise()}, {WhileExpression.Serialise()})";
+                return $"new {PathToSelf}({Location.Serialise()}, {WhileExpression.Serialise()})";
             }
         }
         
@@ -2062,7 +2052,7 @@ namespace Embers
             }
         }
         public static string Serialise<T>(this List<T> List) where T : Phase2.Phase2Object {
-            string Serialised = $"new List<{typeof(T).Name}>() {{";
+            string Serialised = $"new List<{typeof(T).PathTo()}>() {{";
             bool IsFirst = true;
             foreach (T Item in List) {
                 if (IsFirst) IsFirst = false;
@@ -2109,5 +2099,7 @@ namespace Embers
                 Target.Add(Pair.Key, Pair.Value);
             }
         }
+        public static string PathTo(this object Self) => PathTo(Self.GetType());
+        public static string PathTo(this Type Self) => (Self.FullName ?? "").Replace('+', '.');
     }
 }

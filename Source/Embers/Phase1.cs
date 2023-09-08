@@ -46,6 +46,9 @@
             public string Inspect() {
                 return Type + (Value != null ? ":" : "") + Value?.Replace("\n", "\\n").Replace("\r", "\\r") + (FollowsWhitespace ? " (true)" : "");
             }
+            public string Serialise() {
+                return $"new {typeof(Phase1Token).PathTo()}({Location.Serialise()}, {typeof(Phase1TokenType).PathTo()}.{Type}, \"{Value}\", {(FollowsWhitespace ? "true" : "false")}, {(ProcessFormatting ? "true" : "false")})";
+            }
         }
 
         static readonly IReadOnlyList<char> InvalidIdentifierCharacters = new List<char>() {'.', ',', '(', ')', '"', '\'', ';', ':',
