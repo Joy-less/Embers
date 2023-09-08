@@ -168,20 +168,6 @@ namespace Embers
                 return $"new ConstantPathExpression({ParentObject.Serialise()}, {Token.Serialise()})";
             }
         }
-        /*public class IndexerExpression : Expression {
-            public readonly Expression ObjectToIndex;
-            public readonly Expression Index;
-            public IndexerExpression(Expression objectToIndex, Expression index) : base(index.Location) {
-                ObjectToIndex = objectToIndex;
-                Index = index;
-            }
-            public override string Inspect() {
-                return ObjectToIndex.Inspect() + "[" + Index.Inspect() + "]";
-            }
-            public override string Serialise() {
-                return $"new IndexerExpression({ObjectToIndex.Serialise()}, {Index.Serialise()})";
-            }
-        }*/
         public class MethodCallExpression : Expression {
             public Expression MethodPath;
             public readonly List<Expression> Arguments;
@@ -295,18 +281,25 @@ namespace Embers
             }
         }
         public abstract class ConditionalExpression : Expression {
+            public readonly bool Inverse;
             public readonly Expression? Condition;
             public readonly List<Expression> Statements;
-            public ConditionalExpression(DebugLocation location, Expression? condition, List<Expression> statements) : base(location) {
+            public ConditionalExpression(DebugLocation location, Expression? condition, List<Expression> statements, bool inverse = false) : base(location) {
+                Inverse = inverse;
                 Condition = condition;
                 Statements = statements;
             }
         }
         public class IfExpression : ConditionalExpression {
-            public IfExpression(DebugLocation location, Expression? condition, List<Expression> statements) : base(location, condition, statements) { }
+            public IfExpression(DebugLocation location, Expression? condition, List<Expression> statements, bool inverse = false) : base(location, condition, statements, inverse) { }
             public override string Inspect() {
                 if (Condition != null) {
-                    return $"if {Condition.Inspect()} then {Statements.Inspect()} end";
+                    if (Inverse) {
+                        return $"if {Condition.Inspect()} then {Statements.Inspect()} end";
+                    }
+                    else {
+                        return $"unless {Condition.Inspect()} then {Statements.Inspect()} end";
+                    }
                 }
                 else {
                     return $"else {Statements.Inspect()} end";
@@ -317,26 +310,19 @@ namespace Embers
             }
         }
         public class WhileExpression : ConditionalExpression {
-            public WhileExpression(DebugLocation location, Expression condition, List<Expression> statements) : base(location, condition, statements) { }
+            public WhileExpression(DebugLocation location, Expression condition, List<Expression> statements, bool inverse = false) : base(location, condition, statements, inverse) { }
             public override string Inspect() {
-                return $"while {Condition!.Inspect()} {{" + Statements.Inspect() + "}";
+                if (Inverse) {
+                    return $"until {Condition!.Inspect()} {{" + Statements.Inspect() + "}";
+                }
+                else {
+                    return $"while {Condition!.Inspect()} {{" + Statements.Inspect() + "}";
+                }
             }
             public override string Serialise() {
                 return $"new WhileExpression({Location.Serialise()}, {Condition!.Serialise()}, {Statements.Serialise()})";
             }
         }
-        /*public class ListOfExpressions : Expression {
-            public readonly List<Expression> Expressions;
-            public ListOfExpressions(DebugLocation location, List<Expression> expressions) : base(location) {
-                Expressions = expressions;
-            }
-            public override string Inspect() {
-                return Expressions.Inspect();
-            }
-            public override string Serialise() {
-                return $"new ListExpression({Location.Serialise()}, {Expressions.Serialise()})";
-            }
-        }*/
         public class AssignmentExpression : Expression {
             public ObjectTokenExpression Left;
             public Expression Right;
@@ -395,6 +381,20 @@ namespace Embers
                 return $"new ArrayExpression({Location.Serialise()}, {Expressions.Serialise()})";
             }
         }
+        /*public class UnaryExpression : Expression {
+            public readonly bool IsAdd;
+            public readonly Expression Expression;
+            public UnaryExpression(bool isAdd, Expression expression) : base(expression.Location) {
+                IsAdd = isAdd;
+                Expression = expression;
+            }
+            public override string Inspect() {
+                return $"{(IsAdd ? "+" : "-")}{Expression.Inspect()}";
+            }
+            public override string Serialise() {
+                return $"new UnaryExpression({(IsAdd ? "true" : "false")}, {Expression.Serialise()})";
+            }
+        }*/
         public abstract class Statement : Expression {
             public Statement(DebugLocation location) : base(location) { }
         }
@@ -724,7 +724,9 @@ namespace Embers
             // No brackets e.g. puts "hi"
             else {
                 ArgumentObjects = GetObjectsUntil(Objects, ref Index, Object => (Object is Phase2Token Token
-                    && Token.Type == Phase2TokenType.EndOfStatement) || Object is Statement || (Object is DoExpression Do && !Do.HighPriority));
+                    && (Token.Type == Phase2TokenType.EndOfStatement || Token.Type == Phase2TokenType.If || Token.Type == Phase2TokenType.Unless
+                    || Token.Type == Phase2TokenType.While || Token.Type == Phase2TokenType.Until)) || Object is Statement || (Object is DoExpression Do && !Do.HighPriority)
+                );
                 Index--;
             }
 
@@ -1158,13 +1160,13 @@ namespace Embers
                     if (Branch.Condition == null && i != IfBranches.Branches.Count - 1) {
                         throw new SyntaxErrorException($"{Branch.Location}: Else must be the last branch in an if statement");
                     }
-                    IfExpressions.Add(new IfExpression(Branch.Location, Branch.Condition, Branch.Statements));
+                    IfExpressions.Add(new IfExpression(Branch.Location, Branch.Condition, Branch.Statements, Branch.Inverse));
                 }
                 return new IfBranchesStatement(IfBranches.Location, IfExpressions);
             }
             // End While Block
             else if (Block is BuildingWhile WhileBlock) {
-                return new WhileStatement(new WhileExpression(WhileBlock.Location, WhileBlock.Condition!, WhileBlock.Statements));
+                return new WhileStatement(new WhileExpression(WhileBlock.Location, WhileBlock.Condition!, WhileBlock.Statements, WhileBlock.Inverse));
             }
             // End Unknown Block (internal error)
             else {
@@ -1194,7 +1196,7 @@ namespace Embers
                 throw new SyntaxErrorException($"{Location}: Expected method name after 'undef', got nothing");
             }
         }
-        static BuildingIf ParseIf(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index)
+        static BuildingIf ParseIf(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index, bool Inverse = false)
         {
             // Get condition
             int StartIndex = Index + 1;
@@ -1209,7 +1211,7 @@ namespace Embers
             Expression ConditionExpression = ObjectsToExpression(Condition);
 
             // Open if block
-            return new BuildingIf(Location, ConditionExpression);
+            return new BuildingIf(Location, ConditionExpression, Inverse);
         }
         static List<Phase2Object> GetBlocks(List<Phase2Object> ParsedObjects) {
             if (ParsedObjects.Count == 0) return ParsedObjects;
@@ -1246,6 +1248,7 @@ namespace Embers
             }
 
             for (int i = 0; i < ParsedObjects.Count; i++) {
+                Phase2Object? LastUnknownObject = i - 1 >= 0 ? ParsedObjects[i - 1] : null;
                 Phase2Object UnknownObject = ParsedObjects[i];
                 DebugLocation Location = UnknownObject.Location;
 
@@ -1290,14 +1293,61 @@ namespace Embers
                             PushBlock(new BuildingDo(Location, DoArguments, false));
                             break;
                         }
-                        // While
-                        case Phase2TokenType.While: {
+                        // While / Until
+                        case Phase2TokenType.While:
+                        case Phase2TokenType.Until: {
+                            if (LastUnknownObject != null && !(LastUnknownObject is Phase2Token Tok && Tok.Type == Phase2TokenType.EndOfStatement)) {
+                                // Format is statement while/until expression; handle later
+                                AddPendingObjectAt(i);
+                                break;
+                            }
+
                             i++;
                             List<Phase2Object> Condition = GetObjectsUntil(ParsedObjects, ref i, Obj =>
                                 Obj is Phase2Token Tok && (Tok.Type == Phase2TokenType.EndOfStatement || Tok.Type == Phase2TokenType.Do));
 
-                            // Open while block
-                            PushBlock(new BuildingWhile(Token.Location, ObjectsToExpression(Condition)));
+                            // Open while/until block
+                            if (Token.Type == Phase2TokenType.While) {
+                                PushBlock(new BuildingWhile(Token.Location, ObjectsToExpression(Condition)));
+                            }
+                            else {
+                                PushBlock(new BuildingWhile(Token.Location, ObjectsToExpression(Condition), true));
+                            }
+                            break;
+                        }
+                        // If / Unless
+                        case Phase2TokenType.If:
+                        case Phase2TokenType.Unless: {
+                            if (LastUnknownObject != null && !(LastUnknownObject is Phase2Token Tok && Tok.Type == Phase2TokenType.EndOfStatement)) {
+                                // Format is statement if/unless expression; handle later
+                                AddPendingObjectAt(i);
+                                break;
+                            }
+
+                            BuildingIf BuildingIf = ParseIf(Token.Location, ParsedObjects, ref i, Token.Type == Phase2TokenType.Unless);
+                            PushBlock(new BuildingIfBranches(Token.Location, new List<BuildingIf>() {BuildingIf}));
+                            break;
+                        }
+                        // Elsif
+                        case Phase2TokenType.Elsif: {
+                            if (CurrentBlocks.TryPeek(out BuildingBlock? Block) && Block is BuildingIfBranches IfBlock) {
+                                ResolveStatementsWithoutEndingBlock();
+                                IfBlock.Branches.Add(ParseIf(Token.Location, ParsedObjects, ref i));
+                            }
+                            else {
+                                throw new SyntaxErrorException($"{Token.Location}: Elsif must follow if");
+                            }
+                            break;
+                        }
+                        // Else
+                        case Phase2TokenType.Else: {
+                            if (CurrentBlocks.TryPeek(out BuildingBlock? Block) && Block is BuildingIfBranches IfBlock) {
+                                ResolveStatementsWithoutEndingBlock();
+                                IfBlock.Branches.Add(new BuildingIf(Token.Location, null));
+                            }
+                            else {
+                                throw new SyntaxErrorException($"{Token.Location}: Else must follow if");
+                            }
                             break;
                         }
                         // End
@@ -1329,34 +1379,6 @@ namespace Embers
                             if (EndedExpression != null) AddPendingObject(EndedExpression);
                             break;
                         }
-                        // If
-                        case Phase2TokenType.If: {
-                            BuildingIf BuildingIf = ParseIf(Token.Location, ParsedObjects, ref i);
-                            PushBlock(new BuildingIfBranches(Token.Location, new List<BuildingIf>() {BuildingIf}));
-                            break;
-                        }
-                        // Elsif
-                        case Phase2TokenType.Elsif: {
-                            if (CurrentBlocks.TryPeek(out BuildingBlock? Block) && Block is BuildingIfBranches IfBlock) {
-                                ResolveStatementsWithoutEndingBlock();
-                                IfBlock.Branches.Add(ParseIf(Token.Location, ParsedObjects, ref i));
-                            }
-                            else {
-                                throw new SyntaxErrorException($"{Token.Location}: Elsif must follow if");
-                            }
-                            break;
-                        }
-                        // Else
-                        case Phase2TokenType.Else: {
-                            if (CurrentBlocks.TryPeek(out BuildingBlock? Block) && Block is BuildingIfBranches IfBlock) {
-                                ResolveStatementsWithoutEndingBlock();
-                                IfBlock.Branches.Add(new BuildingIf(Token.Location, null));
-                            }
-                            else {
-                                throw new SyntaxErrorException($"{Token.Location}: Else must follow if");
-                            }
-                            break;
-                        }
                         // Other
                         default: {
                             AddPendingObjectAt(i);
@@ -1370,7 +1392,8 @@ namespace Embers
             }
 
             if (CurrentBlocks.Count != 1) {
-                throw new SyntaxErrorException($"{CurrentBlocks.Peek().Location}: {CurrentBlocks.Count - 1} block{(CurrentBlocks.Count == 2 ? " was" : "s were")} never closed with an end statement");
+                throw new SyntaxErrorException($"{CurrentBlocks.Peek().Location}: {(CurrentBlocks.Count == 2 ? "" : CurrentBlocks.Count - 1 + " ")
+                    }block{(CurrentBlocks.Count == 2 ? " was" : "s were")} never closed with an end statement");
             }
 
             BuildingBlock TopBlock = CurrentBlocks.Pop();
@@ -1609,6 +1632,54 @@ namespace Embers
                 }
             }
 
+            // Unary
+            for (int i = 0; i < ParsedObjects.Count; i++) {
+                Phase2Object UnknownObject = ParsedObjects[i];
+                Phase2Object? LastUnknownObject = i - 1 >= 0 ? ParsedObjects[i - 1] : null;
+                Phase2Object? NextUnknownObject = i + 1 < ParsedObjects.Count ? ParsedObjects[i + 1] : null;
+
+                if (UnknownObject is Phase2Token Token) {
+                    if (Token.Type == Phase2TokenType.Operator && (Token.Value! == "+" || Token.Value! == "-")) {
+                        // Get next object token
+                        ObjectTokenExpression? NextObjectToken = null;
+                        if (NextUnknownObject is ObjectTokenExpression NextExpression) {
+                            if (NextExpression is PathExpression NextPathExpression) {
+                                if (NextPathExpression.ParentObject is ObjectTokenExpression NextPathObjectExpression) {
+                                    NextObjectToken = NextPathObjectExpression;
+                                }
+                            }
+                            else if (NextExpression is ObjectTokenExpression NextObjectExpression) {
+                                NextObjectToken = NextObjectExpression;
+                            }
+                        }
+                        else if (NextUnknownObject is MethodCallExpression NextMethodExpression) {
+                            if (NextMethodExpression.MethodPath is PathExpression NextMethodPathExpression) {
+                                if (NextMethodPathExpression.ParentObject is ObjectTokenExpression NextMethodPathObjectExpression) {
+                                    NextObjectToken = NextMethodPathObjectExpression;
+                                }
+                            }
+                            else if (NextMethodExpression.MethodPath is ObjectTokenExpression NextMethodObjectExpression) {
+                                NextObjectToken = NextMethodObjectExpression;
+                            }
+                        }
+
+                        // Add method call expression for unary operator
+                        if (NextObjectToken != null) {
+                            bool DoesNotFollowExpression = LastUnknownObject == null || LastUnknownObject is not Expression;
+                            bool HasNoWhitespace = !NextObjectToken.Token.FollowsWhitespace;
+
+                            if (DoesNotFollowExpression || HasNoWhitespace) {
+                                ParsedObjects.RemoveRange(i, 2);
+                                ParsedObjects.Insert(i, new MethodCallExpression(
+                                    new PathExpression(NextObjectToken, new Phase2Token(NextObjectToken.Location, Phase2TokenType.LocalVariableOrMethod, Token.Value! + "@")),
+                                    null
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+
             // Operators
             foreach (string[] Operators in OperatorPrecedence) {
                 for (int i = 0; i < ParsedObjects.Count; i++) {
@@ -1753,7 +1824,7 @@ namespace Embers
                 Phase2Object UnknownObject = ParsedObjects[i];
 
                 if (UnknownObject is Phase2Token Token) {
-                    if (Token.Type == Phase2TokenType.If || Token.Type == Phase2TokenType.While) {
+                    if (Token.Type == Phase2TokenType.If || Token.Type == Phase2TokenType.Unless || Token.Type == Phase2TokenType.While || Token.Type == Phase2TokenType.Until) {
                         if (i - 1 >= 0 && ParsedObjects[i - 1] is Expression Statement) {
                             if (i + 1 < ParsedObjects.Count && ParsedObjects[i + 1] is Expression Condition) {
                                 // Remove three expressions
@@ -1765,8 +1836,14 @@ namespace Embers
                                 if (Token.Type == Phase2TokenType.If) {
                                     ConditionalExpression = new IfExpression(Statement.Location, Condition, ConditionalStatement);
                                 }
-                                else {
+                                else if (Token.Type == Phase2TokenType.Unless) {
+                                    ConditionalExpression = new IfExpression(Statement.Location, Condition, ConditionalStatement, true);
+                                }
+                                else if (Token.Type == Phase2TokenType.While) {
                                     ConditionalExpression = new WhileExpression(Statement.Location, Condition, ConditionalStatement);
+                                }
+                                else {
+                                    ConditionalExpression = new WhileExpression(Statement.Location, Condition, ConditionalStatement, true);
                                 }
                                 // Insert conditional expression
                                 ParsedObjects.Insert(i, ConditionalExpression);
@@ -1929,16 +2006,18 @@ namespace Embers
             }
         }
         abstract class BuildingConditional : BuildingBlock {
+            public readonly bool Inverse;
             public readonly Expression? Condition;
-            public BuildingConditional(DebugLocation location, Expression? condition) : base(location) {
+            public BuildingConditional(DebugLocation location, Expression? condition, bool inverse = false) : base(location) {
+                Inverse = inverse;
                 Condition = condition;
             }
         }
         class BuildingIf : BuildingConditional {
-            public BuildingIf(DebugLocation location, Expression? condition) : base(location, condition) { }
+            public BuildingIf(DebugLocation location, Expression? condition, bool inverse = false) : base(location, condition, inverse) { }
         }
         class BuildingWhile : BuildingConditional {
-            public BuildingWhile(DebugLocation location, Expression condition) : base(location, condition) { }
+            public BuildingWhile(DebugLocation location, Expression condition, bool inverse = false) : base(location, condition, inverse) { }
         }
         class BuildingIfBranches : BuildingBlock {
             public readonly List<BuildingIf> Branches;

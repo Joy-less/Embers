@@ -95,6 +95,24 @@ namespace Embers_Tests
                 end
             ", -99L);
 
+            // Unless
+            AssertEqual(@"
+                unless false then
+                    $result = 1
+                else
+                    $result = 0
+                end
+                $result
+            ", 1L);
+
+            // One-line conditions
+            AssertEqual(@"
+                $value = 0
+                $value += 1 until true
+                $value -= 30 if true
+                $value
+            ", -30L);
+
             // Lambdas & always return last expression
             AssertEqual(@"
                 my_method = lambda do
@@ -201,6 +219,14 @@ namespace Embers_Tests
                 arr = [1, 2, 3, 4, 5]
                 arr.map {|a| 2*a}
             ", Obj => Obj is List<Instance> Arr && Arr.Count == 5 && Arr[0].Integer == 2L && Arr[1].Integer == 4L && Arr[2].Integer == 6L && Arr[3].Integer == 8L && Arr[4].Integer == 10L);
+
+            // Unary
+            AssertEqual(@"
+                a = -1
+                b = - 2
+                c = (- 3.4)
+                return a, b, c
+            ", new object[] {-1L, -2L, -3.4d});
         }
 
 

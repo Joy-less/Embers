@@ -970,19 +970,15 @@ namespace Embers
                     }
                 }
             }
-            /*// Indexer
-            else if (Expression is IndexerExpression IndexerExpression) {
-                
-            }*/
             // If
             else if (Expression is IfExpression IfExpression) {
-                if (IfExpression.Condition == null || (await InterpretExpressionAsync(IfExpression.Condition))[0].IsTruthy) {
+                if (IfExpression.Condition == null || (await InterpretExpressionAsync(IfExpression.Condition))[0].IsTruthy != IfExpression.Inverse) {
                     return await InternalInterpretAsync(IfExpression.Statements);
                 }
             }
             // While
             else if (Expression is WhileExpression WhileExpression) {
-                while ((await InterpretExpressionAsync(WhileExpression.Condition!))[0].IsTruthy) {
+                while ((await InterpretExpressionAsync(WhileExpression.Condition!))[0].IsTruthy != WhileExpression.Inverse) {
                     try {
                         await InternalInterpretAsync(WhileExpression.Statements);
                     }
@@ -1144,7 +1140,7 @@ namespace Embers
                     IfExpression Branch = IfStatement.Branches[i];
                     if (Branch.Condition != null) {
                         Instance ConditionResult = await InterpretExpressionAsync(Branch.Condition);
-                        if (ConditionResult.IsTruthy) {
+                        if (ConditionResult.IsTruthy != Branch.Inverse) {
                             return await InternalInterpretAsync(Branch.Statements);
                         }
                     }

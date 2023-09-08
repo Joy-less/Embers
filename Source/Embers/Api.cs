@@ -50,6 +50,8 @@ namespace Embers
             Interpreter.Integer.InstanceMethods["=="] = new Method(Integer._Equals, 1);
             Interpreter.Integer.InstanceMethods["<"] = new Method(Integer._LessThan, 1);
             Interpreter.Integer.InstanceMethods[">"] = new Method(Integer._GreaterThan, 1);
+            Interpreter.Integer.InstanceMethods["+@"] = new Method(Integer._UnaryPlus, 0);
+            Interpreter.Integer.InstanceMethods["-@"] = new Method(Integer._UnaryMinus, 0);
             Interpreter.Integer.InstanceMethods["to_i"] = new Method(Integer.to_i, 0);
             Interpreter.Integer.InstanceMethods["to_f"] = new Method(Integer.to_f, 0);
             Interpreter.Integer.InstanceMethods["times"] = new Method(Integer.times, 0);
@@ -62,6 +64,8 @@ namespace Embers
             Interpreter.Float.InstanceMethods["%"] = new Method(Float._Modulo, 1);
             Interpreter.Float.InstanceMethods["**"] = new Method(Float._Exponentiate, 1);
             Interpreter.Float.InstanceMethods["=="] = new Method(Float._Equals, 1);
+            Interpreter.Float.InstanceMethods["+@"] = new Method(Float._UnaryPlus, 0);
+            Interpreter.Float.InstanceMethods["-@"] = new Method(Float._UnaryMinus, 0);
             Interpreter.Float.InstanceMethods["to_i"] = new Method(Float.to_i, 0);
             Interpreter.Float.InstanceMethods["to_f"] = new Method(Float.to_f, 0);
 
@@ -466,6 +470,12 @@ namespace Embers
                     return Input.Interpreter.False;
                 }
             }
+            public static async Task<Instances> _UnaryPlus(MethodInput Input) {
+                return Input.Instance;
+            }
+            public static async Task<Instances> _UnaryMinus(MethodInput Input) {
+                return new IntegerInstance(Input.Interpreter.Integer, -Input.Instance.Integer);
+            }
             public static async Task<Instances> to_i(MethodInput Input) {
                 return Input.Instance;
             }
@@ -519,6 +529,12 @@ namespace Embers
                 else {
                     return Input.Interpreter.False;
                 }
+            }
+            public static async Task<Instances> _UnaryPlus(MethodInput Input) {
+                return Input.Instance;
+            }
+            public static async Task<Instances> _UnaryMinus(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, -Input.Instance.Float);
             }
             public static async Task<Instances> to_i(MethodInput Input) {
                 return new IntegerInstance(Input.Interpreter.Integer, Input.Instance.Integer);
