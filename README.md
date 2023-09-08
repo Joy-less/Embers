@@ -1,21 +1,25 @@
+![Noko](Assets/Noko.png)
+
 # Embers (Embeddable Ruby Scripts)
+
 An embeddable Ruby interpreter written entirely in C#. The aim is to make Ruby usable in the Unity game engine or other C# applications.
 
 Its minimalistic design should be suitable for use in game engines or modding scenarios.
 
 ## Advantages
 - Easy to embed, sandbox, and control in your C# application or game.
-- Source code is easier to understand, with everything in one place.
+- Source code is easy to understand, with everything in one place.
 - Each interpreter can have multiple scripts which can each run on their own thread and communicate.
-- Fully compatible with Unity.
-- Obsolete functionality, such as interpreting numbers starting with 0 as octal, is removed.
+- Full compatibility with Unity.
+- Obsolete functionality, such as numbers starting with 0 being octal integers, is not included.
+- A great mascot.
 
 ## Drawbacks
 - Likely to be considerably less optimised than Ruby. Benchmarks show it is several times slower.
-- Does not have 100% compatibility with Ruby syntax or functionality.
+- Does not have 100% compatibility with Ruby syntax and functionality.
 
 ## Note
-Ruby is a very flexible language that is often likened to a set of sharp knives. One such feature is the ability to patch core classes. Please keep this in mind when using or contributing to this repository.
+Ruby is a very flexible language that is sometimes likened to a set of sharp knives. One such feature is the ability to patch core classes. Please keep this in mind when using or contributing to this repository.
 
 ## Usage
 ### Basic example
@@ -214,3 +218,14 @@ This will output some C# code, which you can then run directly by wrapping it in
 MyScript.Interpret(new List<Embers.Phase2.Expression>() {new Embers.Phase2.MethodCallExpression(new Embers.Phase2.ObjectTokenExpression(new Embers.Phase2.Phase2Token(new DebugLocation(1, 0), Embers.Phase2.Phase2TokenType.LocalVariableOrMethod, "puts", new Embers.Phase1.Phase1Token(new DebugLocation(1, 0), Embers.Phase1.Phase1TokenType.Identifier, "puts", false, false))), new List<Embers.Phase2.Expression>() {new Embers.Phase2.ObjectTokenExpression(new Embers.Phase2.Phase2Token(new DebugLocation(1, 5), Embers.Phase2.Phase2TokenType.String, "Hello there!", new Embers.Phase1.Phase1Token(new DebugLocation(1, 5), Embers.Phase1.Phase1TokenType.String, "Hello there!", true, false)))}, null)});
 ```
 Please note that pre-parsed code will not be compatible between different versions of Embers. It should be done just before building your project.
+
+## About Noko
+Noko is Embers' mascot who you can see at the top.
+
+She comes from a society living in the Earth's core, nearly 3000km below the surface. She has fiery powers but finds the surface a bit cold.
+
+Noko is short for "Nokoribi" meaning "embers" in Japanese.
+
+You can use her branding under the [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) license.
+
+![Made with Embers](Assets/Made%20with%20Embers.png)
