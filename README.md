@@ -228,4 +228,4 @@ Noko is short for "Nokoribi" meaning "embers" in Japanese.
 
 You can use her branding under the [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) license.
 
-![Made with Embers](Assets/Made%20with%20Embers.png)
+![Made with Embers](Assets/Made%20with%20Embers%20Mini.png)

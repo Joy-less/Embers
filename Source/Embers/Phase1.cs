@@ -272,7 +272,12 @@
 
                 // Integer
                 if (char.IsAsciiDigit(Chara)) {
-                    string Number = BuildWhile(char.IsAsciiDigit);
+                    // Build integer
+                    string Number = BuildWhile(c => char.IsAsciiDigit(c) || c == '_');
+                    // Remove '_'
+                    if (Number.EndsWith('_')) throw new SyntaxErrorException($"{Location}: Trailing '_' in number");
+                    Number = Number.Replace("_", "");
+                    // Add integer to tokens
                     Tokens.Add(new(Location, Phase1TokenType.Integer, Number, FollowsWhitespace));
                     i--;
                 }

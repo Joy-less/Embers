@@ -17,6 +17,9 @@ unless false then
 else
     puts 'No'
 end
+
+_52 = 5_0_4.2_6
+puts _52
                     ")
                 );
                 Console.ReadLine();
