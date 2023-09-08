@@ -21,9 +21,9 @@ namespace Embers
         public readonly Class Proc;
         public readonly Class Array;
 
-        public readonly Instance Nil;
-        public readonly Instance True;
-        public readonly Instance False;
+        public readonly NilInstance Nil;
+        public readonly TrueInstance True;
+        public readonly FalseInstance False;
 
         public readonly Random InternalRandom = new();
         public long RandomSeed;

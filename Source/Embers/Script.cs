@@ -666,6 +666,565 @@ namespace Embers
             LocalInstanceMethod = null;
             return false;
         }
+
+        async Task<Instances> InterpretMethodCallExpression(MethodCallExpression MethodCallExpression) {
+            Instance MethodPath = await InterpretExpressionAsync(MethodCallExpression.MethodPath, ReturnType.FoundVariable);
+            if (MethodPath is VariableReference MethodReference) {
+                // Static method
+                if (MethodReference.Block != null) {
+                    // Get class/module which owns method
+                    Module MethodModule = MethodReference.Block as Module ?? CurrentModule;
+                    // Get instance of the class/module which owns method
+                    Instance MethodOwner;
+                    if (MethodCallExpression.MethodPath is PathExpression MethodCallPathExpression) {
+                        MethodOwner = await InterpretExpressionAsync(MethodCallPathExpression.ParentObject);
+                    }
+                    else {
+                        MethodOwner = new ModuleReference(MethodModule);
+                    }
+                    // Call class method
+                    bool Found = MethodModule.Methods.TryGetValue(MethodReference.Token.Value!, out Method? StaticMethod);
+                    if (Found) {
+                        return await CreateTemporaryClassScope(MethodModule, async () =>
+                            await StaticMethod!.Call(
+                                this, MethodOwner, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
+                            )
+                        );
+                    }
+                    else {
+                        throw new RuntimeException($"{MethodReference.Token.Location}: Undefined method '{MethodReference.Token.Value!}' for {CurrentInstance.Module.Name}");
+                    }
+                }
+                // Instance method
+                else {
+                    // Local
+                    if (MethodReference.IsLocalReference) {
+                        // Call local instance method
+                        bool Found = TryGetLocalInstanceMethod(MethodReference.Token.Value!, out Method? LocalInstanceMethod);
+                        if (Found) {
+                            return await CreateTemporaryInstanceScope(CurrentInstance, async () =>
+                                await LocalInstanceMethod!.Call(
+                                    this, CurrentInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
+                                )
+                            );
+                        }
+                        else {
+                            throw new RuntimeException($"{MethodReference.Token.Location}: Undefined method '{MethodReference.Token.Value!}'");
+                        }
+                    }
+                    // Path
+                    else {
+                        Instance MethodInstance = MethodReference.Instance!;
+                        // Call instance method
+                        bool Found = MethodInstance.InstanceMethods.TryGetValue(MethodReference.Token.Value!, out Method? PathInstanceMethod);
+                        if (Found) {
+                            return await CreateTemporaryInstanceScope(MethodInstance, async () =>
+                                await PathInstanceMethod!.Call(
+                                    this, MethodInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
+                                )
+                            );
+                        }
+                        else {
+                            throw new RuntimeException($"{MethodReference.Token.Location}: Undefined method '{MethodReference.Token.Value!}' for {CurrentInstance.Module.Name}");
+                        }
+                    }
+                }
+            }
+            else {
+                throw new InternalErrorException($"{MethodCallExpression.Location}: MethodPath should be VariableReference, not {MethodPath.GetType().Name}");
+            }
+        }
+        async Task<Instances> InterpretObjectTokenExpression(ObjectTokenExpression ObjectTokenExpression, ReturnType ReturnType) {
+            // Path
+            if (ObjectTokenExpression is PathExpression PathExpression) {
+                Instance ParentInstance = await InterpretExpressionAsync(PathExpression.ParentObject);
+                // Static method
+                if (ParentInstance is ModuleReference ParentModule) {
+                    // Method
+                    if (ReturnType != ReturnType.HypotheticalVariable) {
+                        // Found
+                        if (ParentModule.Module.Methods.TryGetValue(PathExpression.Token.Value!, out Method? FindMethod)) {
+                            // Call class/module method
+                            if (ReturnType == ReturnType.InterpretResult) {
+                                return await CreateTemporaryClassScope(ParentModule.Module, async () =>
+                                    await FindMethod.Call(this, ParentModule)
+                                );
+                            }
+                            // Return method
+                            else {
+                                return new VariableReference(ParentModule.Module, PathExpression.Token);
+                            }
+                        }
+                        // Error
+                        else {
+                            throw new RuntimeException($"{PathExpression.Token.Location}: Undefined method '{PathExpression.Token.Value!}' for {ParentModule.Module.Name}");
+                        }
+                    }
+                    // New method
+                    else {
+                        return new VariableReference(ParentModule.Module, PathExpression.Token);
+                    }
+                }
+                // Instance method
+                else {
+                    // Method
+                    if (ReturnType != ReturnType.HypotheticalVariable) {
+                        // Method
+                        if (ParentInstance.InstanceMethods.TryGetValue(PathExpression.Token.Value!, out Method? FindMethod)) {
+                            // Call instance method
+                            if (ReturnType == ReturnType.InterpretResult) {
+                                return await CreateTemporaryInstanceScope(ParentInstance, async () =>
+                                    await FindMethod.Call(this, ParentInstance)
+                                );
+                            }
+                            // Return method
+                            else {
+                                return new VariableReference(ParentInstance, PathExpression.Token);
+                            }
+                        }
+                        // Error
+                        else {
+                            throw new RuntimeException($"{PathExpression.Token.Location}: Undefined method '{PathExpression.Token.Value!}' for {ParentInstance.Inspect()}");
+                        }
+                    }
+                    // New method
+                    else {
+                        return new VariableReference(ParentInstance, PathExpression.Token);
+                    }
+                }
+            }
+            // Constant Path
+            else if (ObjectTokenExpression is ConstantPathExpression ConstantPathExpression) {
+                Instance ParentInstance = await InterpretExpressionAsync(ConstantPathExpression.ParentObject);
+                // Constant
+                if (ReturnType != ReturnType.HypotheticalVariable) {
+                    // Constant
+                    if (ParentInstance.Module.Constants.TryGetValue(ConstantPathExpression.Token.Value!, out Instance? ConstantValue)) {
+                        // Return constant
+                        if (ReturnType == ReturnType.InterpretResult) {
+                            return ConstantValue;
+                        }
+                        // Return constant reference
+                        else {
+                            return new VariableReference(ParentInstance.Module, ConstantPathExpression.Token);
+                        }
+                    }
+                    // Error
+                    else {
+                        throw new RuntimeException($"{ConstantPathExpression.Token.Location}: Uninitialized constant {ConstantPathExpression.Inspect()}");
+                    }
+                }
+                // New constant
+                else {
+                    return new VariableReference(ParentInstance.Module, ConstantPathExpression.Token);
+                }
+            }
+            // Local
+            else {
+                // Literal
+                if (ObjectTokenExpression.Token.IsObjectToken) {
+                    return await Instance.CreateFromToken(this, ObjectTokenExpression.Token);
+                }
+                else {
+                    if (ReturnType != ReturnType.HypotheticalVariable) {
+                        switch (ObjectTokenExpression.Token.Type) {
+                            // Local variable or method
+                            case Phase2TokenType.LocalVariableOrMethod: {
+                                // Local variable (priority)
+                                if (TryGetLocalVariable(ObjectTokenExpression.Token.Value!, out Instance? Value)) {
+                                    // Return local variable value
+                                    if (ReturnType == ReturnType.InterpretResult) {
+                                        return Value!;
+                                    }
+                                    // Return local variable reference
+                                    else {
+                                        return new VariableReference(ObjectTokenExpression.Token);
+                                    }
+                                }
+                                // Method
+                                else if (TryGetLocalInstanceMethod(ObjectTokenExpression.Token.Value!, out Method? Method)) {
+                                    // Call local method
+                                    if (ReturnType == ReturnType.InterpretResult) {
+                                        return await Method!.Call(this, CurrentInstance);
+                                    }
+                                    // Return method reference
+                                    else {
+                                        return new VariableReference(ObjectTokenExpression.Token);
+                                    }
+                                }
+                                // Undefined
+                                else {
+                                    throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Undefined local variable or method '{ObjectTokenExpression.Token.Value!}' for {CurrentScope}");
+                                }
+                            }
+                            // Global variable
+                            case Phase2TokenType.GlobalVariable: {
+                                if (Interpreter.GlobalVariables.TryGetValue(ObjectTokenExpression.Token.Value!, out Instance? Value)) {
+                                    // Return global variable value
+                                    if (ReturnType == ReturnType.InterpretResult) {
+                                        return Value;
+                                    }
+                                    // Return global variable reference
+                                    else {
+                                        return new VariableReference(ObjectTokenExpression.Token);
+                                    }
+                                }
+                                else {
+                                    return Interpreter.Nil;
+                                }
+                            }
+                            // Constant
+                            case Phase2TokenType.ConstantOrMethod: {
+                                // Constant (priority)
+                                if (TryGetLocalConstant(ObjectTokenExpression.Token.Value!, out Instance? ConstantValue)) {
+                                    // Return constant value
+                                    if (ReturnType == ReturnType.InterpretResult) {
+                                        return ConstantValue!;
+                                    }
+                                    // Return constant reference
+                                    else {
+                                        return new VariableReference(ObjectTokenExpression.Token);
+                                    }
+                                }
+                                // Method
+                                else if (TryGetLocalInstanceMethod(ObjectTokenExpression.Token.Value!, out Method? Method)) {
+                                    // Call local method
+                                    if (ReturnType == ReturnType.InterpretResult) {
+                                        return await Method!.Call(this, CurrentInstance);
+                                    }
+                                    // Return method reference
+                                    else {
+                                        return new VariableReference(ObjectTokenExpression.Token);
+                                    }
+                                }
+                                // Uninitialized
+                                else {
+                                    throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Uninitialized constant '{ObjectTokenExpression.Token.Value!}' for {CurrentModule.Name}");
+                                }
+                            }
+                            // Instance variable
+                            case Phase2TokenType.InstanceVariable: {
+                                if (CurrentInstance.InstanceVariables.TryGetValue(ObjectTokenExpression.Token.Value!, out Instance? Value)) {
+                                    // Return instance variable value
+                                    if (ReturnType == ReturnType.InterpretResult) {
+                                        return Value;
+                                    }
+                                    // Return instance variable reference
+                                    else {
+                                        return new VariableReference(ObjectTokenExpression.Token);
+                                    }
+                                }
+                                else {
+                                    return Interpreter.Nil;
+                                }
+                            }
+                            // Class variable
+                            case Phase2TokenType.ClassVariable: {
+                                if (CurrentModule.ClassVariables.TryGetValue(ObjectTokenExpression.Token.Value!, out Instance? Value)) {
+                                    // Return class variable value
+                                    if (ReturnType == ReturnType.InterpretResult) {
+                                        return Value;
+                                    }
+                                    // Return class variable reference
+                                    else {
+                                        return new VariableReference(ObjectTokenExpression.Token);
+                                    }
+                                }
+                                else {
+                                    throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Uninitialized class variable '{ObjectTokenExpression.Token.Value!}' for {CurrentModule}");
+                                }
+                            }
+                            // Symbol
+                            case Phase2TokenType.Symbol: {
+                                return GetSymbol(ObjectTokenExpression.Token.Value!);
+                            }
+                            // Self
+                            case Phase2TokenType.Self: {
+                                return new ModuleReference(CurrentModule);
+                            }
+                            // Error
+                            default:
+                                throw new InternalErrorException($"{ObjectTokenExpression.Token.Location}: Unknown variable type {ObjectTokenExpression.Token.Type}");
+                        }
+                    }
+                    // Variable
+                    else {
+                        return new VariableReference(ObjectTokenExpression.Token);
+                    }
+                }
+            }
+        }
+        async Task<Instances> InterpretIfExpression(IfExpression IfExpression) {
+            if (IfExpression.Condition == null || (await InterpretExpressionAsync(IfExpression.Condition))[0].IsTruthy != IfExpression.Inverse) {
+                return await InternalInterpretAsync(IfExpression.Statements);
+            }
+            return Interpreter.Nil;
+        }
+        async Task<Instances> InterpretWhileExpression(WhileExpression WhileExpression) {
+            while ((await InterpretExpressionAsync(WhileExpression.Condition!))[0].IsTruthy != WhileExpression.Inverse) {
+                try {
+                    await InternalInterpretAsync(WhileExpression.Statements);
+                }
+                catch (BreakException) {
+                    break;
+                }
+            }
+            return Interpreter.Nil;
+        }
+        async Task<Instances> InterpretArrayExpression(ArrayExpression ArrayExpression) {
+            List<Instance> Items = new();
+            foreach (Expression Item in ArrayExpression.Expressions) {
+                Items.Add(await InterpretExpressionAsync(Item));
+            }
+            return new ArrayInstance(Interpreter.Array, Items);
+        }
+        async Task<Instances> InterpretWhileStatement(WhileStatement WhileStatement) {
+            await InterpretExpressionAsync(WhileStatement.WhileExpression);
+            return Interpreter.Nil;
+        }
+        async Task<Instances> InterpretLogicalExpression(LogicalExpression LogicalExpression) {
+            Instance Left = (await InterpretExpressionAsync(LogicalExpression.Left)).SingleInstance;
+            switch (LogicalExpression.LogicType) {
+                case LogicalExpression.LogicalExpressionType.And:
+                    if (!Left.IsTruthy)
+                        return Left;
+                    break;
+            }
+            Instance Right = (await InterpretExpressionAsync(LogicalExpression.Right)).SingleInstance;
+            switch (LogicalExpression.LogicType) {
+                case LogicalExpression.LogicalExpressionType.And:
+                    return Right;
+                case LogicalExpression.LogicalExpressionType.Or:
+                    if (Left.IsTruthy)
+                        return Left;
+                    else
+                        return Right;
+                case LogicalExpression.LogicalExpressionType.Xor:
+                    if (Left.IsTruthy && !Right.IsTruthy)
+                        return Left;
+                    else if (!Left.IsTruthy && Right.IsTruthy)
+                        return Right;
+                    else
+                        return Interpreter.False;
+                default:
+                    throw new InternalErrorException($"{LogicalExpression.Location}: Unhandled logical expression type: '{LogicalExpression.LogicType}'");
+            }
+        }
+        async Task<Instances> InterpretDefineMethodStatement(DefineMethodStatement DefineMethodStatement) {
+            Instance MethodNameObject = await InterpretExpressionAsync(DefineMethodStatement.MethodName, ReturnType.HypotheticalVariable);
+            if (MethodNameObject is VariableReference MethodNameRef) {
+                string MethodName = MethodNameRef.Token.Value!;
+                // Define static method
+                if (MethodNameRef.Block != null) {
+                    Module MethodModule = (Module)MethodNameRef.Block;
+                    // Prevent redefining unsafe API methods
+                    if (!AllowUnsafeApi && MethodModule.Methods.TryGetValue(MethodName, out Method? ExistingMethod) && ExistingMethod.Unsafe) {
+                        throw new RuntimeException($"{DefineMethodStatement.Location}: The static method '{MethodName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
+                    }
+                    // Create or overwrite static method
+                    lock (MethodModule.Methods)
+                        MethodModule.Methods[MethodName] = DefineMethodStatement.MethodExpression.Method;
+                }
+                // Define instance method
+                else {
+                    Instance MethodInstance = MethodNameRef.Instance ?? CurrentInstance;
+                    // Prevent redefining unsafe API methods
+                    if (!AllowUnsafeApi && MethodInstance.InstanceMethods.TryGetValue(MethodName, out Method? ExistingMethod) && ExistingMethod.Unsafe) {
+                        throw new RuntimeException($"{DefineMethodStatement.Location}: The instance method '{MethodName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
+                    }
+                    // Create or overwrite instance method
+                    MethodInstance.AddOrUpdateInstanceMethod(MethodName, DefineMethodStatement.MethodExpression.Method);
+                }
+            }
+            else {
+                throw new InternalErrorException($"{DefineMethodStatement.Location}: Invalid method name: {MethodNameObject}");
+            }
+            return Interpreter.Nil;
+        }
+        async Task<Instances> InterpretDefineClassStatement(DefineClassStatement DefineClassStatement) {
+            Instance ClassNameObject = await InterpretExpressionAsync(DefineClassStatement.ClassName, ReturnType.HypotheticalVariable);
+            if (ClassNameObject is VariableReference ClassNameRef) {
+                string ClassName = ClassNameRef.Token.Value!;
+
+                // Create or patch class
+                Module NewModule;
+                // Patch class
+                if (CurrentModule.Constants.TryGetValue(ClassName, out Instance? ConstantValue) && ConstantValue is ModuleReference ModuleReference) {
+                    NewModule = ModuleReference.Module;
+                }
+                // Create class
+                else {
+                    if (DefineClassStatement.IsModule) {
+                        NewModule = new Module(ClassName, ClassNameRef.Module);
+                    }
+                    else {
+                        NewModule = new Class(ClassName, ClassNameRef.Module);
+                    }
+                }
+
+                // Interpret class statements
+                await CreateTemporaryClassScope(NewModule, async () => {
+                    await CreateTemporaryInstanceScope(new Instance(NewModule), async () => {
+                        await InternalInterpretAsync(DefineClassStatement.BlockStatements);
+                    });
+                });
+
+                // Store class/module constant
+                if (ClassNameRef.Block != null) {
+                    // Path
+                    Module Module = (Module)ClassNameRef.Block;
+                    lock (Module.Constants)
+                        Module.Constants[ClassName] = new ModuleReference(NewModule);
+                }
+                else if (ClassNameRef.IsLocalReference) {
+                    // Local
+                    Module Module = (ClassNameRef.Instance ?? CurrentInstance).Module;
+                    lock (Module)
+                        Module.Constants[ClassName] = new ModuleReference(NewModule);
+                }
+            }
+            else {
+                throw new InternalErrorException($"{DefineClassStatement.Location}: Invalid class/module name: {ClassNameObject}");
+            }
+            return Interpreter.Nil;
+        }
+        async Task<Instances> InterpretYieldStatement(YieldStatement YieldStatement, Method? OnYield) {
+            if (OnYield != null) {
+                List<Instance> YieldArgs = YieldStatement.YieldValues != null
+                    ? await InterpretExpressionsAsync(YieldStatement.YieldValues)
+                    : new();
+                await OnYield.Call(this, null, YieldArgs, BreakHandleType: BreakHandleType.Destroy);
+            }
+            else {
+                throw new RuntimeException($"{YieldStatement.Location}: No block given to yield to");
+            }
+            return Interpreter.Nil;
+        }
+        async Task<Instances> InterpretIfBranchesStatement(IfBranchesStatement IfStatement) {
+            for (int i = 0; i < IfStatement.Branches.Count; i++) {
+                IfExpression Branch = IfStatement.Branches[i];
+                if (Branch.Condition != null) {
+                    Instance ConditionResult = await InterpretExpressionAsync(Branch.Condition);
+                    if (ConditionResult.IsTruthy != Branch.Inverse) {
+                        return await InternalInterpretAsync(Branch.Statements);
+                    }
+                }
+                else {
+                    return await InternalInterpretAsync(Branch.Statements);
+                }
+            }
+            return Interpreter.Nil;
+        }
+        async Task<Instances> InterpretAssignmentExpression(AssignmentExpression AssignmentExpression, ReturnType ReturnType) {
+            async Task AssignToVariable(VariableReference Variable, Instance Value) {
+                switch (Variable.Token.Type) {
+                    case Phase2TokenType.LocalVariableOrMethod:
+                        lock (CurrentBlock.LocalVariables)
+                            CurrentBlock.LocalVariables[Variable.Token.Value!] = Value;
+                        break;
+                    case Phase2TokenType.GlobalVariable:
+                        lock (Interpreter.GlobalVariables)
+                            Interpreter.GlobalVariables[Variable.Token.Value!] = Value;
+                        break;
+                    case Phase2TokenType.ConstantOrMethod:
+                        if (CurrentBlock.Constants.ContainsKey(Variable.Token.Value!))
+                            await Warn($"{Variable.Token.Location}: Already initialized constant '{Variable.Token.Value!}'");
+                        lock (CurrentBlock.Constants)
+                            CurrentBlock.Constants[Variable.Token.Value!] = Value;
+                        break;
+                    case Phase2TokenType.InstanceVariable:
+                        lock (CurrentInstance.InstanceVariables)
+                            CurrentInstance.InstanceVariables[Variable.Token.Value!] = Value;
+                        break;
+                    case Phase2TokenType.ClassVariable:
+                        lock (CurrentModule.ClassVariables)
+                            CurrentModule.ClassVariables[Variable.Token.Value!] = Value;
+                        break;
+                    default:
+                        throw new InternalErrorException($"{Variable.Token.Location}: Assignment variable token is not a variable type (got {Variable.Token.Type})");
+                }
+            }
+
+            Instance Right = await InterpretExpressionAsync(AssignmentExpression.Right);
+
+            Instance Left = await InterpretExpressionAsync(AssignmentExpression.Left, ReturnType.HypotheticalVariable);
+            if (Left is VariableReference LeftVariable) {
+                if (Right is Instance RightInstance) {
+                    // LeftVariable = RightInstance
+                    await AssignToVariable(LeftVariable, RightInstance);
+
+                    // Return left variable reference or value
+                    if (ReturnType == ReturnType.InterpretResult) {
+                        return RightInstance;
+                    }
+                    else {
+                        return Left;
+                    }
+                }
+                else {
+                    throw new InternalErrorException($"{LeftVariable.Token.Location}: Assignment value should be an instance, but got {Right.GetType().Name}");
+                }
+            }
+            else {
+                throw new RuntimeException($"{AssignmentExpression.Left.Location}: {Left.GetType()} cannot be the target of an assignment");
+            }
+        }
+        async Task<Instances> InterpretUndefineMethodStatement(UndefineMethodStatement UndefineMethodStatement) {
+            string MethodName = UndefineMethodStatement.MethodName.Token.Value!;
+            if (MethodName == "initialize") {
+                await Warn($"{UndefineMethodStatement.MethodName.Token.Location}: undefining 'initialize' may cause serious problems");
+            }
+            if (!CurrentModule.InstanceMethods.Remove(MethodName)) {
+                throw new RuntimeException($"{UndefineMethodStatement.MethodName.Token.Location}: Undefined method '{MethodName}' for {CurrentModule.Name}");
+            }
+            return Interpreter.Nil;
+        }
+        async Task<Instances> InterpretDefinedExpression(DefinedExpression DefinedExpression) {
+            if (DefinedExpression.Expression is MethodCallExpression || DefinedExpression.Expression is PathExpression) {
+                return new StringInstance(Interpreter.String, "method");
+            }
+            else if (DefinedExpression.Expression is ObjectTokenExpression ObjectToken) {
+                if (ObjectToken.Token.Type == Phase2TokenType.LocalVariableOrMethod) {
+                    if (CurrentScope.LocalVariables.ContainsKey(ObjectToken.Token.Value!)) {
+                        return new StringInstance(Interpreter.String, "local-variable");
+                    }
+                    else if (CurrentInstance.InstanceMethods.ContainsKey(ObjectToken.Token.Value!)) {
+                        return new StringInstance(Interpreter.String, "method");
+                    }
+                    else {
+                        return Interpreter.Nil;
+                    }
+                }
+                else if (ObjectToken.Token.Type == Phase2TokenType.GlobalVariable) {
+                    if (Interpreter.GlobalVariables.ContainsKey(ObjectToken.Token.Value!)) {
+                        return new StringInstance(Interpreter.String, "global-variable");
+                    }
+                    else {
+                        return Interpreter.Nil;
+                    }
+                }
+                else if (ObjectToken.Token.Type == Phase2TokenType.ConstantOrMethod) {
+                    throw new NotImplementedException("Defined? not yet implemented for constants");
+                }
+                else if (ObjectToken.Token.Type == Phase2TokenType.InstanceVariable) {
+                    throw new NotImplementedException("Defined? not yet implemented for instance variables");
+                }
+                else if (ObjectToken.Token.Type == Phase2TokenType.ClassVariable) {
+                    if (CurrentModule.ClassVariables.ContainsKey(ObjectToken.Token.Value!)) {
+                        return new StringInstance(Interpreter.String, "class-variable");
+                    }
+                    else {
+                        return Interpreter.Nil;
+                    }
+                }
+                else {
+                    return new StringInstance(Interpreter.String, "expression");
+                }
+            }
+            else {
+                throw new InternalErrorException($"{DefinedExpression.Location}: Unknown expression type for defined?: {DefinedExpression.Expression.GetType().Name}");
+            }
+        }
         
         public enum BreakHandleType {
             Invalid,
@@ -681,591 +1240,30 @@ namespace Embers
             // Set approximate location
             ApproximateLocation = Expression.Location;
 
-            // Method call
-            if (Expression is MethodCallExpression MethodCallExpression) {
-                Instance MethodPath = await InterpretExpressionAsync(MethodCallExpression.MethodPath, ReturnType.FoundVariable);
-                if (MethodPath is VariableReference MethodReference) {
-                    // Static method
-                    if (MethodReference.Block != null) {
-                        // Get class/module which owns method
-                        Module MethodModule = MethodReference.Block as Module ?? CurrentModule;
-                        // Get instance of the class/module which owns method
-                        Instance MethodOwner;
-                        if (MethodCallExpression.MethodPath is PathExpression MethodCallPathExpression) {
-                            MethodOwner = await InterpretExpressionAsync(MethodCallPathExpression.ParentObject);
-                        }
-                        else {
-                            MethodOwner = new ModuleReference(MethodModule);
-                        }
-                        // Call class method
-                        bool Found = MethodModule.Methods.TryGetValue(MethodReference.Token.Value!, out Method? StaticMethod);
-                        if (Found) {
-                            return await CreateTemporaryClassScope(MethodModule, async () =>
-                                await StaticMethod!.Call(
-                                    this, MethodOwner, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
-                                )
-                            );
-                        }
-                        else {
-                            throw new RuntimeException($"{MethodReference.Token.Location}: Undefined method '{MethodReference.Token.Value!}' for {CurrentInstance.Module.Name}");
-                        }
-                    }
-                    // Instance method
-                    else {
-                        // Local
-                        if (MethodReference.IsLocalReference) {
-                            // Call local instance method
-                            bool Found = TryGetLocalInstanceMethod(MethodReference.Token.Value!, out Method? LocalInstanceMethod);
-                            if (Found) {
-                                return await CreateTemporaryInstanceScope(CurrentInstance, async () =>
-                                    await LocalInstanceMethod!.Call(
-                                        this, CurrentInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
-                                    )
-                                );
-                            }
-                            else {
-                                throw new RuntimeException($"{MethodReference.Token.Location}: Undefined method '{MethodReference.Token.Value!}'");
-                            }
-                        }
-                        // Path
-                        else {
-                            Instance MethodInstance = MethodReference.Instance!;
-                            // Call instance method
-                            bool Found = MethodInstance.InstanceMethods.TryGetValue(MethodReference.Token.Value!, out Method? PathInstanceMethod);
-                            if (Found) {
-                                return await CreateTemporaryInstanceScope(MethodInstance, async () =>
-                                    await PathInstanceMethod!.Call(
-                                        this, MethodInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
-                                    )
-                                );
-                            }
-                            else {
-                                throw new RuntimeException($"{MethodReference.Token.Location}: Undefined method '{MethodReference.Token.Value!}' for {CurrentInstance.Module.Name}");
-                            }
-                        }
-                    }
-                }
-                else {
-                    throw new InternalErrorException($"{MethodCallExpression.Location}: MethodPath should be VariableReference, not {MethodPath.GetType().Name}");
-                }
-            }
-            // Path or Object Token
-            else if (Expression is ObjectTokenExpression ObjectTokenExpression) {
-                // Path
-                if (ObjectTokenExpression is PathExpression PathExpression) {
-                    Instance ParentInstance = await InterpretExpressionAsync(PathExpression.ParentObject);
-                    // Static method
-                    if (ParentInstance is ModuleReference ParentModule) {
-                        // Method
-                        if (ReturnType != ReturnType.HypotheticalVariable) {
-                            // Found
-                            if (ParentModule.Module.Methods.TryGetValue(PathExpression.Token.Value!, out Method? FindMethod)) {
-                                // Call class/module method
-                                if (ReturnType == ReturnType.InterpretResult) {
-                                    return await CreateTemporaryClassScope(ParentModule.Module, async () =>
-                                        await FindMethod.Call(this, ParentModule)
-                                    );
-                                }
-                                // Return method
-                                else {
-                                    return new VariableReference(ParentModule.Module, PathExpression.Token);
-                                }
-                            }
-                            // Error
-                            else {
-                                throw new RuntimeException($"{PathExpression.Token.Location}: Undefined method '{PathExpression.Token.Value!}' for {ParentModule.Module.Name}");
-                            }
-                        }
-                        // New method
-                        else {
-                            return new VariableReference(ParentModule.Module, PathExpression.Token);
-                        }
-                    }
-                    // Instance method
-                    else {
-                        // Method
-                        if (ReturnType != ReturnType.HypotheticalVariable) {
-                            // Method
-                            if (ParentInstance.InstanceMethods.TryGetValue(PathExpression.Token.Value!, out Method? FindMethod)) {
-                                // Call instance method
-                                if (ReturnType == ReturnType.InterpretResult) {
-                                    return await CreateTemporaryInstanceScope(ParentInstance, async () =>
-                                        await FindMethod.Call(this, ParentInstance)
-                                    );
-                                }
-                                // Return method
-                                else {
-                                    return new VariableReference(ParentInstance, PathExpression.Token);
-                                }
-                            }
-                            // Error
-                            else {
-                                throw new RuntimeException($"{PathExpression.Token.Location}: Undefined method '{PathExpression.Token.Value!}' for {ParentInstance.Inspect()}");
-                            }
-                        }
-                        // New method
-                        else {
-                            return new VariableReference(ParentInstance, PathExpression.Token);
-                        }
-                    }
-                }
-                // Constant Path
-                else if (ObjectTokenExpression is ConstantPathExpression ConstantPathExpression) {
-                    Instance ParentInstance = await InterpretExpressionAsync(ConstantPathExpression.ParentObject);
-                    // Constant
-                    if (ReturnType != ReturnType.HypotheticalVariable) {
-                        // Constant
-                        if (ParentInstance.Module.Constants.TryGetValue(ConstantPathExpression.Token.Value!, out Instance? ConstantValue)) {
-                            // Return constant
-                            if (ReturnType == ReturnType.InterpretResult) {
-                                return ConstantValue;
-                            }
-                            // Return constant reference
-                            else {
-                                return new VariableReference(ParentInstance.Module, ConstantPathExpression.Token);
-                            }
-                        }
-                        // Error
-                        else {
-                            throw new RuntimeException($"{ConstantPathExpression.Token.Location}: Uninitialized constant {ConstantPathExpression.Inspect()}");
-                        }
-                    }
-                    // New constant
-                    else {
-                        return new VariableReference(ParentInstance.Module, ConstantPathExpression.Token);
-                    }
-                }
-                // Local
-                else {
-                    // Literal
-                    if (ObjectTokenExpression.Token.IsObjectToken) {
-                        return await Instance.CreateFromToken(this, ObjectTokenExpression.Token);
-                    }
-                    else {
-                        if (ReturnType != ReturnType.HypotheticalVariable) {
-                            switch (ObjectTokenExpression.Token.Type) {
-                                // Local variable or method
-                                case Phase2TokenType.LocalVariableOrMethod: {
-                                    // Local variable (priority)
-                                    if (TryGetLocalVariable(ObjectTokenExpression.Token.Value!, out Instance? Value)) {
-                                        // Return local variable value
-                                        if (ReturnType == ReturnType.InterpretResult) {
-                                            return Value!;
-                                        }
-                                        // Return local variable reference
-                                        else {
-                                            return new VariableReference(ObjectTokenExpression.Token);
-                                        }
-                                    }
-                                    // Method
-                                    else if (TryGetLocalInstanceMethod(ObjectTokenExpression.Token.Value!, out Method? Method)) {
-                                        // Call local method
-                                        if (ReturnType == ReturnType.InterpretResult) {
-                                            return await Method!.Call(this, CurrentInstance);
-                                        }
-                                        // Return method reference
-                                        else {
-                                            return new VariableReference(ObjectTokenExpression.Token);
-                                        }
-                                    }
-                                    // Undefined
-                                    else {
-                                        throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Undefined local variable or method '{ObjectTokenExpression.Token.Value!}' for {CurrentScope}");
-                                    }
-                                }
-                                // Global variable
-                                case Phase2TokenType.GlobalVariable: {
-                                    if (Interpreter.GlobalVariables.TryGetValue(ObjectTokenExpression.Token.Value!, out Instance? Value)) {
-                                        // Return global variable value
-                                        if (ReturnType == ReturnType.InterpretResult) {
-                                            return Value;
-                                        }
-                                        // Return global variable reference
-                                        else {
-                                            return new VariableReference(ObjectTokenExpression.Token);
-                                        }
-                                    }
-                                    else {
-                                        return Interpreter.Nil;
-                                    }
-                                }
-                                // Constant
-                                case Phase2TokenType.ConstantOrMethod: {
-                                    // Constant (priority)
-                                    if (TryGetLocalConstant(ObjectTokenExpression.Token.Value!, out Instance? ConstantValue)) {
-                                        // Return constant value
-                                        if (ReturnType == ReturnType.InterpretResult) {
-                                            return ConstantValue!;
-                                        }
-                                        // Return constant reference
-                                        else {
-                                            return new VariableReference(ObjectTokenExpression.Token);
-                                        }
-                                    }
-                                    // Method
-                                    else if (TryGetLocalInstanceMethod(ObjectTokenExpression.Token.Value!, out Method? Method)) {
-                                        // Call local method
-                                        if (ReturnType == ReturnType.InterpretResult) {
-                                            return await Method!.Call(this, CurrentInstance);
-                                        }
-                                        // Return method reference
-                                        else {
-                                            return new VariableReference(ObjectTokenExpression.Token);
-                                        }
-                                    }
-                                    // Uninitialized
-                                    else {
-                                        throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Uninitialized constant '{ObjectTokenExpression.Token.Value!}' for {CurrentModule.Name}");
-                                    }
-                                }
-                                // Instance variable
-                                case Phase2TokenType.InstanceVariable: {
-                                    if (CurrentInstance.InstanceVariables.TryGetValue(ObjectTokenExpression.Token.Value!, out Instance? Value)) {
-                                        // Return instance variable value
-                                        if (ReturnType == ReturnType.InterpretResult) {
-                                            return Value;
-                                        }
-                                        // Return instance variable reference
-                                        else {
-                                            return new VariableReference(ObjectTokenExpression.Token);
-                                        }
-                                    }
-                                    else {
-                                        return Interpreter.Nil;
-                                    }
-                                }
-                                // Class variable
-                                case Phase2TokenType.ClassVariable: {
-                                    if (CurrentModule.ClassVariables.TryGetValue(ObjectTokenExpression.Token.Value!, out Instance? Value)) {
-                                        // Return class variable value
-                                        if (ReturnType == ReturnType.InterpretResult) {
-                                            return Value;
-                                        }
-                                        // Return class variable reference
-                                        else {
-                                            return new VariableReference(ObjectTokenExpression.Token);
-                                        }
-                                    }
-                                    else {
-                                        throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Uninitialized class variable '{ObjectTokenExpression.Token.Value!}' for {CurrentModule}");
-                                    }
-                                }
-                                // Symbol
-                                case Phase2TokenType.Symbol: {
-                                    return GetSymbol(ObjectTokenExpression.Token.Value!);
-                                }
-                                // Self
-                                case Phase2TokenType.Self: {
-                                    return new ModuleReference(CurrentModule);
-                                }
-                                // Error
-                                default:
-                                    throw new InternalErrorException($"{ObjectTokenExpression.Token.Location}: Unknown variable type {ObjectTokenExpression.Token.Type}");
-                            }
-                        }
-                        // Variable
-                        else {
-                            return new VariableReference(ObjectTokenExpression.Token);
-                        }
-                    }
-                }
-            }
-            // If
-            else if (Expression is IfExpression IfExpression) {
-                if (IfExpression.Condition == null || (await InterpretExpressionAsync(IfExpression.Condition))[0].IsTruthy != IfExpression.Inverse) {
-                    return await InternalInterpretAsync(IfExpression.Statements);
-                }
-            }
-            // While
-            else if (Expression is WhileExpression WhileExpression) {
-                while ((await InterpretExpressionAsync(WhileExpression.Condition!))[0].IsTruthy != WhileExpression.Inverse) {
-                    try {
-                        await InternalInterpretAsync(WhileExpression.Statements);
-                    }
-                    catch (BreakException) {
-                        break;
-                    }
-                }
-            }
-            // Array
-            else if (Expression is ArrayExpression ArrayExpression) {
-                List<Instance> Items = new();
-                foreach (Expression Item in ArrayExpression.Expressions) {
-                    Items.Add(await InterpretExpressionAsync(Item));
-                }
-                return new ArrayInstance(Interpreter.Array, Items);
-            }
-            // While Statement
-            else if (Expression is WhileStatement WhileStatement) {
-                await InterpretExpressionAsync(WhileStatement.WhileExpression);
-            }
-            // Self
-            else if (Expression is SelfExpression) {
-                return new ModuleReference(CurrentModule);
-            }
-            // Logical operator
-            else if (Expression is LogicalExpression LogicalExpression) {
-                Instance Left = (await InterpretExpressionAsync(LogicalExpression.Left)).SingleInstance;
-                switch (LogicalExpression.LogicType) {
-                    case LogicalExpression.LogicalExpressionType.And:
-                        if (!Left.IsTruthy)
-                            return Left;
-                        break;
-                }
-                Instance Right = (await InterpretExpressionAsync(LogicalExpression.Right)).SingleInstance;
-                switch (LogicalExpression.LogicType) {
-                    case LogicalExpression.LogicalExpressionType.And:
-                        return Right;
-                    case LogicalExpression.LogicalExpressionType.Or:
-                        if (Left.IsTruthy)
-                            return Left;
-                        else
-                            return Right;
-                    case LogicalExpression.LogicalExpressionType.Xor:
-                        if (Left.IsTruthy && !Right.IsTruthy)
-                            return Left;
-                        else if (!Left.IsTruthy && Right.IsTruthy)
-                            return Right;
-                        else
-                            return Interpreter.False;
-                    default:
-                        throw new InternalErrorException($"{LogicalExpression.Location}: Unhandled logical expression type: '{LogicalExpression.LogicType}'");
-                }
-            }
-            // Define method
-            else if (Expression is DefineMethodStatement DefineMethodStatement) {
-                Instance MethodNameObject = await InterpretExpressionAsync(DefineMethodStatement.MethodName, ReturnType.HypotheticalVariable);
-                if (MethodNameObject is VariableReference MethodNameRef) {
-                    string MethodName = MethodNameRef.Token.Value!;
-                    // Define static method
-                    if (MethodNameRef.Block != null) {
-                        Module MethodModule = (Module)MethodNameRef.Block;
-                        // Prevent redefining unsafe API methods
-                        if (!AllowUnsafeApi && MethodModule.Methods.TryGetValue(MethodName, out Method? ExistingMethod) && ExistingMethod.Unsafe) {
-                            throw new RuntimeException($"{DefineMethodStatement.Location}: The static method '{MethodName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
-                        }
-                        // Create or overwrite static method
-                        lock (MethodModule.Methods)
-                            MethodModule.Methods[MethodName] = DefineMethodStatement.MethodExpression.Method;
-                    }
-                    // Define instance method
-                    else {
-                        Instance MethodInstance = MethodNameRef.Instance ?? CurrentInstance;
-                        // Prevent redefining unsafe API methods
-                        if (!AllowUnsafeApi && MethodInstance.InstanceMethods.TryGetValue(MethodName, out Method? ExistingMethod) && ExistingMethod.Unsafe) {
-                            throw new RuntimeException($"{DefineMethodStatement.Location}: The instance method '{MethodName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
-                        }
-                        // Create or overwrite instance method
-                        MethodInstance.AddOrUpdateInstanceMethod(MethodName, DefineMethodStatement.MethodExpression.Method);
-                    }
-                }
-                else {
-                    throw new InternalErrorException($"{DefineMethodStatement.Location}: Invalid method name: {MethodNameObject}");
-                }
-            }
-            // Define class
-            else if (Expression is DefineClassStatement DefineClassStatement) {
-                Instance ClassNameObject = await InterpretExpressionAsync(DefineClassStatement.ClassName, ReturnType.HypotheticalVariable);
-                if (ClassNameObject is VariableReference ClassNameRef) {
-                    string ClassName = ClassNameRef.Token.Value!;
-
-                    // Create or patch class
-                    Module NewModule;
-                    // Patch class
-                    if (CurrentModule.Constants.TryGetValue(ClassName, out Instance? ConstantValue) && ConstantValue is ModuleReference ModuleReference) {
-                        NewModule = ModuleReference.Module;
-                    }
-                    // Create class
-                    else {
-                        if (DefineClassStatement.IsModule) {
-                            NewModule = new Module(ClassName, ClassNameRef.Module);
-                        }
-                        else {
-                            NewModule = new Class(ClassName, ClassNameRef.Module);
-                        }
-                    }
-
-                    // Interpret class statements
-                    await CreateTemporaryClassScope(NewModule, async () => {
-                        await CreateTemporaryInstanceScope(new Instance(NewModule), async () => {
-                            await InternalInterpretAsync(DefineClassStatement.BlockStatements);
-                        });
-                    });
-
-                    // Store class/module constant
-                    if (ClassNameRef.Block != null) {
-                        // Path
-                        Module Module = (Module)ClassNameRef.Block;
-                        lock (Module.Constants)
-                            Module.Constants[ClassName] = new ModuleReference(NewModule);
-                    }
-                    else if (ClassNameRef.IsLocalReference) {
-                        // Local
-                        Module Module = (ClassNameRef.Instance ?? CurrentInstance).Module;
-                        lock (Module)
-                            Module.Constants[ClassName] = new ModuleReference(NewModule);
-                    }
-                }
-                else {
-                    throw new InternalErrorException($"{DefineClassStatement.Location}: Invalid class/module name: {ClassNameObject}");
-                }
-            }
-            // Return
-            else if (Expression is ReturnStatement ReturnStatement) {
-                throw new ReturnException(
-                    ReturnStatement.ReturnValues != null
-                    ? await InterpretExpressionsAsync(ReturnStatement.ReturnValues)
-                    : Interpreter.Nil
-                );
-            }
-            // Break
-            else if (Expression is BreakStatement BreakStatement) {
-                throw new BreakException();
-            }
-            // Yield
-            else if (Expression is YieldStatement YieldStatement) {
-                if (OnYield != null) {
-                    List<Instance> YieldArgs = YieldStatement.YieldValues != null
-                        ? await InterpretExpressionsAsync(YieldStatement.YieldValues)
-                        : new();
-                    await OnYield.Call(this, null, YieldArgs, BreakHandleType: BreakHandleType.Destroy);
-                }
-                else {
-                    throw new RuntimeException($"{YieldStatement.Location}: No block given to yield to");
-                }
-            }
-            // If branches
-            else if (Expression is IfBranchesStatement IfStatement) {
-                for (int i = 0; i < IfStatement.Branches.Count; i++) {
-                    IfExpression Branch = IfStatement.Branches[i];
-                    if (Branch.Condition != null) {
-                        Instance ConditionResult = await InterpretExpressionAsync(Branch.Condition);
-                        if (ConditionResult.IsTruthy != Branch.Inverse) {
-                            return await InternalInterpretAsync(Branch.Statements);
-                        }
-                    }
-                    else {
-                        return await InternalInterpretAsync(Branch.Statements);
-                    }
-                }
-            }
-            // Assignment
-            else if (Expression is AssignmentExpression AssignmentExpression) {
-                async Task AssignToVariable(VariableReference Variable, Instance Value) {
-                    switch (Variable.Token.Type) {
-                        case Phase2TokenType.LocalVariableOrMethod:
-                            lock (CurrentBlock.LocalVariables)
-                                CurrentBlock.LocalVariables[Variable.Token.Value!] = Value;
-                            break;
-                        case Phase2TokenType.GlobalVariable:
-                            lock (Interpreter.GlobalVariables)
-                                Interpreter.GlobalVariables[Variable.Token.Value!] = Value;
-                            break;
-                        case Phase2TokenType.ConstantOrMethod:
-                            if (CurrentBlock.Constants.ContainsKey(Variable.Token.Value!))
-                                await Warn($"{Variable.Token.Location}: Already initialized constant '{Variable.Token.Value!}'");
-                            lock (CurrentBlock.Constants)
-                                CurrentBlock.Constants[Variable.Token.Value!] = Value;
-                            break;
-                        case Phase2TokenType.InstanceVariable:
-                            lock (CurrentInstance.InstanceVariables)
-                                CurrentInstance.InstanceVariables[Variable.Token.Value!] = Value;
-                            break;
-                        case Phase2TokenType.ClassVariable:
-                            lock (CurrentModule.ClassVariables)
-                                CurrentModule.ClassVariables[Variable.Token.Value!] = Value;
-                            break;
-                        default:
-                            throw new InternalErrorException($"{Variable.Token.Location}: Assignment variable token is not a variable type (got {Variable.Token.Type})");
-                    }
-                }
-
-                Instance Right = await InterpretExpressionAsync(AssignmentExpression.Right);
-
-                Instance Left = await InterpretExpressionAsync(AssignmentExpression.Left, ReturnType.HypotheticalVariable);
-                if (Left is VariableReference LeftVariable) {
-                    if (Right is Instance RightInstance) {
-                        // LeftVariable = RightInstance
-                        await AssignToVariable(LeftVariable, RightInstance);
-
-                        // Return left variable reference or value
-                        if (ReturnType == ReturnType.InterpretResult) {
-                            return RightInstance;
-                        }
-                        else {
-                            return Left;
-                        }
-                    }
-                    else {
-                        throw new InternalErrorException($"{LeftVariable.Token.Location}: Assignment value should be an instance, but got {Right.GetType().Name}");
-                    }
-                }
-                else {
-                    throw new RuntimeException($"{AssignmentExpression.Left.Location}: {Left.GetType()} cannot be the target of an assignment");
-                }
-            }
-            // Undefine method
-            else if (Expression is UndefineMethodStatement UndefineMethodStatement) {
-                string MethodName = UndefineMethodStatement.MethodName.Token.Value!;
-                if (MethodName == "initialize") {
-                    await Warn($"{UndefineMethodStatement.MethodName.Token.Location}: undefining 'initialize' may cause serious problems");
-                }
-                if (!CurrentModule.InstanceMethods.Remove(MethodName)) {
-                    throw new RuntimeException($"{UndefineMethodStatement.MethodName.Token.Location}: Undefined method '{MethodName}' for {CurrentModule.Name}");
-                }
-            }
-            // Defined?
-            else if (Expression is DefinedExpression DefinedExpression) {
-                if (DefinedExpression.Expression is MethodCallExpression || DefinedExpression.Expression is PathExpression) {
-                    return new StringInstance(Interpreter.String, "method");
-                }
-                else if (DefinedExpression.Expression is ObjectTokenExpression ObjectToken) {
-                    if (ObjectToken.Token.Type == Phase2TokenType.LocalVariableOrMethod) {
-                        if (CurrentScope.LocalVariables.ContainsKey(ObjectToken.Token.Value!)) {
-                            return new StringInstance(Interpreter.String, "local-variable");
-                        }
-                        else if (CurrentInstance.InstanceMethods.ContainsKey(ObjectToken.Token.Value!)) {
-                            return new StringInstance(Interpreter.String, "method");
-                        }
-                        else {
-                            return Interpreter.Nil;
-                        }
-                    }
-                    else if (ObjectToken.Token.Type == Phase2TokenType.GlobalVariable) {
-                        if (Interpreter.GlobalVariables.ContainsKey(ObjectToken.Token.Value!)) {
-                            return new StringInstance(Interpreter.String, "global-variable");
-                        }
-                        else {
-                            return Interpreter.Nil;
-                        }
-                    }
-                    else if (ObjectToken.Token.Type == Phase2TokenType.ConstantOrMethod) {
-                        throw new NotImplementedException("Defined? not yet implemented for constants");
-                    }
-                    else if (ObjectToken.Token.Type == Phase2TokenType.InstanceVariable) {
-                        throw new NotImplementedException("Defined? not yet implemented for instance variables");
-                    }
-                    else if (ObjectToken.Token.Type == Phase2TokenType.ClassVariable) {
-                        if (CurrentModule.ClassVariables.ContainsKey(ObjectToken.Token.Value!)) {
-                            return new StringInstance(Interpreter.String, "class-variable");
-                        }
-                        else {
-                            return Interpreter.Nil;
-                        }
-                    }
-                    else {
-                        return new StringInstance(Interpreter.String, "expression");
-                    }
-                }
-                else {
-                    throw new InternalErrorException($"{DefinedExpression.Location}: Unknown expression type for defined?: {DefinedExpression.Expression.GetType().Name}");
-                }
-            }
-            // Unknown
-            else {
-                throw new InternalErrorException($"{Expression.Location}: Not sure how to interpret expression {Expression.GetType().Name} ({Expression.Inspect()})");
-            }
-            return Interpreter.Nil;
+            // Interpret expression
+            return Expression switch {
+                MethodCallExpression MethodCallExpression => await InterpretMethodCallExpression(MethodCallExpression),
+                ObjectTokenExpression ObjectTokenExpression => await InterpretObjectTokenExpression(ObjectTokenExpression, ReturnType),
+                IfExpression IfExpression => await InterpretIfExpression(IfExpression),
+                WhileExpression WhileExpression => await InterpretWhileExpression(WhileExpression),
+                ArrayExpression ArrayExpression => await InterpretArrayExpression(ArrayExpression),
+                WhileStatement WhileStatement => await InterpretWhileStatement(WhileStatement),
+                SelfExpression => new ModuleReference(CurrentModule),
+                LogicalExpression LogicalExpression => await InterpretLogicalExpression(LogicalExpression),
+                DefineMethodStatement DefineMethodStatement => await InterpretDefineMethodStatement(DefineMethodStatement),
+                DefineClassStatement DefineClassStatement => await InterpretDefineClassStatement(DefineClassStatement),
+                ReturnStatement ReturnStatement => throw new ReturnException(
+                                                ReturnStatement.ReturnValues != null
+                                                ? await InterpretExpressionsAsync(ReturnStatement.ReturnValues)
+                                                : Interpreter.Nil),
+                BreakStatement => throw new BreakException(),
+                YieldStatement YieldStatement => await InterpretYieldStatement(YieldStatement, OnYield),
+                IfBranchesStatement IfBranchesStatement => await InterpretIfBranchesStatement(IfBranchesStatement),
+                AssignmentExpression AssignmentExpression => await InterpretAssignmentExpression(AssignmentExpression, ReturnType),
+                UndefineMethodStatement UndefineMethodStatement => await InterpretUndefineMethodStatement(UndefineMethodStatement),
+                DefinedExpression DefinedExpression => await InterpretDefinedExpression(DefinedExpression),
+                _ => throw new InternalErrorException($"{Expression.Location}: Not sure how to interpret expression {Expression.GetType().Name} ({Expression.Inspect()})"),
+            };
         }
         async Task<List<Instance>> InterpretExpressionsAsync(List<Expression> Expressions) {
             List<Instance> Results = new();
