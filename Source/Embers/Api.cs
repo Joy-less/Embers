@@ -28,6 +28,7 @@ namespace Embers
             Interpreter.RootInstance.InstanceMethods["srand"] = new Method(Random.srand, 0..1);
             Interpreter.RootInstance.InstanceMethods["exit"] = new Method(exit, 0);
             Interpreter.RootInstance.InstanceMethods["quit"] = new Method(exit, 0);
+            Interpreter.RootInstance.InstanceMethods["eval"] = new Method(eval, 1);
 
             // String
             Interpreter.String.InstanceMethods["[]"] = new Method(String._Indexer, 1);
@@ -39,8 +40,19 @@ namespace Embers
             Interpreter.String.InstanceMethods["to_i"] = new Method(String.to_i, 0);
             Interpreter.String.InstanceMethods["to_f"] = new Method(String.to_f, 0);
             Interpreter.String.InstanceMethods["to_sym"] = new Method(String.to_sym, 0);
+            Interpreter.String.InstanceMethods["to_a"] = new Method(String.to_a, 0);
             Interpreter.String.InstanceMethods["chomp"] = new Method(String.chomp, 0..1);
             Interpreter.String.InstanceMethods["strip"] = new Method(String.strip, 0);
+            Interpreter.String.InstanceMethods["lstrip"] = new Method(String.lstrip, 0);
+            Interpreter.String.InstanceMethods["rstrip"] = new Method(String.rstrip, 0);
+            Interpreter.String.InstanceMethods["squeeze"] = new Method(String.squeeze, 0);
+            Interpreter.String.InstanceMethods["chop"] = new Method(String.chop, 0);
+            Interpreter.String.InstanceMethods["chr"] = new Method(String.chr, 0);
+            Interpreter.String.InstanceMethods["capitalize"] = new Method(String.capitalize, 0);
+            Interpreter.String.InstanceMethods["upcase"] = new Method(String.upcase, 0);
+            Interpreter.String.InstanceMethods["downcase"] = new Method(String.downcase, 0);
+            Interpreter.String.InstanceMethods["sub"] = new Method(String.sub, 2);
+            Interpreter.String.InstanceMethods["gsub"] = new Method(String.gsub, 2);
 
             // Integer
             Interpreter.Integer.InstanceMethods["+"] = new Method(Integer._Add, 1);
@@ -94,6 +106,11 @@ namespace Embers
             Interpreter.Hash.InstanceMethods["initialize"] = new Method(Hash.initialize, 0..1);
             Interpreter.Hash.InstanceMethods["has_key?"] = new Method(Hash.has_key, 1);
             Interpreter.Hash.InstanceMethods["has_value?"] = new Method(Hash.has_value, 1);
+            Interpreter.Hash.InstanceMethods["keys"] = new Method(Hash.keys, 0);
+            Interpreter.Hash.InstanceMethods["values"] = new Method(Hash.values, 0);
+            Interpreter.Hash.InstanceMethods["invert"] = new Method(Hash.invert, 0);
+            Interpreter.Hash.InstanceMethods["to_a"] = new Method(Hash.to_a, 0);
+            Interpreter.Hash.InstanceMethods["to_hash"] = new Method(Hash.to_hash, 0);
 
             // Random
             Class RandomClass = Script.CreateClass("Random");
@@ -160,11 +177,12 @@ namespace Embers
             return new StringInstance(Input.Interpreter.String, UserInput);
         }
         static async Task<Instances> warn(MethodInput Input) {
+            ConsoleColor PreviousForegroundColour = Console.ForegroundColor;
             Console.ForegroundColor = ConsoleColor.Yellow;
             foreach (Instance Message in Input.Arguments) {
                 Console.WriteLine(Message.Object);
             }
-            Console.ResetColor();
+            Console.ForegroundColor = PreviousForegroundColour;
             return Input.Interpreter.Nil;
         }
         static async Task<Instances> sleep(MethodInput Input) {
@@ -248,6 +266,9 @@ namespace Embers
         }
         static async Task<Instances> exit(MethodInput Input) {
             throw new ExitException();
+        }
+        static async Task<Instances> eval(MethodInput Input) {
+            return await Input.Script.InternalEvaluateAsync(Input.Arguments[0].String);
         }
         static class ClassInstance {
             public static async Task<Instances> _Equals(MethodInput Input) {
@@ -411,6 +432,13 @@ namespace Embers
             public static async Task<Instances> to_sym(MethodInput Input) {
                 return new SymbolInstance(Input.Interpreter.Symbol, Input.Instance.LightInspect());
             }
+            public static async Task<Instances> to_a(MethodInput Input) {
+                List<Instance> Array = new();
+                foreach (char Chara in Input.Instance.String) {
+                    Array.Add(new StringInstance(Input.Interpreter.Array, Chara.ToString()));
+                }
+                return new ArrayInstance(Input.Interpreter.Array, Array);
+            }
             public static async Task<Instances> chomp(MethodInput Input) {
                 string String = Input.Instance.String;
                 if (Input.Arguments.Count == 0) {
@@ -429,13 +457,71 @@ namespace Embers
                 }
                 return Input.Instance;
             }
-            public static async Task<Instances> strip(MethodInput Input) {
-                string String = Input.Instance.String;
-                string Stripped = String.Trim();
-                if (Stripped.Length != String.Length) {
-                    return new StringInstance(Input.Interpreter.String, Stripped);
+            static async Task<Instances> ModifyString(MethodInput Input, Func<string, string> Modifier) {
+                string OriginalString = Input.Instance.String;
+                string ModifiedString = Modifier(OriginalString);
+                if (ModifiedString != OriginalString) {
+                    return new StringInstance(Input.Interpreter.String, ModifiedString);
                 }
                 return Input.Instance;
+            }
+            public static async Task<Instances> strip(MethodInput Input) {
+                return await ModifyString(Input, Str => Str.Trim());
+            }
+            public static async Task<Instances> lstrip(MethodInput Input) {
+                return await ModifyString(Input, Str => Str.TrimStart());
+            }
+            public static async Task<Instances> rstrip(MethodInput Input) {
+                return await ModifyString(Input, Str => Str.TrimEnd());
+            }
+            public static async Task<Instances> squeeze(MethodInput Input) {
+                return await ModifyString(Input, Str => {
+                    StringBuilder SqueezedString = new();
+                    char? LastChara = null;
+                    for (int i = 0; i < Str.Length; i++) {
+                        char Chara = Str[i];
+                        if (Chara != LastChara) {
+                            LastChara = Chara;
+                            SqueezedString.Append(Chara);
+                        }
+                    }
+                    return SqueezedString.ToString();
+                });
+            }
+            public static async Task<Instances> chop(MethodInput Input) {
+                return await ModifyString(Input, Str => Str.Length != 0 ? Str[..^1] : Str);
+            }
+            public static async Task<Instances> chr(MethodInput Input) {
+                return await ModifyString(Input, Str => Str.Length != 0 ? Str[0].ToString() : Str);
+            }
+            public static async Task<Instances> capitalize(MethodInput Input) {
+                return await ModifyString(Input, Str => {
+                    if (Str.Length == 0) {
+                        return Str;
+                    }
+                    else if (Str.Length == 1) {
+                        return char.ToUpperInvariant(Str[0]).ToString();
+                    }
+                    else {
+                        return char.ToUpperInvariant(Str[0]) + Str[1..].ToLowerInvariant();
+                    }
+                });
+            }
+            public static async Task<Instances> upcase(MethodInput Input) {
+                return await ModifyString(Input, Str => Str.ToUpperInvariant());
+            }
+            public static async Task<Instances> downcase(MethodInput Input) {
+                return await ModifyString(Input, Str => Str.ToLowerInvariant());
+            }
+            public static async Task<Instances> sub(MethodInput Input) {
+                string Replace = Input.Arguments[0].String;
+                string With = Input.Arguments[1].String;
+                return await ModifyString(Input, Str => Str.ReplaceFirst(Replace, With));
+            }
+            public static async Task<Instances> gsub(MethodInput Input) {
+                string Replace = Input.Arguments[0].String;
+                string With = Input.Arguments[1].String;
+                return await ModifyString(Input, Str => Str.Replace(Replace, With));
             }
         }
         static class Integer {
@@ -698,8 +784,11 @@ namespace Embers
             public static async Task<Instances> insert(MethodInput Input) {
                 List<Instance> Items = Input.Instance.Array;
                 int Index = _RealisticIndex(Input, Input.Arguments[0].Integer);
-
+                
                 if (Input.Arguments.Count == 1) {
+                    Items.Add(Input.Arguments[0]);
+                }
+                else if (Input.Arguments.Count == 2) {
                     Items.Insert(Index, Input.Arguments[1]);
                 }
                 else {
@@ -820,6 +909,27 @@ namespace Embers
                     }
                 }
                 return Input.Interpreter.False;
+            }
+            public static async Task<Instances> keys(MethodInput Input) {
+                return new ArrayInstance(Input.Interpreter.Array, Input.Instance.Hash.Keys.ToList());
+            }
+            public static async Task<Instances> values(MethodInput Input) {
+                return new ArrayInstance(Input.Interpreter.Array, Input.Instance.Hash.Values.ToList());
+            }
+            public static async Task<Instances> invert(MethodInput Input) {
+                HashInstance Hash = (HashInstance)Input.Instance;
+                Dictionary<Instance, Instance> Inverted = Hash.Hash.ToDictionary(kv => kv.Value, kv => kv.Key);
+                return new HashInstance(Input.Interpreter.Hash, Inverted, Hash.DefaultValue);
+            }
+            public static async Task<Instances> to_a(MethodInput Input) {
+                List<Instance> Array = new();
+                foreach (KeyValuePair<Instance, Instance> Item in Input.Instance.Hash) {
+                    Array.Add(new ArrayInstance(Input.Interpreter.Array, new List<Instance>() {Item.Key, Item.Value}));
+                }
+                return new ArrayInstance(Input.Interpreter.Array, Array);
+            }
+            public static async Task<Instances> to_hash(MethodInput Input) {
+                return Input.Instance;
             }
         }
         static class Random {

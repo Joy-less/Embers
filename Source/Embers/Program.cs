@@ -12,8 +12,27 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() => 
                     Script.Evaluate(@"
-puts [4, 6,4.5].include?4.5
-puts({4=>6}.has_value? 6)
+p ' hiii '.strip
+p ' hiii '.lstrip
+p ' hiii '.rstrip
+p ' hiii '.squeeze
+p ' hiii '.chop
+p ' hiii '.chr
+p 'hIII'.capitalize
+p 'hIII'.upcase
+p 'hIII'.downcase
+p 'cat cat'.sub('at', 'orkscrew')
+p 'cat cat'.gsub('at', 'orkscrew')
+p 'cat cat'.to_a
+
+p eval('puts \'Evaluated\'; 5')
+
+hash = {1 => 'one', 2 => 'two'}
+p hash.invert
+p hash.keys
+p hash.values
+p hash.to_a
+p hash.to_hash
                     ")
                 );
                 Console.ReadLine();

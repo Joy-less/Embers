@@ -344,7 +344,7 @@
                                     }
                                     LastC = C;
                                     return C == Chara;
-                                });
+                                }).Replace("\\'", "'");
                                 Tokens.Add(new(Location, Phase1TokenType.String, String, FollowsWhitespace, false));
                             }
                             // Symbol string
