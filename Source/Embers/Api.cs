@@ -27,12 +27,14 @@ namespace Embers
             Interpreter.RootInstance.InstanceMethods["rand"] = new Method(Random.rand, 0..1);
             Interpreter.RootInstance.InstanceMethods["srand"] = new Method(Random.srand, 0..1);
             Interpreter.RootInstance.InstanceMethods["exit"] = new Method(exit, 0);
-            Interpreter.RootInstance.InstanceMethods["quit"] = new Method(exit, 0);
+            Interpreter.RootInstance.InstanceMethods["quit"] = new Method(quit, 0);
 
             // String
+            Interpreter.String.InstanceMethods["[]"] = new Method(String._Indexer, 1);
             Interpreter.String.InstanceMethods["+"] = new Method(String._Add, 1);
             Interpreter.String.InstanceMethods["*"] = new Method(String._Multiply, 1);
             Interpreter.String.InstanceMethods["=="] = new Method(String._Equals, 1);
+            Interpreter.String.InstanceMethods["initialize"] = new Method(String.initialize, 0..1);
             Interpreter.String.InstanceMethods["to_str"] = new Method(String.to_str, 0);
             Interpreter.String.InstanceMethods["to_i"] = new Method(String.to_i, 0);
             Interpreter.String.InstanceMethods["to_f"] = new Method(String.to_f, 0);
@@ -70,25 +72,29 @@ namespace Embers
             Interpreter.Float.InstanceMethods["to_f"] = new Method(Float.to_f, 0);
 
             // Proc
-            Interpreter.Proc.InstanceMethods.Add("call", new Method(Proc.call, null));
+            Interpreter.Proc.InstanceMethods["call"] = new Method(Proc.call, null);
 
             // Array
-            Interpreter.Array.InstanceMethods.Add("[]", new Method(Array._Indexer, 1));
-            Interpreter.Array.InstanceMethods.Add("length", new Method(Array.length, 0));
-            Interpreter.Array.InstanceMethods.Add("count", new Method(Array.count, 0..1));
-            Interpreter.Array.InstanceMethods.Add("first", new Method(Array.first, 0));
-            Interpreter.Array.InstanceMethods.Add("last", new Method(Array.last, 0));
-            Interpreter.Array.InstanceMethods.Add("forty_two", new Method(Array.forty_two, 0));
-            Interpreter.Array.InstanceMethods.Add("sample", new Method(Array.sample, 0));
-            Interpreter.Array.InstanceMethods.Add("insert", new Method(Array.insert, 1..));
-            Interpreter.Array.InstanceMethods.Add("each", new Method(Array.each, 0));
-            Interpreter.Array.InstanceMethods.Add("reverse_each", new Method(Array.reverse_each, 0));
-            Interpreter.Array.InstanceMethods.Add("map", new Method(Array.map, 0));
+            Interpreter.Array.InstanceMethods["[]"] = new Method(Array._Indexer, 1);
+            Interpreter.Array.InstanceMethods["length"] = new Method(Array.length, 0);
+            Interpreter.Array.InstanceMethods["count"] = new Method(Array.count, 0..1);
+            Interpreter.Array.InstanceMethods["first"] = new Method(Array.first, 0);
+            Interpreter.Array.InstanceMethods["last"] = new Method(Array.last, 0);
+            Interpreter.Array.InstanceMethods["forty_two"] = new Method(Array.forty_two, 0);
+            Interpreter.Array.InstanceMethods["sample"] = new Method(Array.sample, 0);
+            Interpreter.Array.InstanceMethods["insert"] = new Method(Array.insert, 1..);
+            Interpreter.Array.InstanceMethods["each"] = new Method(Array.each, 0);
+            Interpreter.Array.InstanceMethods["reverse_each"] = new Method(Array.reverse_each, 0);
+            Interpreter.Array.InstanceMethods["map"] = new Method(Array.map, 0);
+
+            // Hash
+            Interpreter.Hash.InstanceMethods["[]"] = new Method(Hash._Indexer, 1);
+            Interpreter.Hash.InstanceMethods["initialize"] = new Method(Hash.initialize, 0..1);
 
             // Random
             Class RandomClass = Script.CreateClass("Random");
-            RandomClass.Methods.Add("rand", new Method(Random.rand, 0..1));
-            RandomClass.Methods.Add("srand", new Method(Random.srand, 0..1));
+            RandomClass.Methods["rand"] = new Method(Random.rand, 0..1);
+            RandomClass.Methods["srand"] = new Method(Random.srand, 0..1);
 
             //
             // UNSAFE APIS
@@ -99,8 +105,8 @@ namespace Embers
 
             // File
             Module FileModule = Script.CreateModule("File");
-            FileModule.Methods.Add("read", new Method(File.read, 1, isUnsafe: true));
-            FileModule.Methods.Add("write", new Method(File.write, 2, isUnsafe: true));
+            FileModule.Methods["read"] = new Method(File.read, 1, isUnsafe: true);
+            FileModule.Methods["write"] = new Method(File.write, 2, isUnsafe: true);
         }
 
         public static readonly IReadOnlyDictionary<string, Method> DefaultClassAndInstanceMethods = new Dictionary<string, Method>() {
@@ -110,6 +116,7 @@ namespace Embers
             {"class", new Method(ClassInstance.@class, 0)},
             {"to_s", new Method(ClassInstance.to_s, 0)},
             {"method", new Method(ClassInstance.method, 1)},
+            {"object_id", new Method(ClassInstance.object_id, 0)},
         };
         public static readonly IReadOnlyDictionary<string, Method> DefaultInstanceMethods = new Dictionary<string, Method>() {
             {"attr_reader", new Method(ClassInstance.attr_reader, 1)},
@@ -288,6 +295,9 @@ namespace Embers
                     throw new RuntimeException($"{Input.Location}: Undefined method '{MethodName}' for {Input.Instance.LightInspect()}");
                 }
             }
+            public static async Task<Instances> object_id(MethodInput Input) {
+                return new IntegerInstance(Input.Interpreter.Integer, Input.Instance.ObjectId);
+            }
             public static async Task<Instances> attr_reader(MethodInput Input) {
                 string VariableName = Input.Arguments[0].String;
                 // Prevent redefining unsafe API methods
@@ -325,6 +335,35 @@ namespace Embers
                 else {
                     return Input.Interpreter.False;
                 }
+            }
+            private static int _RealisticIndex(MethodInput Input, long RawIndex) {
+                if (RawIndex < int.MinValue || RawIndex > int.MaxValue) {
+                    throw new RuntimeException($"{Input.Script.ApproximateLocation}: Index ({RawIndex}) is too large for string.");
+                }
+                int Index = (int)RawIndex;
+                return Index;
+            }
+            public static async Task<Instances> _Indexer(MethodInput Input) {
+                // Get string and index
+                string String = Input.Instance.String;
+                int Index = _RealisticIndex(Input, Input.Arguments[0].Integer);
+
+                // Return value at string index or nil
+                if (Index >= 0 && Index < String.Length) {
+                    return new StringInstance(Input.Interpreter.String, String[Index].ToString());
+                }
+                else if (Index < 0 && Index > -String.Length) {
+                    return new StringInstance(Input.Interpreter.String, String[^(-Index)].ToString());
+                }
+                else {
+                    return Input.Interpreter.Nil;
+                }
+            }
+            public static async Task<Instances> initialize(MethodInput Input) {
+                if (Input.Arguments.Count == 1) {
+                    ((StringInstance)Input.Instance).SetValue(Input.Arguments[0].String);
+                }
+                return Input.Interpreter.Nil;
             }
             public static async Task<Instances> to_str(MethodInput Input) {
                 return await ClassInstance.to_s(Input);
@@ -485,8 +524,17 @@ namespace Embers
             public static async Task<Instances> times(MethodInput Input) {
                 if (Input.OnYield != null) {
                     long Times = Input.Instance.Integer;
-                    for (long i = 0; i < Times; i++) {
-                        await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i));
+                    // x.times do |n|
+                    if (Input.OnYield.ArgumentNames.Count == 1) {
+                        for (long i = 0; i < Times; i++) {
+                            await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i));
+                        }
+                    }
+                    // x.times do
+                    else {
+                        for (long i = 0; i < Times; i++) {
+                            await Input.OnYield.Call(Input.Script, Input.Instance);
+                        }
                     }
                 }
                 return Input.Interpreter.Nil;
@@ -661,8 +709,23 @@ namespace Embers
             public static async Task<Instances> each(MethodInput Input) {
                 if (Input.OnYield != null) {
                     List<Instance> Array = Input.Instance.Array;
-                    for (int i = 0; i < Array.Count; i++) {
-                        await Input.OnYield.Call(Input.Script, Input.Instance, new List<Instance>() {Array[i], new IntegerInstance(Input.Interpreter.Integer, i)});
+                    // x.each do |n, i|
+                    if (Input.OnYield.ArgumentNames.Count == 2) {
+                        for (int i = 0; i < Array.Count; i++) {
+                            await Input.OnYield.Call(Input.Script, Input.Instance, new List<Instance>() {Array[i], new IntegerInstance(Input.Interpreter.Integer, i)});
+                        }
+                    }
+                    // x.each do |n|
+                    else if (Input.OnYield.ArgumentNames.Count == 1) {
+                        for (int i = 0; i < Array.Count; i++) {
+                            await Input.OnYield.Call(Input.Script, Input.Instance, Array[i]);
+                        }
+                    }
+                    // x.each do
+                    else {
+                        for (int i = 0; i < Array.Count; i++) {
+                            await Input.OnYield.Call(Input.Script, Input.Instance);
+                        }
                     }
                 }
                 return Input.Interpreter.Nil;
@@ -670,8 +733,23 @@ namespace Embers
             public static async Task<Instances> reverse_each(MethodInput Input) {
                 if (Input.OnYield != null) {
                     List<Instance> Array = Input.Instance.Array;
-                    for (int i = Array.Count - 1; i >= 0; i--) {
-                        await Input.OnYield.Call(Input.Script, Input.Instance, Array[i]);
+                    // x.reverse_each do |n, i|
+                    if (Input.OnYield.ArgumentNames.Count == 2) {
+                        for (int i = Array.Count - 1; i >= 0; i--) {
+                            await Input.OnYield.Call(Input.Script, Input.Instance, new List<Instance>() {Array[i], new IntegerInstance(Input.Interpreter.Integer, i)});
+                        }
+                    }
+                    // x.reverse_each do |n|
+                    else if (Input.OnYield.ArgumentNames.Count == 1) {
+                        for (int i = Array.Count - 1; i >= 0; i--) {
+                            await Input.OnYield.Call(Input.Script, Input.Instance, Array[i]);
+                        }
+                    }
+                    // x.reverse_each do
+                    else {
+                        for (int i = Array.Count - 1; i >= 0; i--) {
+                            await Input.OnYield.Call(Input.Script, Input.Instance);
+                        }
                     }
                 }
                 return Input.Interpreter.Nil;
@@ -688,6 +766,32 @@ namespace Embers
                     return new ArrayInstance(Input.Interpreter.Array, MappedArray);
                 }
                 return Input.Instance;
+            }
+        }
+        static class Hash {
+            public static async Task<Instances> _Indexer(MethodInput Input) {
+                // Get hash and key
+                Dictionary<Instance, Instance> Hash = Input.Instance.Hash;
+                Instance Key = Input.Arguments[0];
+
+                // Return value at hash index or default value
+                if (Hash.TryGetValue(Key, out Instance? Value)) {
+                    return Value;
+                }
+                else {
+                    foreach (KeyValuePair<Instance, Instance> Item in Hash) {
+                        if ((await Item.Key.InstanceMethods["=="].Call(Input.Script, Item.Key, Key))[0].IsTruthy) {
+                            return Item.Value;
+                        }
+                    }
+                    return ((HashInstance)Input.Instance).DefaultValue;
+                }
+            }
+            public static async Task<Instances> initialize(MethodInput Input) {
+                if (Input.Arguments.Count == 1) {
+                    ((HashInstance)Input.Instance).SetValue(Input.Instance.Hash, Input.Arguments[0]);
+                }
+                return Input.Interpreter.Nil;
             }
         }
         static class Random {

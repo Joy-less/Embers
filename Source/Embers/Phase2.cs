@@ -45,6 +45,7 @@ namespace Embers
             StartSquare,
             EndSquare,
             Pipe,
+            RightArrow,
             EndOfStatement,
         }
         public readonly static Dictionary<string, Phase2TokenType> Keywords = new() {
@@ -385,6 +386,18 @@ namespace Embers
                 return $"new {PathToSelf}({Location.Serialise()}, {Expressions.Serialise()})";
             }
         }
+        public class HashExpression : Expression {
+            public readonly Dictionary<Expression, Expression> Expressions;
+            public HashExpression(DebugLocation location, Dictionary<Expression, Expression> expressions) : base(location) {
+                Expressions = expressions;
+            }
+            public override string Inspect() {
+                return $"{{{Expressions.Inspect()}}}";
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({Location.Serialise()}, {Expressions.Serialise()})";
+            }
+        }
         public abstract class Statement : Expression {
             public Statement(DebugLocation location) : base(location) { }
         }
@@ -506,9 +519,10 @@ namespace Embers
             Double
         }
         public enum ExpressionsType {
+            SingleExpression,
             Statements,
             CommaSeparatedExpressions,
-            SingleExpression
+            KeyValueExpressions,
         }
         enum BlockPriority {
             First,
@@ -662,6 +676,7 @@ namespace Embers
                         Phase1TokenType.StartSquare => new Phase2Token(Token.Location, Phase2TokenType.StartSquare, Token.Value, Token),
                         Phase1TokenType.EndSquare => new Phase2Token(Token.Location, Phase2TokenType.EndSquare, Token.Value, Token),
                         Phase1TokenType.Pipe => new Phase2Token(Token.Location, Phase2TokenType.Pipe, Token.Value, Token),
+                        Phase1TokenType.RightArrow => new Phase2Token(Token.Location, Phase2TokenType.RightArrow, Token.Value, Token),
                         Phase1TokenType.EndOfStatement => new Phase2Token(Token.Location, Phase2TokenType.EndOfStatement, Token.Value, Token),
                         _ => throw new InternalErrorException($"{Token.Location}: Conversion of {Token.Type} from phase 1 to phase 2 not supported")
                     });
@@ -1351,6 +1366,12 @@ namespace Embers
                         }
                         // {
                         case Phase2TokenType.StartCurly: {
+                            if (LastUnknownObject == null || (LastUnknownObject is not Expression || LastUnknownObject is Statement)) {
+                                // {} is hash; handle later
+                                PushBlock(new BuildingHash(Location));
+                                break;
+                            }
+
                             i++;
 
                             // Get do |arguments|
@@ -1364,6 +1385,23 @@ namespace Embers
                         case Phase2TokenType.EndCurly: {
                             if (CurrentBlocks.Count == 1) {
                                 throw new SyntaxErrorException($"{Token.Location}: Unexpected '}}'");
+                            }
+                            else if (CurrentBlocks.Peek() is BuildingHash) {
+                                // Get objects inside {}
+                                List<Phase2Object> HashContents = PendingObjects.Pop();
+                                HashContents.RemoveFromEnd(Item => Item is Phase2Token Tok && Tok.Type == Phase2TokenType.EndOfStatement);
+                                // Get items to put in hash
+                                List<Expression> HashItemsList = ObjectsToExpressions(HashContents, ExpressionsType.KeyValueExpressions);
+                                // Split items into key value pairs
+                                Dictionary<Expression, Expression> HashItems = new();
+                                for (int i2 = 0; i2 < HashItemsList.Count; i2 += 2) {
+                                    HashItems[HashItemsList[i2]] = HashItemsList[i2 + 1];
+                                }
+                                // Create hash expression and add to expressions
+                                CurrentBlocks.Pop();
+                                PendingObjects.Peek().Add(new HashExpression(Token.Location, HashItems));
+                                ResolveStatementsWithoutEndingBlock();
+                                break;
                             }
                             Expression? EndedExpression = ResolveEndBlock(true);
                             if (EndedExpression != null) AddPendingObject(EndedExpression);
@@ -1415,65 +1453,6 @@ namespace Embers
 
             // Get Blocks
             ParsedObjects = GetBlocks(ParsedObjects);
-
-            // Arrays
-            {
-                Stack<int> SquareBracketsStack = new();
-                for (int i = 0; i < ParsedObjects.Count; i++) {
-                    Phase2Object Object = ParsedObjects[i];
-
-                    if (Object is Phase2Token Token) {
-                        if (Token.Type == Phase2TokenType.StartSquare) {
-                            SquareBracketsStack.Push(i);
-                        }
-                        else if (Token.Type == Phase2TokenType.EndSquare) {
-                            if (SquareBracketsStack.TryPop(out int OpenBracketIndex)) {
-                                // Check whether [] is array or indexer
-                                Expression? IsIndexer = null;
-                                if (OpenBracketIndex - 1 >= 0) {
-                                    Phase2Object OriginalLastObject = ParsedObjects[OpenBracketIndex - 1];
-                                    if (OriginalLastObject is Expression OriginalLastExpression && OriginalLastObject is not Statement) {
-                                        IsIndexer = OriginalLastExpression;
-                                    }
-                                }
-
-                                // Get objects enclosed in []
-                                List<Phase2Object> EnclosedObjects = ParsedObjects.GetIndexRange(OpenBracketIndex + 1, i - 1);
-                                // Remove objects from objects list
-                                ParsedObjects.RemoveIndexRange(OpenBracketIndex, i);
-
-                                // Indexer
-                                if (IsIndexer != null) {
-                                    // Get index
-                                    Expression Index = ObjectsToExpression(EnclosedObjects);
-                                    // Create indexer expression
-                                    ParsedObjects.Insert(OpenBracketIndex, new MethodCallExpression(
-                                        new PathExpression(IsIndexer, new Phase2Token(ParsedObjects[OpenBracketIndex].Location, Phase2TokenType.LocalVariableOrMethod, "[]")),
-                                        new List<Expression>() {Index}
-                                    ));
-                                    // Remove indexed object
-                                    ParsedObjects.RemoveAt(OpenBracketIndex - 1);
-                                }
-                                // Array
-                                else {
-                                    // Get items to put in array
-                                    List<Expression> ArrayItems = ObjectsToExpressions(EnclosedObjects, ExpressionsType.CommaSeparatedExpressions);
-                                    // Create array expression
-                                    ParsedObjects.Insert(OpenBracketIndex, new ArrayExpression(Token.Location, ArrayItems));
-                                }
-                                // Move on
-                                i = OpenBracketIndex;
-                            }
-                            else {
-                                throw new SyntaxErrorException($"{Token.Location}: Unexpected square close bracket");
-                            }
-                        }
-                    }
-                }
-                if (SquareBracketsStack.TryPop(out int RemainingOpenBracketIndex)) {
-                    throw new SyntaxErrorException($"{ParsedObjects[RemainingOpenBracketIndex].Location}: Unclosed square bracket");
-                }
-            }
 
             // Method calls (any)
             void ParseMethodCall(ObjectTokenExpression MethodName, int MethodNameIndex, bool WrappedInBrackets) {
@@ -1619,6 +1598,65 @@ namespace Embers
                             throw new SyntaxErrorException($"{Token.Location}: Expected a value before '{Token.Value!}'");
                         }
                     }
+                }
+            }
+
+            // Arrays
+            {
+                Stack<int> SquareBracketsStack = new();
+                for (int i = 0; i < ParsedObjects.Count; i++) {
+                    Phase2Object Object = ParsedObjects[i];
+
+                    if (Object is Phase2Token Token) {
+                        if (Token.Type == Phase2TokenType.StartSquare) {
+                            SquareBracketsStack.Push(i);
+                        }
+                        else if (Token.Type == Phase2TokenType.EndSquare) {
+                            if (SquareBracketsStack.TryPop(out int OpenBracketIndex)) {
+                                // Check whether [] is array or indexer
+                                Expression? IsIndexer = null;
+                                if (OpenBracketIndex - 1 >= 0) {
+                                    Phase2Object OriginalLastObject = ParsedObjects[OpenBracketIndex - 1];
+                                    if (OriginalLastObject is Expression OriginalLastExpression && OriginalLastObject is not Statement) {
+                                        IsIndexer = OriginalLastExpression;
+                                    }
+                                }
+
+                                // Get objects enclosed in []
+                                List<Phase2Object> EnclosedObjects = ParsedObjects.GetIndexRange(OpenBracketIndex + 1, i - 1);
+                                // Remove objects from objects list
+                                ParsedObjects.RemoveIndexRange(OpenBracketIndex, i);
+
+                                // Indexer
+                                if (IsIndexer != null) {
+                                    // Get index
+                                    Expression Index = ObjectsToExpression(EnclosedObjects);
+                                    // Create indexer expression
+                                    ParsedObjects.Insert(OpenBracketIndex, new MethodCallExpression(
+                                        new PathExpression(IsIndexer, new Phase2Token(ParsedObjects[OpenBracketIndex].Location, Phase2TokenType.LocalVariableOrMethod, "[]")),
+                                        new List<Expression>() {Index}
+                                    ));
+                                    // Remove indexed object
+                                    ParsedObjects.RemoveAt(OpenBracketIndex - 1);
+                                }
+                                // Array
+                                else {
+                                    // Get items to put in array
+                                    List<Expression> ArrayItems = ObjectsToExpressions(EnclosedObjects, ExpressionsType.CommaSeparatedExpressions);
+                                    // Create array expression
+                                    ParsedObjects.Insert(OpenBracketIndex, new ArrayExpression(Token.Location, ArrayItems));
+                                }
+                                // Move on
+                                i = OpenBracketIndex;
+                            }
+                            else {
+                                throw new SyntaxErrorException($"{Token.Location}: Unexpected square close bracket");
+                            }
+                        }
+                    }
+                }
+                if (SquareBracketsStack.TryPop(out int RemainingOpenBracketIndex)) {
+                    throw new SyntaxErrorException($"{ParsedObjects[RemainingOpenBracketIndex].Location}: Unclosed square bracket");
                 }
             }
 
@@ -1884,6 +1922,44 @@ namespace Embers
                         }
                     }
                 }
+                // Key value (hash) expressions
+                else if (ExpressionsType == ExpressionsType.KeyValueExpressions) {
+                    int Phase = 0; // 0: Accept item only, 1: Expect right arrow, 2: Expect item, 3: Accept comma or end only
+                    DebugLocation? SyntaxErrorLocation = null;
+
+                    for (int i = 0; i < ParsedObjects.Count; i++) {
+                        Phase2Object ParsedObject = ParsedObjects[i];
+                        SyntaxErrorLocation = null;
+
+                        if (ParsedObject is Statement ParsedStatement) {
+                            throw new SyntaxErrorException($"{ParsedObject.Location}: Unexpected statement: {ParsedStatement.Inspect()}");
+                        }
+                        else if (ParsedObject is Expression ParsedExpression && (Phase == 0 || Phase == 2)) {
+                            Expressions.Add(ParsedExpression);
+                            Phase++;
+                            if (Phase == 1) {
+                                SyntaxErrorLocation = ParsedExpression.Location;
+                            }
+                        }
+                        else if (ParsedObject is Phase2Token ParsedComma && ParsedComma.Type == Phase2TokenType.Comma && Phase == 3) {
+                            Phase = 0;
+                        }
+                        else if (ParsedObject is Phase2Token ParsedRightArrow && ParsedRightArrow.Type == Phase2TokenType.RightArrow && Phase == 1) {
+                            Phase = 2;
+                            SyntaxErrorLocation = ParsedRightArrow.Location;
+                        }
+                        else {
+                            throw new SyntaxErrorException($"{ParsedObject.Location}: Unexpected '{ParsedObject.Inspect()}'");
+                        }
+                    }
+
+                    if (Phase == 1) {
+                        throw new SyntaxErrorException($"{SyntaxErrorLocation}: Expected value after key");
+                    }
+                    else if (Phase == 2) {
+                        throw new SyntaxErrorException($"{SyntaxErrorLocation}: Expected value after right arrow");
+                    }
+                }
                 // Comma-separated expressions
                 else {
                     bool AcceptComma = false;
@@ -1995,6 +2071,9 @@ namespace Embers
                 DoIsCurly = doIsCurly;
             }
         }
+        class BuildingHash : BuildingBlock {
+            public BuildingHash(DebugLocation location) : base(location) { }
+        }
         abstract class BuildingConditional : BuildingBlock {
             public readonly bool Inverse;
             public readonly Expression? Condition;
@@ -2082,6 +2161,38 @@ namespace Embers
                 }
             }
             return ListInspection;
+        }
+        public static string Serialise<T>(this Dictionary<T, T> Dictionary) where T : Phase2.Phase2Object {
+            string Serialised = $"new Dictionary<{typeof(T).PathTo()}, {typeof(T).PathTo()}>() {{";
+            bool IsFirst = true;
+            foreach (KeyValuePair<T, T> Item in Dictionary) {
+                if (IsFirst) IsFirst = false;
+                else Serialised += ", ";
+                Serialised += "{" + Item.Key.Serialise() + ", " + Item.Value.Serialise() + "}, ";
+            }
+            return Serialised + "}";
+        }
+        public static string Inspect<T>(this Dictionary<T, T>? Dictionary, string Separator = ", ") where T : Phase2.Phase2Object {
+            string DictionaryInspection = "";
+            if (Dictionary != null) {
+                foreach (KeyValuePair<T, T> Object in Dictionary) {
+                    if (DictionaryInspection.Length != 0)
+                        DictionaryInspection += Separator;
+                    DictionaryInspection += $"{Object.Key.Inspect()} => {Object.Value.Inspect()}";
+                }
+            }
+            return DictionaryInspection;
+        }
+        public static string InspectInstances<T>(this Dictionary<T, T>? Dictionary, string Separator = ", ") where T : Instance {
+            string DictionaryInspection = "";
+            if (Dictionary != null) {
+                foreach (KeyValuePair<T, T> Object in Dictionary) {
+                    if (DictionaryInspection.Length != 0)
+                        DictionaryInspection += Separator;
+                    DictionaryInspection += $"{Object.Key.Inspect()} => {Object.Value.Inspect()}";
+                }
+            }
+            return DictionaryInspection;
         }
         public static DebugLocation Location<T>(this List<T> List) where T : Phase2.Phase2Object {
             if (List.Count != 0)

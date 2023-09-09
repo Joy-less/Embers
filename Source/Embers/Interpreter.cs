@@ -5,7 +5,7 @@ namespace Embers
 {
     public class Interpreter
     {
-        public readonly Class RootModule;
+        public readonly Module RootModule;
         public readonly Instance RootInstance;
         public readonly Scope RootScope;
 
@@ -21,6 +21,7 @@ namespace Embers
         public readonly Class Float;
         public readonly Class Proc;
         public readonly Class Array;
+        public readonly Class Hash;
 
         public readonly NilInstance Nil;
         public readonly TrueInstance True;
@@ -29,6 +30,8 @@ namespace Embers
         public readonly Random InternalRandom = new();
         public long RandomSeed;
         public Random Random;
+        public long GenerateObjectId => InternalNextObjectId++;
+        private long InternalNextObjectId = 0;
         
         public static string Serialise(string Code) {
             List<Phase1.Phase1Token> Tokens = Phase1.GetPhase1Tokens(Code);
@@ -38,7 +41,7 @@ namespace Embers
         }
 
         public Interpreter() {
-            RootModule = new("main", null);
+            RootModule = new("main", this);
             RootInstance = new Instance(RootModule);
             RootScope = new Scope(RootInstance);
 
@@ -53,6 +56,7 @@ namespace Embers
             Float = MainScript.CreateClass("Float");
             Proc = MainScript.CreateClass("Proc");
             Array = MainScript.CreateClass("Array");
+            Hash = MainScript.CreateClass("Hash");
 
             RandomSeed = InternalRandom.NextInt64();
             Random = new Random(RandomSeed.GetHashCode());

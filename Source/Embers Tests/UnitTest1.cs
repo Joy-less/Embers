@@ -227,6 +227,12 @@ namespace Embers_Tests
                 c = (- 3.4)
                 return a, b, c
             ", new object[] {-1L, -2L, -3.4d});
+
+            // Hashes
+            AssertEqual(@"
+                a = {:hi => 56.1}
+                return a[:hi]
+            ", 56.1d);
         }
 
 

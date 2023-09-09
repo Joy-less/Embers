@@ -26,6 +26,7 @@
             StartSquare,
             EndSquare,
             Pipe,
+            RightArrow,
         }
         public class Phase1Token {
             public readonly DebugLocation Location;
@@ -398,6 +399,10 @@
                                     Tokens.Add(new(Location, Phase1TokenType.Operator, "==", FollowsWhitespace));
                                     i++;
                                 }
+                            }
+                            else if (NextChara == '>') {
+                                Tokens.Add(new(Location, Phase1TokenType.RightArrow, "=>", FollowsWhitespace));
+                                i++;
                             }
                             else {
                                 Tokens.Add(new(Location, Phase1TokenType.AssignmentOperator, "=", FollowsWhitespace));
