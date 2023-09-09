@@ -408,23 +408,23 @@ namespace Embers
             public readonly IntRange ArgumentCountRange;
             public readonly List<MethodArgumentExpression> ArgumentNames;
             public readonly bool Unsafe;
-            public Method(Func<MethodInput, Task<Instances>> function, IntRange? argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool isUnsafe = false) {
+            public Method(Func<MethodInput, Task<Instances>> function, IntRange? argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false) {
                 Function = function;
                 ArgumentCountRange = argumentCountRange ?? new IntRange();
                 ArgumentNames = argumentNames ?? new();
-                Unsafe = isUnsafe;
+                Unsafe = IsUnsafe;
             }
-            public Method(Func<MethodInput, Task<Instances>> function, Range argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool isUnsafe = false) {
+            public Method(Func<MethodInput, Task<Instances>> function, Range argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false) {
                 Function = function;
                 ArgumentCountRange = new IntRange(argumentCountRange);
                 ArgumentNames = argumentNames ?? new();
-                Unsafe = isUnsafe;
+                Unsafe = IsUnsafe;
             }
-            public Method(Func<MethodInput, Task<Instances>> function, int argumentCount, List<MethodArgumentExpression>? argumentNames = null, bool isUnsafe = false) {
+            public Method(Func<MethodInput, Task<Instances>> function, int argumentCount, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false) {
                 Function = function;
                 ArgumentCountRange = new IntRange(argumentCount, argumentCount);
                 ArgumentNames = argumentNames ?? new();
-                Unsafe = isUnsafe;
+                Unsafe = IsUnsafe;
             }
             public async Task<Instances> Call(Script Script, Instance? OnInstance, Instances? Arguments = null, Method? OnYield = null, BreakHandleType BreakHandleType = BreakHandleType.Invalid) {
                 if (Unsafe && !Script.AllowUnsafeApi)

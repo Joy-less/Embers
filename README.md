@@ -201,7 +201,7 @@ pos = Vector2.new 1, 2; puts(""{#{pos.x}, #{pos.y}}"") # {1, 2}
 ");
 ```
 ### Sandboxing
-If you don't trust the Ruby code that will be run, you can remove access to dangerous methods by passing `false` when creating the script:
+If you don't trust the Ruby code that will be run, you can remove access to dangerous methods by passing `false` when creating a script:
 ```csharp
 Script MyScript = new(MyInterpreter, AllowUnsafeApi: false);
 ```

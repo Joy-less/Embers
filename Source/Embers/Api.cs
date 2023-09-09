@@ -101,12 +101,12 @@ namespace Embers
             //
 
             // Global methods
-            Interpreter.RootInstance.InstanceMethods["system"] = new Method(system, 1, isUnsafe: true);
+            Interpreter.RootInstance.InstanceMethods["system"] = new Method(system, 1, IsUnsafe: true);
 
             // File
             Module FileModule = Script.CreateModule("File");
-            FileModule.Methods["read"] = new Method(File.read, 1, isUnsafe: true);
-            FileModule.Methods["write"] = new Method(File.write, 2, isUnsafe: true);
+            FileModule.Methods["read"] = new Method(File.read, 1, IsUnsafe: true);
+            FileModule.Methods["write"] = new Method(File.write, 2, IsUnsafe: true);
         }
 
         public static readonly IReadOnlyDictionary<string, Method> DefaultClassAndInstanceMethods = new Dictionary<string, Method>() {
