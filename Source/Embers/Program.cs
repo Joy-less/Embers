@@ -12,11 +12,12 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() => 
                     Script.Evaluate(@"
-a = {true => false}
-p a # '{true => false}'
-p a[3] # 'nil'
-p Hash.new('hi')[0] # '""hi""'
-p 5.object_id # ?
+def a(*b, **c)
+    p b
+    p c
+end
+
+a true, 5, 8, ""hi"" => 2.4, ""hey"" => :test
                     ")
                 );
                 Console.ReadLine();

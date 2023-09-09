@@ -149,7 +149,7 @@ namespace Embers
                                 string ToFormat = String[(StartPosition + 2)..i];
                                 string SecondHalf = String[(i + 1)..];
 
-                                string Formatted = (await Script.InternalEvaluateAsync(ToFormat))[0].LightInspect();
+                                string Formatted = (await Script.InternalEvaluateAsync(ToFormat)).LightInspect();
                                 String = FirstHalf + Formatted + SecondHalf;
                                 i = FirstHalf.Length - 1;
                             }
@@ -346,6 +346,15 @@ namespace Embers
                 Value = value;
             }
         }
+        public class HashArgumentsInstance : Instance {
+            public readonly HashInstance Value;
+            public override string Inspect() {
+                return $"Hash arguments instance: {{{Value.Inspect()}}}";
+            }
+            public HashArgumentsInstance(HashInstance value, Interpreter interpreter) : base(interpreter) {
+                Value = value;
+            }
+        }
         public abstract class PseudoInstance : Instance {
             public override Dictionary<string, Instance> InstanceVariables { get { throw new ApiException($"{GetType().Name} instance does not have instance variables"); } }
             public override Dictionary<string, Method> InstanceMethods { get { throw new ApiException($"{GetType().Name} instance does not have instance methods"); } }
@@ -435,32 +444,53 @@ namespace Embers
                     // Create temporary scope
                     Script.CurrentObject.Push(new Scope(Script.CurrentBlock));
                     // Set argument variables
-                    for (int i = 0; i < ArgumentNames.Count; i++) {
-                        MethodArgumentExpression Argument = ArgumentNames[i];
-                        if (Argument.SplatType == SplatType.Single) {
-                            // Get splat arguments
-                            int RemainingArgumentNames = ArgumentNames.Count - i - 1;
-                            int RemainingGivenArguments = Arguments.Count - i;
-                            int SplatArgumentCount = RemainingGivenArguments - RemainingArgumentNames;
-                            List<MethodArgumentExpression> SplatArguments = ArgumentNames.GetRange(i, SplatArgumentCount);
-                            i += SplatArgumentCount;
-                            // Create array from splat arguments
-                            throw new NotImplementedException($"Splat arguments not implemented yet, because arrays not implemented yet (but {SplatArguments.Count} arguments were splat)");
-                            // Interpreter.CurrentScope.LocalVariables.Add(Argument.ArgumentName.Value!, SplatArguments);
-                        }
-                        else if (Argument.SplatType == SplatType.Double) {
-                            throw new NotImplementedException("Double splat arguments not implemented yet");
-                        }
-                        else {
+                    {
+                        int ArgumentNameIndex = 0;
+                        int ArgumentIndex = 0;
+                        while (ArgumentNameIndex < ArgumentNames.Count) {
+                            MethodArgumentExpression ArgumentName = ArgumentNames[ArgumentNameIndex];
+                            string ArgumentIdentifier = ArgumentName.ArgumentName.Value!;
                             // Declare argument as variable in local scope
-                            if (i < Arguments.Count) {
-                                Script.CurrentScope.LocalVariables.Add(Argument.ArgumentName.Value!, Arguments[i]);
+                            if (ArgumentIndex < Arguments.Count) {
+                                // Splat argument
+                                if (ArgumentName.SplatType == SplatType.Single) {
+                                    // Add splat arguments while there will be enough remaining arguments
+                                    List<Instance> SplatArguments = new();
+                                    while (Arguments.Count - ArgumentIndex >= ArgumentNames.Count - ArgumentNameIndex) {
+                                        SplatArguments.Add(Arguments[ArgumentIndex]);
+                                        ArgumentIndex++;
+                                    }
+                                    if (SplatArguments.Count != 0)
+                                        ArgumentIndex--;
+                                    // Add extra ungiven double splat argument if available
+                                    if (ArgumentNameIndex + 1 < ArgumentNames.Count && ArgumentNames[ArgumentNameIndex + 1].SplatType == SplatType.Double
+                                        && Arguments.MultiInstance.Last() is not HashArgumentsInstance)
+                                    {
+                                        SplatArguments.Add(Arguments[ArgumentIndex]);
+                                        ArgumentIndex++;
+                                    }
+                                    // Create array from splat arguments
+                                    ArrayInstance SplatArgumentsArray = new(Script.Interpreter.Array, SplatArguments);
+                                    // Add array to scope
+                                    Script.CurrentScope.LocalVariables.Add(ArgumentIdentifier, SplatArgumentsArray);
+                                }
+                                // Double splat argument
+                                else if (ArgumentName.SplatType == SplatType.Double && Arguments.MultiInstance.Last() is HashArgumentsInstance DoubleSplatArgumentsHash) {
+                                    // Add hash to scope
+                                    Script.CurrentScope.LocalVariables.Add(ArgumentIdentifier, DoubleSplatArgumentsHash.Value);
+                                }
+                                // Normal argument
+                                else {
+                                    Script.CurrentScope.LocalVariables.Add(ArgumentIdentifier, Arguments[ArgumentIndex]);
+                                }
                             }
                             // Optional argument not given
                             else {
-                                Instance DefaultValue = Argument.DefaultValue != null ? (await Script.InterpretExpressionAsync(Argument.DefaultValue)) : Script.Interpreter.Nil;
-                                Script.CurrentScope.LocalVariables.Add(Argument.ArgumentName.Value!, DefaultValue);
+                                Instance DefaultValue = ArgumentName.DefaultValue != null ? (await Script.InterpretExpressionAsync(ArgumentName.DefaultValue)) : Script.Interpreter.Nil;
+                                Script.CurrentScope.LocalVariables.Add(ArgumentIdentifier, DefaultValue);
                             }
+                            ArgumentNameIndex++;
+                            ArgumentIndex++;
                         }
                     }
                     // Call method
@@ -1015,14 +1045,14 @@ namespace Embers
             }
             return Interpreter.Nil;
         }
-        async Task<Instances> InterpretArrayExpression(ArrayExpression ArrayExpression) {
+        async Task<ArrayInstance> InterpretArrayExpression(ArrayExpression ArrayExpression) {
             List<Instance> Items = new();
             foreach (Expression Item in ArrayExpression.Expressions) {
                 Items.Add(await InterpretExpressionAsync(Item));
             }
             return new ArrayInstance(Interpreter.Array, Items);
         }
-        async Task<Instances> InterpretHashExpression(HashExpression HashExpression) {
+        async Task<HashInstance> InterpretHashExpression(HashExpression HashExpression) {
             Dictionary<Instance, Instance> Items = new();
             foreach (KeyValuePair<Expression, Expression> Item in HashExpression.Expressions) {
                 Items.Add(await InterpretExpressionAsync(Item.Key), await InterpretExpressionAsync(Item.Value));
@@ -1286,6 +1316,12 @@ namespace Embers
                 throw new InternalErrorException($"{DefinedExpression.Location}: Unknown expression type for defined?: {DefinedExpression.Expression.GetType().Name}");
             }
         }
+        async Task<Instances> InterpretHashArgumentsExpression(HashArgumentsExpression HashArgumentsExpression) {
+            return new HashArgumentsInstance(
+                await InterpretHashExpression(HashArgumentsExpression.HashExpression),
+                Interpreter
+            );
+        }
         
         public enum BreakHandleType {
             Invalid,
@@ -1315,15 +1351,16 @@ namespace Embers
                 DefineMethodStatement DefineMethodStatement => await InterpretDefineMethodStatement(DefineMethodStatement),
                 DefineClassStatement DefineClassStatement => await InterpretDefineClassStatement(DefineClassStatement),
                 ReturnStatement ReturnStatement => throw new ReturnException(
-                                                ReturnStatement.ReturnValues != null
-                                                ? await InterpretExpressionsAsync(ReturnStatement.ReturnValues)
-                                                : Interpreter.Nil),
+                                                        ReturnStatement.ReturnValue != null
+                                                        ? await InterpretExpressionAsync(ReturnStatement.ReturnValue)
+                                                        : Interpreter.Nil),
                 BreakStatement => throw new BreakException(),
                 YieldStatement YieldStatement => await InterpretYieldStatement(YieldStatement, OnYield),
                 IfBranchesStatement IfBranchesStatement => await InterpretIfBranchesStatement(IfBranchesStatement),
                 AssignmentExpression AssignmentExpression => await InterpretAssignmentExpression(AssignmentExpression, ReturnType),
                 UndefineMethodStatement UndefineMethodStatement => await InterpretUndefineMethodStatement(UndefineMethodStatement),
                 DefinedExpression DefinedExpression => await InterpretDefinedExpression(DefinedExpression),
+                HashArgumentsExpression HashArgumentsExpression => await InterpretHashArgumentsExpression(HashArgumentsExpression),
                 _ => throw new InternalErrorException($"{Expression.Location}: Not sure how to interpret expression {Expression.GetType().Name} ({Expression.Inspect()})"),
             };
         }
@@ -1334,7 +1371,7 @@ namespace Embers
             }
             return Results;
         }
-        internal async Task<Instances> InternalInterpretAsync(List<Expression> Statements, Method? OnYield = null) {
+        internal async Task<Instance> InternalInterpretAsync(List<Expression> Statements, Method? OnYield = null) {
             // Interpret statements
             Instances LastExpression = Interpreter.Nil;
             for (int Index = 0; Index < Statements.Count; Index++) {
@@ -1345,7 +1382,7 @@ namespace Embers
             // Return last expression
             return LastExpression;
         }
-        internal async Task<Instances> InternalEvaluateAsync(string Code) {
+        internal async Task<Instance> InternalEvaluateAsync(string Code) {
             // Get statements from code
             List<Phase1.Phase1Token> Tokens = Phase1.GetPhase1Tokens(Code);
             List<Expression> Statements = ObjectsToExpressions(Tokens, ExpressionsType.Statements);
@@ -1354,7 +1391,7 @@ namespace Embers
             return await InternalInterpretAsync(Statements);
         }
         
-        public async Task<Instances> InterpretAsync(List<Expression> Statements, Method? OnYield = null) {
+        public async Task<Instance> InterpretAsync(List<Expression> Statements, Method? OnYield = null) {
             // Debounce
             if (Running) throw new ApiException("The script is already running.");
             Running = true;
@@ -1379,10 +1416,10 @@ namespace Embers
             }
             return LastExpression;
         }
-        public Instances Interpret(List<Expression> Statements) {
+        public Instance Interpret(List<Expression> Statements) {
             return InterpretAsync(Statements).Result;
         }
-        public async Task<Instances> EvaluateAsync(string Code) {
+        public async Task<Instance> EvaluateAsync(string Code) {
             List<Phase1.Phase1Token> Tokens = Phase1.GetPhase1Tokens(Code);
             List<Expression> Statements = ObjectsToExpressions(Tokens, ExpressionsType.Statements);
 
@@ -1392,7 +1429,7 @@ namespace Embers
 
             return await InterpretAsync(Statements);
         }
-        public Instances Evaluate(string Code) {
+        public Instance Evaluate(string Code) {
             return EvaluateAsync(Code).Result;
         }
 

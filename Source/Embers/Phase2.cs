@@ -1,4 +1,5 @@
 ﻿using static Embers.Phase1;
+using static Embers.Phase2;
 using static Embers.Script;
 
 namespace Embers
@@ -398,6 +399,18 @@ namespace Embers
                 return $"new {PathToSelf}({Location.Serialise()}, {Expressions.Serialise()})";
             }
         }
+        public class HashArgumentsExpression : Expression {
+            public readonly HashExpression HashExpression;
+            public HashArgumentsExpression(DebugLocation location, Dictionary<Expression, Expression> expressions) : base(location) {
+                HashExpression = new(location, expressions);
+            }
+            public override string Inspect() {
+                return HashExpression.Expressions.Inspect();
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({Location.Serialise()}, {HashExpression.Serialise()})";
+            }
+        }
         public abstract class Statement : Expression {
             public Statement(DebugLocation location) : base(location) { }
         }
@@ -457,16 +470,16 @@ namespace Embers
             }
         }
         public class ReturnStatement : Statement {
-            public readonly List<Expression>? ReturnValues;
-            public ReturnStatement(DebugLocation location, List<Expression>? returnValues = null) : base(location) {
-                ReturnValues = returnValues;
+            public readonly Expression? ReturnValue;
+            public ReturnStatement(DebugLocation location, Expression? returnValue = null) : base(location) {
+                ReturnValue = returnValue;
             }
             public override string Inspect() {
-                if (ReturnValues != null) return "return " + ReturnValues.Inspect();
+                if (ReturnValue != null) return "return " + ReturnValue.Inspect();
                 else return "return";
             }
             public override string Serialise() {
-                return $"new {PathToSelf}({Location.Serialise()}, {(ReturnValues != null ? ReturnValues.Serialise() : "null")})";
+                return $"new {PathToSelf}({Location.Serialise()}, {(ReturnValue != null ? ReturnValue.Serialise() : "null")})";
             }
         }
         public class BreakStatement : Statement {
@@ -735,7 +748,29 @@ namespace Embers
                 Index--;
             }
 
-            List<Expression> Arguments = ObjectsToExpressions(ArgumentObjects, ExpressionsType.CommaSeparatedExpressions);
+            List<Expression> Arguments = new();
+
+            int IndexOfRightArrow = ArgumentObjects.FindIndex(Arg => Arg is Phase2Token Tok && Tok.Type == Phase2TokenType.RightArrow);
+            // Arguments with double-splat hash arguments
+            if (IndexOfRightArrow != -1) {
+                // Find index of hash arguments
+                int StartHashArgumentsIndex = ArgumentObjects.FindLastIndex(IndexOfRightArrow - 1, Arg => Arg is Phase2Token Tok && Tok.Type == Phase2TokenType.Comma);
+                if (StartHashArgumentsIndex == -1)
+                    StartHashArgumentsIndex = 0;
+                // Get comma-separated arguments
+                Arguments = ObjectsToExpressions(ArgumentObjects.GetRange(0, StartHashArgumentsIndex), ExpressionsType.CommaSeparatedExpressions);
+                // Get hash arguments
+                if (StartHashArgumentsIndex != 0)
+                    StartHashArgumentsIndex++;
+                List<Expression> HashArguments = ObjectsToExpressions(ArgumentObjects.GetIndexRange(StartHashArgumentsIndex), ExpressionsType.KeyValueExpressions);
+                HashArgumentsExpression HashArgumentsExpression = new(HashArguments.Location(), HashArguments.ListAsHash());
+                Arguments.Add(HashArgumentsExpression);
+            }
+            // Only comma-separated arguments
+            else {
+                Arguments = ObjectsToExpressions(ArgumentObjects, ExpressionsType.CommaSeparatedExpressions);
+            }
+
             return Arguments;
         }
         static List<Expression> ParseArgumentsWithBrackets(List<Phase2Object> Objects, ref int Index) {
@@ -1182,7 +1217,20 @@ namespace Embers
             // Get return/yield values
             List<Expression>? ReturnOrYieldValues = ParseArguments(StatementTokens, ref Index);
             // Create yield/return statement
-            return IsReturn ? new ReturnStatement(Location, ReturnOrYieldValues) : new YieldStatement(Location, ReturnOrYieldValues);
+            if (IsReturn) {
+                if (ReturnOrYieldValues == null || ReturnOrYieldValues.Count == 0) {
+                    return new ReturnStatement(Location);
+                }
+                else if (ReturnOrYieldValues.Count == 1) {
+                    return new ReturnStatement(Location, ReturnOrYieldValues[0]);
+                }
+                else {
+                    return new ReturnStatement(Location, new ArrayExpression(ReturnOrYieldValues.Location(), ReturnOrYieldValues));
+                }
+            }
+            else {
+                return new YieldStatement(Location, ReturnOrYieldValues);
+            }
         }
         static Expression ParseUndef(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index) {
             // Get undef method name
@@ -1393,10 +1441,7 @@ namespace Embers
                                 // Get items to put in hash
                                 List<Expression> HashItemsList = ObjectsToExpressions(HashContents, ExpressionsType.KeyValueExpressions);
                                 // Split items into key value pairs
-                                Dictionary<Expression, Expression> HashItems = new();
-                                for (int i2 = 0; i2 < HashItemsList.Count; i2 += 2) {
-                                    HashItems[HashItemsList[i2]] = HashItemsList[i2 + 1];
-                                }
+                                Dictionary<Expression, Expression> HashItems = HashItemsList.ListAsHash();
                                 // Create hash expression and add to expressions
                                 CurrentBlocks.Pop();
                                 PendingObjects.Peek().Add(new HashExpression(Token.Location, HashItems));
@@ -2130,7 +2175,7 @@ namespace Embers
                 }
             }
         }
-        public static string Serialise<T>(this List<T> List) where T : Phase2.Phase2Object {
+        public static string Serialise<T>(this List<T> List) where T : Phase2Object {
             string Serialised = $"new List<{typeof(T).PathTo()}>() {{";
             bool IsFirst = true;
             foreach (T Item in List) {
@@ -2140,10 +2185,10 @@ namespace Embers
             }
             return Serialised + "}";
         }
-        public static string Inspect<T>(this List<T>? List, string Separator = ", ") where T : Phase2.Phase2Object {
+        public static string Inspect<T>(this List<T>? List, string Separator = ", ") where T : Phase2Object {
             string ListInspection = "";
             if (List != null) {
-                foreach (Phase2.Phase2Object Object in List) {
+                foreach (Phase2Object Object in List) {
                     if (ListInspection.Length != 0)
                         ListInspection += Separator;
                     ListInspection += Object.Inspect();
@@ -2162,7 +2207,7 @@ namespace Embers
             }
             return ListInspection;
         }
-        public static string Serialise<T>(this Dictionary<T, T> Dictionary) where T : Phase2.Phase2Object {
+        public static string Serialise<T>(this Dictionary<T, T> Dictionary) where T : Phase2Object {
             string Serialised = $"new Dictionary<{typeof(T).PathTo()}, {typeof(T).PathTo()}>() {{";
             bool IsFirst = true;
             foreach (KeyValuePair<T, T> Item in Dictionary) {
@@ -2172,7 +2217,7 @@ namespace Embers
             }
             return Serialised + "}";
         }
-        public static string Inspect<T>(this Dictionary<T, T>? Dictionary, string Separator = ", ") where T : Phase2.Phase2Object {
+        public static string Inspect<T>(this Dictionary<T, T>? Dictionary, string Separator = ", ") where T : Phase2Object {
             string DictionaryInspection = "";
             if (Dictionary != null) {
                 foreach (KeyValuePair<T, T> Object in Dictionary) {
@@ -2194,7 +2239,7 @@ namespace Embers
             }
             return DictionaryInspection;
         }
-        public static DebugLocation Location<T>(this List<T> List) where T : Phase2.Phase2Object {
+        public static DebugLocation Location<T>(this List<T> List) where T : Phase2Object {
             if (List.Count != 0)
                 return List[0].Location;
             else
@@ -2209,6 +2254,13 @@ namespace Embers
             foreach (KeyValuePair<TKey, TValue> Pair in Origin) {
                 Target.Add(Pair.Key, Pair.Value);
             }
+        }
+        public static Dictionary<T, T> ListAsHash<T>(this List<T> HashItemsList) where T : Expression {
+            Dictionary<T, T> HashItems = new();
+            for (int i2 = 0; i2 < HashItemsList.Count; i2 += 2) {
+                HashItems[HashItemsList[i2]] = HashItemsList[i2 + 1];
+            }
+            return HashItems;
         }
         public static string PathTo(this object Self) => PathTo(Self.GetType());
         public static string PathTo(this Type Self) => (Self.FullName ?? "").Replace('+', '.');

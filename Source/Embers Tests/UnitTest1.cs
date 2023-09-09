@@ -208,7 +208,7 @@ namespace Embers_Tests
             // system
             AssertEqual(@"
                 return system('echo %date%').chomp
-            ", Obj => Obj is string Str && DateTime.TryParse(Str, out _));
+            ", Obj => Obj is StringInstance Str && DateTime.TryParse(Str.String, out _));
 
             // Arrays
             AssertEqual(@"
@@ -218,7 +218,8 @@ namespace Embers_Tests
             AssertEqual(@"
                 arr = [1, 2, 3, 4, 5]
                 arr.map {|a| 2*a}
-            ", Obj => Obj is List<Instance> Arr && Arr.Count == 5 && Arr[0].Integer == 2L && Arr[1].Integer == 4L && Arr[2].Integer == 6L && Arr[3].Integer == 8L && Arr[4].Integer == 10L);
+            ", Obj => Obj is ArrayInstance Arr && Arr.Array.Count == 5 && Arr.Array[0].Integer == 2L && Arr.Array[1].Integer == 4L && Arr.Array[2].Integer == 6L
+                && Arr.Array[3].Integer == 8L && Arr.Array[4].Integer == 10L);
 
             // Unary
             AssertEqual(@"
@@ -233,13 +234,27 @@ namespace Embers_Tests
                 a = {:hi => 56.1}
                 return a[:hi]
             ", 56.1d);
+
+            // Splat Arguments
+            AssertEqual(@"
+                def a(*b, **c)
+                    $b = b
+                    $c = c
+                end
+
+                a true, 5, 8, ""hi"" => 2.4, ""hey"" => :test
+                return $b, $c
+            ", Obj => Obj is ArrayInstance Objs && Objs.Array.Count == 2 && Objs.Array[0] is ArrayInstance Arr && Arr.Array[0].Boolean == true && Arr.Array[1].Integer == 5L
+                && Arr.Array[2].Integer == 8L && Objs.Array[1] is HashInstance Hash && Hash.Hash.Count == 2);
         }
 
 
         // Helper methods
         public static void AssertEqual(string Code, object[] ExpectedResults, bool AllowUnsafeApi = true) {
-            Instances Results = new Script(new Interpreter(), allowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
+            Instance Result = new Script(new Interpreter(), AllowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
 
+            Assert.IsTrue(Result is ArrayInstance);
+            List<Instance> Results = Result.Array;
             Assert.AreEqual(ExpectedResults.Length, Results.Count, "Wrong number of objects.");
 
             for (int i = 0; i < ExpectedResults.Length; i++) {
@@ -247,30 +262,24 @@ namespace Embers_Tests
             }
         }
         public static void AssertEqual(string Code, object ExpectedResult, bool AllowUnsafeApi = true) {
-            Instances Results = new Script(new Interpreter(), allowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
+            Instance Result = new Script(new Interpreter(), AllowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
 
-            Assert.AreEqual(1, Results.Count, "Wrong number of objects.");
-
-            Assert.AreEqual(ExpectedResult, Results[0].Object);
+            Assert.AreEqual(ExpectedResult, Result.Object);
         }
         public static void AssertEqualToNull(string Code, bool AllowUnsafeApi = true) {
-            Instances Results = new Script(new Interpreter(), allowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
+            Instance Result = new Script(new Interpreter(), AllowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
 
-            Assert.AreEqual(1, Results.Count, "Wrong number of objects.");
-
-            Assert.AreEqual(null, Results[0].Object);
+            Assert.AreEqual(null, Result.Object);
         }
         public static void AssertEqual(string Code, Func<object?, bool> CheckEquality, bool AllowUnsafeApi = true) {
-            Instances Results = new Script(new Interpreter(), allowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
+            Instance Result = new Script(new Interpreter(), AllowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
 
-            Assert.AreEqual(1, Results.Count, "Wrong number of objects.");
-
-            bool Equal = CheckEquality(Results[0].Object);
-            Assert.IsTrue(Equal);
+            bool AreEqual = CheckEquality(Result);
+            Assert.IsTrue(AreEqual);
         }
         public static void AssertErrors<TError>(string Code, bool AllowUnsafeApi = true) {
             try {
-                new Script(new Interpreter(), allowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
+                new Script(new Interpreter(), AllowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
             }
             catch (Exception Ex) {
                 if (Ex.InnerException == null) {
@@ -288,7 +297,7 @@ namespace Embers_Tests
         }
         public static void AssertDoesNotError(string Code, bool AllowUnsafeApi = true) {
             try {
-                new Script(new Interpreter(), allowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
+                new Script(new Interpreter(), AllowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
             }
             catch (Exception Ex) {
                 Assert.Fail($"Code errored ({Ex.GetType().Name}): {Ex.Message}.");

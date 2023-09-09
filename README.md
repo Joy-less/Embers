@@ -34,8 +34,8 @@ using static Embers.Script;
 
 // ...
 
-Instances Result = MyScript.Evaluate("3 + 2");
-Console.WriteLine(Result[0].Integer); // 5
+Instance Result = MyScript.Evaluate("3 + 2");
+Console.WriteLine(Result.Integer); // 5
 ```
 ### Asynchronous operation
 ```csharp
@@ -129,17 +129,17 @@ end
 ```
 ```
 Single thread benchmark:
-Took 16.356 seconds
+Took 19.046 seconds
 Multi-threading benchmark:
-Took 10.334 seconds
-Took 10.335 seconds
-Took 10.335 seconds
-Took 10.335 seconds
+Took 13.929 seconds
+Took 13.93 seconds
+Took 13.93 seconds
+Took 13.93 seconds
 Parallel benchmark:
-Took 10.398 seconds
-Took 10.398 seconds
-Took 10.398 seconds
-Took 10.398 seconds
+Took 15.396 seconds
+Took 15.396 seconds
+Took 15.396 seconds
+Took 15.396 seconds
 ```
 </details>
 
