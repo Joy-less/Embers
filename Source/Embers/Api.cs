@@ -27,7 +27,7 @@ namespace Embers
             Interpreter.RootInstance.InstanceMethods["rand"] = new Method(Random.rand, 0..1);
             Interpreter.RootInstance.InstanceMethods["srand"] = new Method(Random.srand, 0..1);
             Interpreter.RootInstance.InstanceMethods["exit"] = new Method(exit, 0);
-            Interpreter.RootInstance.InstanceMethods["quit"] = new Method(quit, 0);
+            Interpreter.RootInstance.InstanceMethods["quit"] = new Method(exit, 0);
 
             // String
             Interpreter.String.InstanceMethods["[]"] = new Method(String._Indexer, 1);
@@ -86,10 +86,14 @@ namespace Embers
             Interpreter.Array.InstanceMethods["each"] = new Method(Array.each, 0);
             Interpreter.Array.InstanceMethods["reverse_each"] = new Method(Array.reverse_each, 0);
             Interpreter.Array.InstanceMethods["map"] = new Method(Array.map, 0);
+            Interpreter.Array.InstanceMethods["contains?"] = new Method(Array.contains, 1);
+            Interpreter.Array.InstanceMethods["include?"] = new Method(Array.contains, 1);
 
             // Hash
             Interpreter.Hash.InstanceMethods["[]"] = new Method(Hash._Indexer, 1);
             Interpreter.Hash.InstanceMethods["initialize"] = new Method(Hash.initialize, 0..1);
+            Interpreter.Hash.InstanceMethods["has_key?"] = new Method(Hash.has_key, 1);
+            Interpreter.Hash.InstanceMethods["has_value?"] = new Method(Hash.has_value, 1);
 
             // Random
             Class RandomClass = Script.CreateClass("Random");
@@ -243,9 +247,6 @@ namespace Embers
             return new StringInstance(Input.Interpreter.String, Output);
         }
         static async Task<Instances> exit(MethodInput Input) {
-            throw new ExitException();
-        }
-        static async Task<Instances> quit(MethodInput Input) {
             throw new ExitException();
         }
         static class ClassInstance {
@@ -767,6 +768,15 @@ namespace Embers
                 }
                 return Input.Instance;
             }
+            public static async Task<Instances> contains(MethodInput Input) {
+                Instance ItemToFind = Input.Arguments[0];
+                foreach (Instance Item in Input.Instance.Array) {
+                    if ((await Item.InstanceMethods["=="].Call(Input.Script, Item, ItemToFind))[0].IsTruthy) {
+                        return Input.Interpreter.True;
+                    }
+                }
+                return Input.Interpreter.False;
+            }
         }
         static class Hash {
             public static async Task<Instances> _Indexer(MethodInput Input) {
@@ -792,6 +802,24 @@ namespace Embers
                     ((HashInstance)Input.Instance).SetValue(Input.Instance.Hash, Input.Arguments[0]);
                 }
                 return Input.Interpreter.Nil;
+            }
+            public static async Task<Instances> has_key(MethodInput Input) {
+                Instance ItemToFind = Input.Arguments[0];
+                foreach (Instance Item in Input.Instance.Hash.Keys) {
+                    if ((await Item.InstanceMethods["=="].Call(Input.Script, Item, ItemToFind))[0].IsTruthy) {
+                        return Input.Interpreter.True;
+                    }
+                }
+                return Input.Interpreter.False;
+            }
+            public static async Task<Instances> has_value(MethodInput Input) {
+                Instance ItemToFind = Input.Arguments[0];
+                foreach (Instance Item in Input.Instance.Hash.Values) {
+                    if ((await Item.InstanceMethods["=="].Call(Input.Script, Item, ItemToFind))[0].IsTruthy) {
+                        return Input.Interpreter.True;
+                    }
+                }
+                return Input.Interpreter.False;
             }
         }
         static class Random {

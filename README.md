@@ -180,7 +180,7 @@ Vector2.InstanceMethods["x"] = new Method(async Input => {
 Vector2.InstanceMethods["y"] = new Method(async Input => {
     return Input.Instance.InstanceVariables["Y"];
 }, 0);
-MyScript.Evaluate("pos = Vector2.new 1, 2; puts(\"{#{pos.x}, #{pos.y}}\")"); // {1, 2}
+MyScript.Evaluate("pos = Vector2.new(1, 2); p [pos.x, pos.y]"); // [1, 2]
 ```
 which is the same as the following:
 ```csharp
@@ -197,7 +197,7 @@ class Vector2
         @Y
     end
 end
-pos = Vector2.new 1, 2; puts(""{#{pos.x}, #{pos.y}}"") # {1, 2}
+pos = Vector2.new(1, 2); p [pos.x, pos.y] # [1, 2]
 ");
 ```
 ### Sandboxing

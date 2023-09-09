@@ -1445,7 +1445,6 @@ namespace Embers
                                 // Create hash expression and add to expressions
                                 CurrentBlocks.Pop();
                                 PendingObjects.Peek().Add(new HashExpression(Token.Location, HashItems));
-                                ResolveStatementsWithoutEndingBlock();
                                 break;
                             }
                             Expression? EndedExpression = ResolveEndBlock(true);
@@ -1594,6 +1593,67 @@ namespace Embers
                 }
             }
 
+            // Arrays
+            {
+                Stack<int> SquareBracketsStack = new();
+                for (int i = 0; i < ParsedObjects.Count; i++) {
+                    Phase2Object Object = ParsedObjects[i];
+
+                    if (Object is Phase2Token Token) {
+                        if (Token.Type == Phase2TokenType.StartSquare) {
+                            SquareBracketsStack.Push(i);
+                        }
+                        else if (Token.Type == Phase2TokenType.EndSquare) {
+                            if (SquareBracketsStack.TryPop(out int OpenBracketIndex)) {
+                                // Check whether [] is array or indexer
+                                Expression? IsIndexer = null;
+                                if (OpenBracketIndex - 1 >= 0) {
+                                    Phase2Object OriginalLastObject = ParsedObjects[OpenBracketIndex - 1];
+                                    if (OriginalLastObject is Expression OriginalLastExpression && OriginalLastObject is not Statement) {
+                                        if (OriginalLastExpression is not ObjectTokenExpression || !((Phase2Token)ParsedObjects[OpenBracketIndex]).FollowsWhitespace) {
+                                            IsIndexer = OriginalLastExpression;
+                                        }
+                                    }
+                                }
+
+                                // Get objects enclosed in []
+                                List<Phase2Object> EnclosedObjects = ParsedObjects.GetIndexRange(OpenBracketIndex + 1, i - 1);
+                                // Remove objects from objects list
+                                ParsedObjects.RemoveIndexRange(OpenBracketIndex, i);
+
+                                // Indexer
+                                if (IsIndexer != null) {
+                                    // Get index
+                                    Expression Index = ObjectsToExpression(EnclosedObjects);
+                                    // Create indexer expression
+                                    ParsedObjects.Insert(OpenBracketIndex, new MethodCallExpression(
+                                        new PathExpression(IsIndexer, new Phase2Token(ParsedObjects[OpenBracketIndex].Location, Phase2TokenType.LocalVariableOrMethod, "[]")),
+                                        new List<Expression>() {Index}
+                                    ));
+                                    // Remove indexed object
+                                    ParsedObjects.RemoveAt(OpenBracketIndex - 1);
+                                }
+                                // Array
+                                else {
+                                    // Get items to put in array
+                                    List<Expression> ArrayItems = ObjectsToExpressions(EnclosedObjects, ExpressionsType.CommaSeparatedExpressions);
+                                    // Create array expression
+                                    ParsedObjects.Insert(OpenBracketIndex, new ArrayExpression(Token.Location, ArrayItems));
+                                }
+                                // Move on
+                                i = OpenBracketIndex;
+                            }
+                            else {
+                                throw new SyntaxErrorException($"{Token.Location}: Unexpected square close bracket");
+                            }
+                        }
+                    }
+                }
+                if (SquareBracketsStack.TryPop(out int RemainingOpenBracketIndex)) {
+                    throw new SyntaxErrorException($"{ParsedObjects[RemainingOpenBracketIndex].Location}: Unclosed square bracket");
+                }
+            }
+
             // Paths
             for (int i = 0; i < ParsedObjects.Count; i++) {
                 Phase2Object? LastObject = i - 1 >= 0 ? ParsedObjects[i - 1] : null;
@@ -1643,65 +1703,6 @@ namespace Embers
                             throw new SyntaxErrorException($"{Token.Location}: Expected a value before '{Token.Value!}'");
                         }
                     }
-                }
-            }
-
-            // Arrays
-            {
-                Stack<int> SquareBracketsStack = new();
-                for (int i = 0; i < ParsedObjects.Count; i++) {
-                    Phase2Object Object = ParsedObjects[i];
-
-                    if (Object is Phase2Token Token) {
-                        if (Token.Type == Phase2TokenType.StartSquare) {
-                            SquareBracketsStack.Push(i);
-                        }
-                        else if (Token.Type == Phase2TokenType.EndSquare) {
-                            if (SquareBracketsStack.TryPop(out int OpenBracketIndex)) {
-                                // Check whether [] is array or indexer
-                                Expression? IsIndexer = null;
-                                if (OpenBracketIndex - 1 >= 0) {
-                                    Phase2Object OriginalLastObject = ParsedObjects[OpenBracketIndex - 1];
-                                    if (OriginalLastObject is Expression OriginalLastExpression && OriginalLastObject is not Statement) {
-                                        IsIndexer = OriginalLastExpression;
-                                    }
-                                }
-
-                                // Get objects enclosed in []
-                                List<Phase2Object> EnclosedObjects = ParsedObjects.GetIndexRange(OpenBracketIndex + 1, i - 1);
-                                // Remove objects from objects list
-                                ParsedObjects.RemoveIndexRange(OpenBracketIndex, i);
-
-                                // Indexer
-                                if (IsIndexer != null) {
-                                    // Get index
-                                    Expression Index = ObjectsToExpression(EnclosedObjects);
-                                    // Create indexer expression
-                                    ParsedObjects.Insert(OpenBracketIndex, new MethodCallExpression(
-                                        new PathExpression(IsIndexer, new Phase2Token(ParsedObjects[OpenBracketIndex].Location, Phase2TokenType.LocalVariableOrMethod, "[]")),
-                                        new List<Expression>() {Index}
-                                    ));
-                                    // Remove indexed object
-                                    ParsedObjects.RemoveAt(OpenBracketIndex - 1);
-                                }
-                                // Array
-                                else {
-                                    // Get items to put in array
-                                    List<Expression> ArrayItems = ObjectsToExpressions(EnclosedObjects, ExpressionsType.CommaSeparatedExpressions);
-                                    // Create array expression
-                                    ParsedObjects.Insert(OpenBracketIndex, new ArrayExpression(Token.Location, ArrayItems));
-                                }
-                                // Move on
-                                i = OpenBracketIndex;
-                            }
-                            else {
-                                throw new SyntaxErrorException($"{Token.Location}: Unexpected square close bracket");
-                            }
-                        }
-                    }
-                }
-                if (SquareBracketsStack.TryPop(out int RemainingOpenBracketIndex)) {
-                    throw new SyntaxErrorException($"{ParsedObjects[RemainingOpenBracketIndex].Location}: Unclosed square bracket");
                 }
             }
 

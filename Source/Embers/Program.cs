@@ -12,12 +12,8 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() => 
                     Script.Evaluate(@"
-def a(*b, **c)
-    p b
-    p c
-end
-
-a true, 5, 8, ""hi"" => 2.4, ""hey"" => :test
+puts [4, 6,4.5].include?4.5
+puts({4=>6}.has_value? 6)
                     ")
                 );
                 Console.ReadLine();
