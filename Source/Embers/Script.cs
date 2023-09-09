@@ -1396,9 +1396,9 @@ namespace Embers
             return EvaluateAsync(Code).Result;
         }
 
-        public Script(Interpreter interpreter, bool allowUnsafeApi = true) {
+        public Script(Interpreter interpreter, bool AllowUnsafeApi = true) {
             Interpreter = interpreter;
-            AllowUnsafeApi = allowUnsafeApi;
+            this.AllowUnsafeApi = AllowUnsafeApi;
 
             CurrentObject.Push(interpreter.RootModule);
             CurrentObject.Push(interpreter.RootInstance);

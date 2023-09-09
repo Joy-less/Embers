@@ -8,8 +8,8 @@ namespace Embers
         static void Main() {
             // Test
             {
-                Interpreter Interpret = new();
-                Script Script = new(Interpret);
+                Interpreter Interpreter = new();
+                Script Script = new(Interpreter);
                 Benchmark(() => 
                     Script.Evaluate(@"
 a = {true => false}
@@ -23,8 +23,8 @@ p 5.object_id # ?
             }
             // Benchmark
             {
-                Interpreter Interpret = new();
-                Script Script = new(Interpret);
+                Interpreter Interpreter = new();
+                Script Script = new(Interpreter);
                 Benchmark(() => 
                     Script.Evaluate("250000000.times do \n end")
                 );

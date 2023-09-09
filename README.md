@@ -203,7 +203,7 @@ pos = Vector2.new 1, 2; puts(""{#{pos.x}, #{pos.y}}"") # {1, 2}
 ### Sandboxing
 If you don't trust the Ruby code that will be run, you can remove access to dangerous methods by passing `false` when creating the script:
 ```csharp
-Script MyScript = new(MyInterpreter, false);
+Script MyScript = new(MyInterpreter, AllowUnsafeApi: false);
 ```
 You can see which APIs can still be accessed in [`Api.cs`](Source/Embers/Api.cs).
 
@@ -226,6 +226,6 @@ She comes from a society living in the Earth's core, nearly 3000km below the sur
 
 Noko is short for "Nokoribi" meaning "embers" in Japanese.
 
-You can use her branding under the [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) license.
+You can use the images in the Assets folder under the [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) license.
 
 ![Made with Embers](Assets/Made%20with%20Embers%20Mini.png)

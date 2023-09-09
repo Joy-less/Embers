@@ -268,7 +268,7 @@ namespace Embers
                 return new StringInstance(Input.Interpreter.String, Input.Instance.Inspect());
             }
             public static async Task<Instances> @class(MethodInput Input) {
-                return new ModuleReference(Input.Instance.Module);
+                return new ModuleReference(Input.Instance.Module!);
             }
             public static async Task<Instances> to_s(MethodInput Input) {
                 return new StringInstance(Input.Interpreter.String, Input.Instance.LightInspect());
@@ -279,7 +279,7 @@ namespace Embers
                 Method? FindMethod;
                 bool Found;
                 if (Input.Instance is PseudoInstance) {
-                    Found = Input.Instance.Module.Methods.TryGetValue(MethodName, out FindMethod);
+                    Found = Input.Instance.Module!.Methods.TryGetValue(MethodName, out FindMethod);
                 }
                 else {
                     Found = Input.Instance.InstanceMethods.TryGetValue(MethodName, out FindMethod);
