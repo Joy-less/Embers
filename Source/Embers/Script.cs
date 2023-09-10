@@ -1,4 +1,5 @@
 ﻿using static Embers.Phase2;
+using static Embers.Script;
 
 #pragma warning disable CS1998
 
@@ -122,6 +123,7 @@ namespace Embers
             public virtual long Integer { get { throw new RuntimeException("Instance is not an integer"); } }
             public virtual double Float { get { throw new RuntimeException("Instance is not a float"); } }
             public virtual Method Proc { get { throw new RuntimeException("Instance is not a proc"); } }
+            public virtual LongRange Range { get { throw new RuntimeException("Instance is not a range"); } }
             public virtual List<Instance> Array { get { throw new RuntimeException("Instance is not an array"); } }
             public virtual Dictionary<Instance, Instance> Hash { get { throw new RuntimeException("Instance is not a hash"); } }
             public virtual Module ModuleRef { get { throw new ApiException("Instance is not a class/module reference"); } }
@@ -311,6 +313,30 @@ namespace Embers
             public void SetValue(Method value) {
                 Value = value;
             }
+        }
+        public class RangeInstance : Instance {
+            public IntegerInstance Min;
+            public IntegerInstance Max;
+            public IntegerInstance AppliedMax;
+            public bool IncludesMax;
+            public override object? Object { get { return ToLongRange; } }
+            public override LongRange Range { get { return ToLongRange; } }
+            public override string Inspect() {
+                return $"{Min.Integer}{(IncludesMax ? ".." : "...")}{Max.Integer}";
+            }
+            public RangeInstance(Class fromClass, IntegerInstance min, IntegerInstance max, bool includesMax) : base(fromClass) {
+                Min = min;
+                Max = max;
+                IncludesMax = includesMax;
+                AppliedMax = IncludesMax ? Max : new IntegerInstance((Class)Max.Module!, Max.Integer - 1);
+            }
+            public void SetValue(IntegerInstance min, IntegerInstance max, bool includesMax) {
+                Min = min;
+                Max = max;
+                IncludesMax = includesMax;
+                AppliedMax = IncludesMax ? Max : new IntegerInstance((Class)Max.Module!, Max.Integer - 1);
+            }
+            LongRange ToLongRange => new(Min.Integer, Max.Integer - (IncludesMax ? 0 : 1));
         }
         public class ArrayInstance : Instance {
             List<Instance> Value;
@@ -596,6 +622,40 @@ namespace Embers
                 return $"new {typeof(IntRange).PathTo()}({(Min != null ? Min : "null")}, {(Max != null ? Max : "null")})";
             }
         }
+        public class LongRange {
+            public readonly long? Min;
+            public readonly long? Max;
+            public LongRange(long? min = null, long? max = null) {
+                Min = min;
+                Max = max;
+            }
+            public bool IsInRange(long Number) {
+                if (Min != null && Number < Min) return false;
+                if (Max != null && Number > Max) return false;
+                return true;
+            }
+            public override string ToString() {
+                if (Min == Max) {
+                    if (Min == null) {
+                        return "any";
+                    }
+                    else {
+                        return $"{Min}";
+                    }
+                }
+                else {
+                    if (Min == null)
+                        return $"{Max}";
+                    else if (Max == null)
+                        return $"{Min}+";
+                    else
+                        return $"{Min}..{Max}";
+                }
+            }
+            public string Serialise() {
+                return $"new {typeof(LongRange).PathTo()}({(Min != null ? Min : "null")}, {(Max != null ? Max : "null")})";
+            }
+        }
         public class Instances {
             // At least one of Instance or InstanceList will be null
             readonly Instance? Instance;
@@ -694,7 +754,7 @@ namespace Embers
             // Return result
             return Result;
         }
-        SymbolInstance GetSymbol(string Value) {
+        public SymbolInstance GetSymbol(string Value) {
             if (Interpreter.Symbols.TryGetValue(Value, out SymbolInstance? FindSymbolInstance)) {
                 return FindSymbolInstance;
             }
@@ -1063,6 +1123,16 @@ namespace Embers
             await InterpretExpressionAsync(WhileStatement.WhileExpression);
             return Interpreter.Nil;
         }
+        async Task<Instances> InterpretForStatement(ForStatement ForStatement) {
+            Instance InResult = await InterpretExpressionAsync(ForStatement.InExpression);
+            if (InResult.InstanceMethods.TryGetValue("each", out Method? EachMethod)) {
+                await EachMethod.Call(this, InResult, OnYield: ForStatement.BlockStatementsMethod);
+            }
+            else {
+                throw new RuntimeException($"{ForStatement.Location}: The instance must have an 'each' method to iterate with 'for'");
+            }
+            return Interpreter.Nil;
+        }
         async Task<Instances> InterpretLogicalExpression(LogicalExpression LogicalExpression) {
             Instance Left = (await InterpretExpressionAsync(LogicalExpression.Left)).SingleInstance;
             switch (LogicalExpression.LogicType) {
@@ -1190,6 +1260,16 @@ namespace Embers
                 throw new RuntimeException($"{YieldStatement.Location}: No block given to yield to");
             }
             return Interpreter.Nil;
+        }
+        async Task<Instances> InterpretRangeExpression(RangeExpression RangeExpression) {
+            Instance RawMin = await InterpretExpressionAsync(RangeExpression.Min);
+            Instance RawMax = await InterpretExpressionAsync(RangeExpression.Max);
+            if (RawMin is IntegerInstance Min && RawMax is IntegerInstance Max) {
+                return new RangeInstance(Interpreter.Range, Min, Max, RangeExpression.IncludesMax);
+            }
+            else {
+                throw new RuntimeException($"{RangeExpression.Location}: Range bounds must be integers (got {RawMin.LightInspect()} and {RawMax.LightInspect()})");
+            }
         }
         async Task<Instances> InterpretIfBranchesStatement(IfBranchesStatement IfStatement) {
             for (int i = 0; i < IfStatement.Branches.Count; i++) {
@@ -1346,6 +1426,7 @@ namespace Embers
                 ArrayExpression ArrayExpression => await InterpretArrayExpression(ArrayExpression),
                 HashExpression HashExpression => await InterpretHashExpression(HashExpression),
                 WhileStatement WhileStatement => await InterpretWhileStatement(WhileStatement),
+                ForStatement ForStatement => await InterpretForStatement(ForStatement),
                 SelfExpression => new ModuleReference(CurrentModule),
                 LogicalExpression LogicalExpression => await InterpretLogicalExpression(LogicalExpression),
                 DefineMethodStatement DefineMethodStatement => await InterpretDefineMethodStatement(DefineMethodStatement),
@@ -1356,6 +1437,7 @@ namespace Embers
                                                         : Interpreter.Nil),
                 BreakStatement => throw new BreakException(),
                 YieldStatement YieldStatement => await InterpretYieldStatement(YieldStatement, OnYield),
+                RangeExpression RangeExpression => await InterpretRangeExpression(RangeExpression),
                 IfBranchesStatement IfBranchesStatement => await InterpretIfBranchesStatement(IfBranchesStatement),
                 AssignmentExpression AssignmentExpression => await InterpretAssignmentExpression(AssignmentExpression, ReturnType),
                 UndefineMethodStatement UndefineMethodStatement => await InterpretUndefineMethodStatement(UndefineMethodStatement),

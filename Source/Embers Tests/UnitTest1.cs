@@ -246,6 +246,11 @@ namespace Embers_Tests
                 return $b, $c
             ", Obj => Obj is ArrayInstance Objs && Objs.Array.Count == 2 && Objs.Array[0] is ArrayInstance Arr && Arr.Array[0].Boolean == true && Arr.Array[1].Integer == 5L
                 && Arr.Array[2].Integer == 8L && Objs.Array[1] is HashInstance Hash && Hash.Hash.Count == 2);
+
+            // Ranges
+            AssertEqual(@"
+                return (5..7).max, (5...7).max
+            ", new object[] {7L, 6L});
         }
 
 

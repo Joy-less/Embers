@@ -47,6 +47,8 @@ namespace Embers
             EndSquare,
             Pipe,
             RightArrow,
+            InclusiveRange,
+            ExclusiveRange,
             EndOfStatement,
         }
         public readonly static Dictionary<string, Phase2TokenType> Keywords = new() {
@@ -188,6 +190,22 @@ namespace Embers
             }
             public override string Serialise() {
                 return $"new {PathToSelf}({MethodPath.Serialise()}, {Arguments.Serialise()}, {(OnYield != null ? OnYield.Serialise() : "null")})";
+            }
+        }
+        public class RangeExpression : Expression {
+            public readonly Expression Min;
+            public readonly Expression Max;
+            public readonly bool IncludesMax;
+            public RangeExpression(Expression min, Expression max, bool includesMax) : base(min.Location) {
+                Min = min;
+                Max = max;
+                IncludesMax = includesMax;
+            }
+            public override string Inspect() {
+                return $"{Min.Inspect()}{(IncludesMax ? ".." : "...")}{Max.Inspect()}";
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({Min.Serialise()}, {Max.Serialise()}, {(IncludesMax ? "true" : "false")})";
             }
         }
         public class DefinedExpression : Expression {
@@ -493,7 +511,7 @@ namespace Embers
             }
         }
         public class IfBranchesStatement : Statement {
-            public List<IfExpression> Branches;
+            public readonly List<IfExpression> Branches;
             public IfBranchesStatement(DebugLocation location, List<IfExpression> branches) : base(location) {
                 Branches = branches;
             }
@@ -505,15 +523,41 @@ namespace Embers
             }
         }
         public class WhileStatement : Statement {
-            public WhileExpression WhileExpression;
+            public readonly WhileExpression WhileExpression;
             public WhileStatement(WhileExpression whileExpression) : base(whileExpression.Location) {
                 WhileExpression = whileExpression;
             }
             public override string Inspect() {
-                return $"while {WhileExpression.Condition!.Inspect()} do " + WhileExpression.Statements.Inspect() + " end";
+                return $"while {WhileExpression.Condition!.Inspect()} do {WhileExpression.Statements.Inspect()} end";
             }
             public override string Serialise() {
                 return $"new {PathToSelf}({Location.Serialise()}, {WhileExpression.Serialise()})";
+            }
+        }
+        public class ForStatement : Statement {
+            public readonly MethodArgumentExpression VariableName;
+            public readonly Expression InExpression;
+            public readonly List<Expression> BlockStatements;
+
+            public readonly Method BlockStatementsMethod;
+
+            public ForStatement(DebugLocation location, MethodArgumentExpression variableName, Expression inExpression, List<Expression> blockStatements) : base(location) {
+                VariableName = variableName;
+                InExpression = inExpression;
+                BlockStatements = blockStatements;
+
+                BlockStatementsMethod = ToMethod();
+            }
+            public override string Inspect() {
+                return $"for {VariableName.Inspect()} in {InExpression.Inspect()} do {BlockStatements.Inspect()} end";
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({Location.Serialise()}, {VariableName.Serialise()}, {InExpression.Serialise()}, {BlockStatements.Serialise()})";
+            }
+            Method ToMethod() {
+                return new Method(async Input => {
+                    return await Input.Script.InternalInterpretAsync(BlockStatements);
+                }, null, new List<MethodArgumentExpression>() {VariableName});
             }
         }
         
@@ -690,6 +734,8 @@ namespace Embers
                         Phase1TokenType.EndSquare => new Phase2Token(Token.Location, Phase2TokenType.EndSquare, Token.Value, Token),
                         Phase1TokenType.Pipe => new Phase2Token(Token.Location, Phase2TokenType.Pipe, Token.Value, Token),
                         Phase1TokenType.RightArrow => new Phase2Token(Token.Location, Phase2TokenType.RightArrow, Token.Value, Token),
+                        Phase1TokenType.InclusiveRange => new Phase2Token(Token.Location, Phase2TokenType.InclusiveRange, Token.Value, Token),
+                        Phase1TokenType.ExclusiveRange => new Phase2Token(Token.Location, Phase2TokenType.ExclusiveRange, Token.Value, Token),
                         Phase1TokenType.EndOfStatement => new Phase2Token(Token.Location, Phase2TokenType.EndOfStatement, Token.Value, Token),
                         _ => throw new InternalErrorException($"{Token.Location}: Conversion of {Token.Type} from phase 1 to phase 2 not supported")
                     });
@@ -1208,6 +1254,10 @@ namespace Embers
             else if (Block is BuildingWhile WhileBlock) {
                 return new WhileStatement(new WhileExpression(WhileBlock.Location, WhileBlock.Condition!, WhileBlock.Statements, WhileBlock.Inverse));
             }
+            // End For Block
+            else if (Block is BuildingFor ForBlock) {
+                return new ForStatement(ForBlock.Location, ForBlock.VariableName, ForBlock.InExpression, ForBlock.Statements);
+            }
             // End Unknown Block (internal error)
             else {
                 throw new InternalErrorException($"{Block.Location}: End block not handled for type: {Block.GetType().Name}");
@@ -1238,8 +1288,8 @@ namespace Embers
             // Get method name
             if (UndefName != null) {
                 // Create undef statement
-                if (UndefName.Count == 1 && UndefName[0] is ObjectTokenExpression MethodName && MethodName is not PathExpression) {
-                    return new UndefineMethodStatement(Location, MethodName);
+                if (UndefName.Count == 1 && UndefName[0].GetType() == typeof(ObjectTokenExpression)) {
+                    return new UndefineMethodStatement(Location, (ObjectTokenExpression)UndefName[0]);
                 }
                 else {
                     throw new SyntaxErrorException($"{Location}: Expected local method name after 'undef', got {UndefName.Inspect()}");
@@ -1249,22 +1299,37 @@ namespace Embers
                 throw new SyntaxErrorException($"{Location}: Expected method name after 'undef', got nothing");
             }
         }
-        static BuildingIf ParseIf(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index, bool Inverse = false)
-        {
+        static BuildingIf ParseIf(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index, bool Inverse = false) {
             // Get condition
-            int StartIndex = Index + 1;
-            for (; Index < StatementTokens.Count; Index++) {
-                if (StatementTokens[Index] is Phase2Token Token) {
-                    if (Token.Type == Phase2TokenType.EndOfStatement || Token.Type == Phase2TokenType.Then) {
-                        break;
-                    }
-                }
-            }
-            List<Phase2Object> Condition = StatementTokens.GetIndexRange(StartIndex, Index - 1);
+            Index++;
+            List<Phase2Object> Condition = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type == Phase2TokenType.Then || Tok.Type == Phase2TokenType.EndOfStatement));
             Expression ConditionExpression = ObjectsToExpression(Condition);
 
             // Open if block
             return new BuildingIf(Location, ConditionExpression, Inverse);
+        }
+        static BuildingFor ParseFor(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index) {
+            // Get variable name
+            if (Index < StatementTokens.Count && StatementTokens[Index].GetType() == typeof(ObjectTokenExpression)) {
+                MethodArgumentExpression VariableName = new(((ObjectTokenExpression)StatementTokens[Index]).Token);
+                // Eat in keyword
+                Index++;
+                if (Index < StatementTokens.Count && StatementTokens[Index] is Phase2Token Tok && Tok.Type == Phase2TokenType.In) {
+                    // Get in expression
+                    Index++;
+                    List<Phase2Object> In = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type == Phase2TokenType.Do || Tok.Type == Phase2TokenType.EndOfStatement));
+                    Expression InExpression = ObjectsToExpression(In);
+
+                    // Open for block
+                    return new BuildingFor(Location, VariableName, InExpression);
+                }
+                else {
+                    throw new SyntaxErrorException($"{Location}: Expected 'in' after 'for'");
+                }
+            }
+            else {
+                throw new SyntaxErrorException($"{Location}: Expected variable name after 'for'");
+            }
         }
         static List<Phase2Object> GetBlocks(List<Phase2Object> ParsedObjects) {
             if (ParsedObjects.Count == 0) return ParsedObjects;
@@ -1366,6 +1431,14 @@ namespace Embers
                             else {
                                 PushBlock(new BuildingWhile(Token.Location, ObjectsToExpression(Condition), true));
                             }
+                            break;
+                        }
+                        // For
+                        case Phase2TokenType.For: {
+                            i++;
+                            
+                            // Open for block
+                            PushBlock(ParseFor(Location, ParsedObjects, ref i));
                             break;
                         }
                         // If / Unless
@@ -1791,6 +1864,26 @@ namespace Embers
                 }
             }
 
+            // Ranges
+            for (int i = 0; i < ParsedObjects.Count; i++) {
+                Phase2Object UnknownObject = ParsedObjects[i];
+                Phase2Object? LastUnknownObject = i - 1 >= 0 ? ParsedObjects[i - 1] : null;
+                Phase2Object? NextUnknownObject = i + 1 < ParsedObjects.Count ? ParsedObjects[i + 1] : null;
+
+                if (UnknownObject is Phase2Token Token) {
+                    if (Token.Type == Phase2TokenType.InclusiveRange || Token.Type == Phase2TokenType.ExclusiveRange) {
+                        if (LastUnknownObject != null && NextUnknownObject != null && LastUnknownObject is Expression LastExpression && NextUnknownObject is Expression NextExpression) {
+                            i--;
+                            ParsedObjects.RemoveRange(i, 3);
+                            ParsedObjects.Insert(i, new RangeExpression(LastExpression, NextExpression, Token.Type == Phase2TokenType.InclusiveRange));
+                        }
+                        else {
+                            throw new SyntaxErrorException($"{Token.Location}: Range operator '{Token.Value!}' must be between two expressions (got {LastUnknownObject?.Inspect()} and {NextUnknownObject?.Inspect()})");
+                        }
+                    }
+                }
+            }
+
             // Defined?
             for (int i = 0; i < ParsedObjects.Count; i++) {
                 Phase2Object UnknownObject = ParsedObjects[i];
@@ -2141,6 +2234,14 @@ namespace Embers
             }
             public override void AddStatement(Expression Statement) {
                 Branches[^1].Statements.Add(Statement);
+            }
+        }
+        class BuildingFor : BuildingBlock {
+            public readonly MethodArgumentExpression VariableName;
+            public readonly Expression InExpression;
+            public BuildingFor(DebugLocation location, MethodArgumentExpression variableName, Expression inExpression) : base(location) {
+                VariableName = variableName;
+                InExpression = inExpression;
             }
         }
     }

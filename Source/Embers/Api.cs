@@ -86,6 +86,14 @@ namespace Embers
             // Proc
             Interpreter.Proc.InstanceMethods["call"] = new Method(Proc.call, null);
 
+            // Range
+            Interpreter.Range.InstanceMethods["min"] = new Method(Range.min, 0);
+            Interpreter.Range.InstanceMethods["max"] = new Method(Range.max, 0);
+            Interpreter.Range.InstanceMethods["each"] = new Method(Range.each, 0);
+            Interpreter.Range.InstanceMethods["reverse_each"] = new Method(Range.reverse_each, 0);
+            Interpreter.Range.InstanceMethods["length"] = new Method(Range.length, 0);
+            Interpreter.Range.InstanceMethods["to_a"] = new Method(Range.to_a, 0);
+
             // Array
             Interpreter.Array.InstanceMethods["[]"] = new Method(Array._Indexer, 1);
             Interpreter.Array.InstanceMethods["length"] = new Method(Array.length, 0);
@@ -169,6 +177,7 @@ namespace Embers
             {"to_s", new Method(ClassInstance.to_s, 0)},
             {"method", new Method(ClassInstance.method, 1)},
             {"object_id", new Method(ClassInstance.object_id, 0)},
+            {"methods", new Method(ClassInstance.methods, 0)},
         };
         public static readonly IReadOnlyDictionary<string, Method> DefaultInstanceMethods = new Dictionary<string, Method>() {
             {"attr_reader", new Method(ClassInstance.attr_reader, 1)},
@@ -350,6 +359,23 @@ namespace Embers
             }
             public static async Task<Instances> object_id(MethodInput Input) {
                 return new IntegerInstance(Input.Interpreter.Integer, Input.Instance.ObjectId);
+            }
+            public static async Task<Instances> methods(MethodInput Input) {
+                List<Instance> MethodsDictToSymbolsArray(Dictionary<string, Method> MethodDict) {
+                    List<Instance> Symbols = new();
+                    foreach (string MethodName in MethodDict.Keys) {
+                        Symbols.Add(Input.Script.GetSymbol(MethodName));
+                    }
+                    return Symbols;
+                }
+                // Get class methods
+                if (Input.Instance is ModuleReference ModuleReference) {
+                    return new ArrayInstance(Input.Interpreter.Array, MethodsDictToSymbolsArray(ModuleReference.Module!.Methods));
+                }
+                // Get instance methods
+                else {
+                    return new ArrayInstance(Input.Interpreter.Array, MethodsDictToSymbolsArray(Input.Instance.InstanceMethods));
+                }
             }
             public static async Task<Instances> attr_reader(MethodInput Input) {
                 string VariableName = Input.Arguments[0].String;
@@ -755,6 +781,73 @@ namespace Embers
         static class Proc {
             public static async Task<Instances> call(MethodInput Input) {
                 return await Input.Instance.Proc.Call(Input.Script, Input.Instance, Input.Arguments, Input.OnYield);
+            }
+        }
+        static class Range {
+            public static async Task<Instances> min(MethodInput Input) {
+                return ((RangeInstance)Input.Instance).Min;
+            }
+            public static async Task<Instances> max(MethodInput Input) {
+                return ((RangeInstance)Input.Instance).AppliedMax;
+            }
+            public static async Task<Instances> each(MethodInput Input) {
+                if (Input.OnYield != null) {
+                    LongRange Range = Input.Instance.Range;
+                    long Min = (long)(Range.Min != null ? Range.Min : 0);
+                    long Max = (long)(Range.Max != null ? Range.Max : throw new RuntimeException($"{Input.Script.ApproximateLocation}: Cannot call 'each' on range if max is indefinite"));
+                    // x.each do |n|
+                    if (Input.OnYield.ArgumentNames.Count == 1) {
+                        for (long i = Min; i <= Max; i++) {
+                            await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i));
+                        }
+                    }
+                    // x.each do
+                    else {
+                        for (long i = Min; i <= Max; i++) {
+                            await Input.OnYield.Call(Input.Script, Input.Instance);
+                        }
+                    }
+                }
+                return Input.Interpreter.Nil;
+            }
+            public static async Task<Instances> reverse_each(MethodInput Input) {
+                if (Input.OnYield != null) {
+                    LongRange Range = Input.Instance.Range;
+                    long Min = (long)(Range.Min != null ? Range.Min : 0);
+                    long Max = (long)(Range.Max != null ? Range.Max : throw new RuntimeException($"{Input.Script.ApproximateLocation}: Cannot call 'reverse_each' on range if max is indefinite"));
+                    // x.reverse_each do |n|
+                    if (Input.OnYield.ArgumentNames.Count == 1) {
+                        for (long i = Max; i >= Min; i--) {
+                            await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i));
+                        }
+                    }
+                    // x.reverse_each do
+                    else {
+                        for (long i = Max; i >= Min; i--) {
+                            await Input.OnYield.Call(Input.Script, Input.Instance);
+                        }
+                    }
+                }
+                return Input.Interpreter.Nil;
+            }
+            public static async Task<Instances> to_a(MethodInput Input) {
+                List<Instance> Array = new();
+                LongRange Range = Input.Instance.Range;
+                long Min = (long)(Range.Min != null ? Range.Min : 0);
+                long Max = (long)(Range.Max != null ? Range.Max : throw new RuntimeException($"{Input.Script.ApproximateLocation}: Cannot call 'to_a' on range if max is indefinite"));
+                for (long i = Min; i <= Max; i++) {
+                    Array.Add(new IntegerInstance(Input.Interpreter.Integer, i));
+                }
+                return new ArrayInstance(Input.Interpreter.Array, Array);
+            }
+            public static async Task<Instances> length(MethodInput Input) {
+                LongRange Range = Input.Instance.Range;
+                if (Range.Min != null && Range.Max != null) {
+                    return new IntegerInstance(Input.Interpreter.Integer, (long)Range.Max - (long)Range.Min + 1);
+                }
+                else {
+                    return Input.Interpreter.Nil;
+                }
             }
         }
         static class Array {

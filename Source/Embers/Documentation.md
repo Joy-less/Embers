@@ -67,6 +67,9 @@ object.method(method_name)
 object.object_id
 	Returns an integer to uniquely identify the given object.
 
+object.methods
+	Returns an array containing a symbol for the name of each method in a given object.
+
 instance.attr_reader(instance_variable_name)
 	Creates an instance method called "{the given name}" which returns the given instance variable.
 
@@ -144,6 +147,24 @@ float.to_f
 
 proc.call(*args)
 	Calls the proc method with the given arguments.
+
+range.min
+	Gets the minimum value of the range.
+
+range.max
+	Gets the maximum value of the range after inclusive/exclusive is applied.
+
+range.each |i|
+	Repeats the given block for each index in the range.
+
+range.reverse_each |i|
+	Repeats the given block for each index in the range backwards.
+
+range.length
+	Returns the number of indexes in the array.
+
+range.to_a
+	Returns an array containing each index in the range.
 
 array.length
 	Returns the number of items in the array.

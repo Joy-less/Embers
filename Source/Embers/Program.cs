@@ -12,15 +12,24 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() => 
                     Script.Evaluate(@"
-puts Math::PI
-puts Math::E
-p Math.frexp(1234) # [0.6025390625, 11]
-p Math.ldexp(0.6025390625, 11) # 1234.0
-p Math.frexp(0) # [0.0, 0]
-p Math.erf(2.1) # ~0.997020533343667
-p Math.gamma(5) # ~24.0
-p Math.lgamma(2.5) # [~0.2846828704729205, 1]
-p Math.hypot(5, 12) # 13.0
+for i in 1..5 do
+    puts i.to_s + '!'
+end
+
+(1..5).reverse_each do |i|
+    puts i.to_s + '!!'
+end
+
+a = 0...4
+p a.max
+p a.max.object_id
+p a.max.object_id
+
+puts '---'
+p (2..6).to_a
+p (2...6).to_a
+p (2..6).length
+p (2...6).length
                     ")
                 );
                 Console.ReadLine();

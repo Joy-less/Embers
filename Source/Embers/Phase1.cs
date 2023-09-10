@@ -27,6 +27,8 @@
             EndSquare,
             Pipe,
             RightArrow,
+            InclusiveRange,
+            ExclusiveRange,
         }
         public class Phase1Token {
             public readonly DebugLocation Location;
@@ -287,7 +289,19 @@
                     switch (Chara) {
                         case '.':
                             RemoveEndOfStatement();
-                            Tokens.Add(new(Location, Phase1TokenType.Dot, ".", FollowsWhitespace));
+                            if (NextChara == '.') {
+                                if (NextNextChara == '.') {
+                                    Tokens.Add(new(Location, Phase1TokenType.ExclusiveRange, "...", FollowsWhitespace));
+                                    i += 2;
+                                }
+                                else {
+                                    Tokens.Add(new(Location, Phase1TokenType.InclusiveRange, "..", FollowsWhitespace));
+                                    i++;
+                                }
+                            }
+                            else {
+                                Tokens.Add(new(Location, Phase1TokenType.Dot, ".", FollowsWhitespace));
+                            }
                             break;
                         case ',':
                             RemoveEndOfStatement();
