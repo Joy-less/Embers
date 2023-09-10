@@ -39,6 +39,8 @@ namespace Embers
                 return new ArrayInstance(Interpreter.Array, new List<Instance>());
             else if (Class == Interpreter.Hash)
                 return new HashInstance(Interpreter.Hash, new Dictionary<Instance, Instance>(), Interpreter.Nil);
+            else if (Class == Interpreter.Exception)
+                return new ExceptionInstance(Interpreter.Exception, "");
             else
                 return new Instance(Class);
         }
@@ -126,6 +128,7 @@ namespace Embers
             public virtual LongRange Range { get { throw new RuntimeException("Instance is not a range"); } }
             public virtual List<Instance> Array { get { throw new RuntimeException("Instance is not an array"); } }
             public virtual Dictionary<Instance, Instance> Hash { get { throw new RuntimeException("Instance is not a hash"); } }
+            public virtual RaiseException Exception { get { throw new RuntimeException("Instance is not an exception"); } }
             public virtual Module ModuleRef { get { throw new ApiException("Instance is not a class/module reference"); } }
             public virtual Method MethodRef { get { throw new ApiException("Instance is not a method reference"); } }
             public virtual string Inspect() {
@@ -394,6 +397,20 @@ namespace Embers
             }
             public HashArgumentsInstance(HashInstance value, Interpreter interpreter) : base(interpreter) {
                 Value = value;
+            }
+        }
+        public class ExceptionInstance : Instance {
+            RaiseException Value;
+            public override object? Object { get { return Value; } }
+            public override RaiseException Exception { get { return Value; } }
+            public override string Inspect() {
+                return $"Exception('{Value.Message}')";
+            }
+            public ExceptionInstance(Class fromClass, string message) : base(fromClass) {
+                Value = new RaiseException(this, message);
+            }
+            public void SetValue(string message) {
+                Value = new RaiseException(this, message);
             }
         }
         public abstract class PseudoInstance : Instance {
@@ -1147,7 +1164,17 @@ namespace Embers
             return Interpreter.Nil;
         }
         async Task<Instances> InterpretWhileStatement(WhileStatement WhileStatement) {
-            await InterpretExpressionAsync(WhileStatement.WhileExpression);
+            try {
+                // Create scope
+                CurrentObject.Push(new Scope(CurrentObject));
+                // Run statements
+                await InterpretExpressionAsync(WhileStatement.WhileExpression);
+            }
+            finally {
+                // Step back a scope
+                CurrentObject.Pop();
+            }
+            //
             return Interpreter.Nil;
         }
         async Task<Instances> InterpretForStatement(ForStatement ForStatement) {
@@ -1313,13 +1340,99 @@ namespace Embers
                 if (Branch.Condition != null) {
                     Instance ConditionResult = await InterpretExpressionAsync(Branch.Condition);
                     if (ConditionResult.IsTruthy != Branch.Inverse) {
-                        return await InternalInterpretAsync(Branch.Statements);
+                        try {
+                            // Create scope
+                            CurrentObject.Push(new Scope(CurrentObject));
+                            // Run statements
+                            await InternalInterpretAsync(Branch.Statements);
+                        }
+                        finally {
+                            // Step back a scope
+                            CurrentObject.Pop();
+                        }
                     }
                 }
                 else {
-                    return await InternalInterpretAsync(Branch.Statements);
+                    try {
+                        // Create scope
+                        CurrentObject.Push(new Scope(CurrentObject));
+                        // Run statements
+                        await InternalInterpretAsync(Branch.Statements);
+                    }
+                    finally {
+                        // Step back a scope
+                        CurrentObject.Pop();
+                    }
                 }
             }
+            return Interpreter.Nil;
+        }
+        async Task<Instances> InterpretBeginBranchesStatement(BeginBranchesStatement BeginBranchesStatement) {
+            /*for (int i = 0; i < BeginBranchesStatement.Branches.Count; i++) {
+                BeginComponentStatement Branch = BeginBranchesStatement.Branches[i];
+                // Create scope
+                CurrentObject.Push(new Scope(CurrentObject));
+                // Run statements
+                await InternalInterpretAsync(Branch.Statements);
+                // Step back a scope
+                CurrentObject.Pop();
+            }
+            return Interpreter.Nil;*/
+
+            // Begin
+            BeginStatement BeginBranch = (BeginStatement)BeginBranchesStatement.Branches[0];
+            RaiseException? ExceptionToRescue = null;
+            try {
+                // Create scope
+                CurrentObject.Push(new Scope(CurrentObject));
+                // Run statements
+                await InternalInterpretAsync(BeginBranch.Statements);
+            }
+            catch (RaiseException Ex) {
+                ExceptionToRescue = Ex;
+            }
+            finally {
+                // Step back a scope
+                CurrentObject.Pop();
+            }
+
+            // Rescue
+            if (ExceptionToRescue != null) {
+                // Find a rescue statement that can rescue the given error
+                for (int i = 1; i < BeginBranchesStatement.Branches.Count; i++) {
+                    BeginComponentStatement Branch = BeginBranchesStatement.Branches[i];
+                    if (Branch is RescueStatement RescueStatement) {
+                        bool CanRescue = false;
+                        if (RescueStatement.Exception == null) {
+                            CanRescue = true;
+                        }
+                        else {
+                            Instance RescuingException = await InterpretExpressionAsync(RescueStatement.Exception, ReturnType.FoundVariable);
+                            if (RescuingException.Module == ExceptionToRescue.ExceptionInstance.Module) {
+                                CanRescue = true;
+                            }
+                        }
+                        if (CanRescue) {
+                            try {
+                                // Create scope
+                                CurrentObject.Push(new Scope(CurrentObject));
+                                // Set exception variable to exception instance
+                                if (RescueStatement.ExceptionVariable != null) {
+                                    CurrentScope.LocalVariables[RescueStatement.ExceptionVariable.Value!] = ExceptionToRescue.ExceptionInstance;
+                                }
+                                // Run statements
+                                await InternalInterpretAsync(RescueStatement.Statements);
+                            }
+                            finally {
+                                // Step back a scope
+                                CurrentObject.Pop();
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
             return Interpreter.Nil;
         }
         async Task<Instances> InterpretAssignmentExpression(AssignmentExpression AssignmentExpression, ReturnType ReturnType) {
@@ -1480,6 +1593,7 @@ namespace Embers
                 YieldStatement YieldStatement => await InterpretYieldStatement(YieldStatement, OnYield),
                 RangeExpression RangeExpression => await InterpretRangeExpression(RangeExpression),
                 IfBranchesStatement IfBranchesStatement => await InterpretIfBranchesStatement(IfBranchesStatement),
+                BeginBranchesStatement BeginBranchesStatement => await InterpretBeginBranchesStatement(BeginBranchesStatement),
                 AssignmentExpression AssignmentExpression => await InterpretAssignmentExpression(AssignmentExpression, ReturnType),
                 UndefineMethodStatement UndefineMethodStatement => await InterpretUndefineMethodStatement(UndefineMethodStatement),
                 DefinedExpression DefinedExpression => await InterpretDefinedExpression(DefinedExpression),

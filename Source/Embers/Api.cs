@@ -126,7 +126,7 @@ namespace Embers
             RandomClass.Methods["srand"] = new Method(_Random.srand, 0..1);
 
             // Math
-            Module MathModule = Script.CreateClass("Math");
+            Module MathModule = Script.CreateModule("Math");
             MathModule.Constants["PI"] = new FloatInstance(Interpreter.Float, Math.PI);
             MathModule.Constants["E"] = new FloatInstance(Interpreter.Float, Math.E);
             MathModule.Methods["sin"] = new Method(_Math.sin, 1);
@@ -155,6 +155,10 @@ namespace Embers
             MathModule.Methods["erfc"] = new Method(_Math.erfc, 1);
             MathModule.Methods["gamma"] = new Method(_Math.gamma, 1);
             MathModule.Methods["lgamma"] = new Method(_Math.lgamma, 1);
+
+            // Exception
+            Interpreter.Exception.InstanceMethods["initialize"] = new Method(_Exception.initialize, 0..1);
+            Interpreter.Exception.InstanceMethods["message"] = new Method(_Exception.message, 0);
 
             //
             // UNSAFE APIS
@@ -236,7 +240,13 @@ namespace Embers
             return Input.Interpreter.Nil;
         }
         static async Task<Instances> raise(MethodInput Input) {
-            throw new RuntimeException(Input.Arguments[0].String);
+            Instance Argument = Input.Arguments[0];
+            if (Input.Arguments[0] is ExceptionInstance) {
+                throw Input.Arguments[0].Exception;
+            }
+            else {
+                throw new RuntimeException(Input.Arguments[0].String);
+            }
         }
         static async Task<Instances> @throw(MethodInput Input) {
             throw ThrowException.New(Input.Arguments[0]);
@@ -1374,6 +1384,17 @@ namespace Embers
                     new FloatInstance(Input.Interpreter.Float, A),
                     new IntegerInstance(Input.Interpreter.Float, B)
                 });
+            }
+        }
+        static class _Exception {
+            public static async Task<Instances> initialize(MethodInput Input) {
+                if (Input.Arguments.Count == 1) {
+                    ((ExceptionInstance)Input.Instance).SetValue(Input.Arguments[0].String);
+                }
+                return Input.Interpreter.Nil;
+            }
+            public static async Task<Instances> message(MethodInput Input) {
+                return new StringInstance(Input.Interpreter.String, Input.Instance.Exception.Message);
             }
         }
     }

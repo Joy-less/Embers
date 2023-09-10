@@ -12,13 +12,21 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() => 
                     Script.Evaluate(@"
-5.times do |n|
-    next if n % 2 == 0
-    puts n
-end
+#begin
 
-p [1, 2, 3, 4, 5, 6][1..]
-p 'Hi there'[2..10]
+#rescue
+
+#else
+
+#ensure
+
+#end
+
+begin
+    raise Exception.new('hi')
+rescue # rescue Exception => ex
+    puts ex.message
+end
                     ")
                 );
                 Console.ReadLine();

@@ -24,14 +24,14 @@ warn(*lines)
 sleep([seconds = inf])
 	Pauses the thread for the given number of seconds.
 
-raise(error_name)
-	Throws an error with the given name.
+raise(exception_name) | raise(exception)
+	Throws the given exception or a new exception with the given name.
 
-throw(error_name)
-	Throws an error with the given name that can be caught with catch.
+throw(exception_name)
+	Throws an exception with the given name that can be caught with catch.
 
-catch(error_name)
-	Catches an error thrown by throw with the given name.
+catch(exception_name)
+	Catches an exception thrown by throw with the given name.
 
 lambda
 	Returns a proc from the given block that can be called with call(*args).
@@ -47,7 +47,7 @@ srand(seed)
 
 exit
 quit
-	Throws an error which cannot be caught.
+	Throws an exception which cannot be caught.
 
 eval(code)
 	Evaluates the given code in the current context.
@@ -202,6 +202,9 @@ array.contains?(item)
 array.include?(item)
 	Returns true if the array contains the item.
 
+Hash.new([default_value = nil])
+	Returns a new hash, where if you try to index the hash with a key that doesn't exist, it returns default_value.
+
 hash.has_key?(key)
 	Returns true if the hash contains the key.
 
@@ -238,6 +241,12 @@ Math.cbrt(number)
 Math.sin, Math.cos, Math.tan, Math.asin, Math.acos, Math.atan, Math.atan2, Math.sinh, Math.cosh, Math.tanh, Math.asinh, Math.acosh,
 Math.atanh, Math.exp, Math.log, Math.log10, Math.log2, Math.frexp, Math.ldexp, Math.hypot, Math.erf, Math.erfc, Math.gamma, Math.lgamma
 	Various nerdy maths methods. Math.erf, Math.erfc, Math.gamma and Math.lgamma are only approximations.
+
+Exception.new([message = ""])
+	Returns a new exception with the given message.
+
+exception.message
+	Returns the exception's message.
 ```
 
 ## Unsafe methods

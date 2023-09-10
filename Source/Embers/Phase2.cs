@@ -518,9 +518,60 @@ namespace Embers
                 return $"new {PathToSelf}({Location.Serialise()}, {Type.PathTo()}))";
             }
         }
+        public abstract class BeginComponentStatement : Statement {
+            public readonly List<Expression> Statements;
+            public BeginComponentStatement(DebugLocation location, List<Expression> statements) : base(location) {
+                Statements = statements;
+            }
+        }
+        public class BeginStatement : BeginComponentStatement {
+            public BeginStatement(DebugLocation location, List<Expression> statements) : base(location, statements) { }
+            public override string Inspect() {
+                return $"begin {Statements.Inspect()} end";
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({Location.Serialise()}, {Statements.Serialise()})";
+            }
+        }
+        public class RescueStatement : BeginComponentStatement {
+            public readonly ObjectTokenExpression? Exception;
+            public readonly Phase2Token? ExceptionVariable;
+            public RescueStatement(DebugLocation location, List<Expression> statements, ObjectTokenExpression? exception, Phase2Token? exceptionVariable) : base(location, statements) {
+                Exception = exception;
+                ExceptionVariable = exceptionVariable;
+            }
+            public override string Inspect() {
+                if (Exception != null) {
+                    if (ExceptionVariable != null) {
+                        return $"rescue {Exception.Inspect()} => {ExceptionVariable.Inspect()}; {Statements.Inspect()}";
+                    }
+                    else {
+                        return $"rescue {Exception.Inspect()}; {Statements.Inspect()}";
+                    }
+                }
+                else {
+                    return $"rescue; {Statements.Inspect()}";
+                }
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({Location.Serialise()}, {Statements.Serialise()}, {(Exception != null ? Exception.Serialise() : "null")}, {(ExceptionVariable != null ? ExceptionVariable.Serialise() : "null")})";
+            }
+        }
         public class IfBranchesStatement : Statement {
             public readonly List<IfExpression> Branches;
             public IfBranchesStatement(DebugLocation location, List<IfExpression> branches) : base(location) {
+                Branches = branches;
+            }
+            public override string Inspect() {
+                return Branches.Inspect(" ");
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({Location.Serialise()}, {Branches.Serialise()})";
+            }
+        }
+        public class BeginBranchesStatement : Statement {
+            public readonly List<BeginComponentStatement> Branches;
+            public BeginBranchesStatement(DebugLocation location, List<BeginComponentStatement> branches) : base(location) {
                 Branches = branches;
             }
             public override string Inspect() {
@@ -1267,6 +1318,23 @@ namespace Embers
                 }
                 return new IfBranchesStatement(IfBranches.Location, IfExpressions);
             }
+            // End Begin Block
+            else if (Block is BuildingBeginBranches BeginBranches) {
+                List<BeginComponentStatement> BeginStatements = new();
+                for (int i = 0; i < BeginBranches.Branches.Count; i++) {
+                    BuildingBeginComponent Branch = BeginBranches.Branches[i];
+                    if (Branch is BuildingBegin) {
+                        BeginStatements.Add(new BeginStatement(Branch.Location, Branch.Statements));
+                    }
+                    else if (Branch is BuildingRescue BuildingRescue) {
+                        BeginStatements.Add(new RescueStatement(Branch.Location, Branch.Statements, null, null));
+                    }
+                    else {
+                        throw new InternalErrorException($"{Branch.Location}: {Branch.GetType().Name} not handled");
+                    }
+                }
+                return new BeginBranchesStatement(BeginBranches.Location, BeginStatements);
+            }
             // End While Block
             else if (Block is BuildingWhile WhileBlock) {
                 return new WhileStatement(new WhileExpression(WhileBlock.Location, WhileBlock.Condition!, WhileBlock.Statements, WhileBlock.Inverse));
@@ -1324,6 +1392,14 @@ namespace Embers
 
             // Open if block
             return new BuildingIf(Location, ConditionExpression, Inverse);
+        }
+        static BuildingRescue ParseRescue(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index) {
+            // Get error
+            Index++;
+            
+
+            // Open rescue block
+            return new BuildingRescue(Location);
         }
         static BuildingFor ParseFor(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index) {
             // Get variable name
@@ -1490,6 +1566,23 @@ namespace Embers
                             }
                             else {
                                 throw new SyntaxErrorException($"{Token.Location}: Else must follow if");
+                            }
+                            break;
+                        }
+                        // Begin
+                        case Phase2TokenType.Begin: {
+                            BuildingBegin BuildingBegin = new(Token.Location);
+                            PushBlock(new BuildingBeginBranches(Token.Location, new List<BuildingBeginComponent>() {BuildingBegin}));
+                            break;
+                        }
+                        // Rescue
+                        case Phase2TokenType.Rescue: {
+                            if (CurrentBlocks.TryPeek(out BuildingBlock? Block) && Block is BuildingBeginBranches BeginBlock) {
+                                ResolveStatementsWithoutEndingBlock();
+                                BeginBlock.Branches.Add(ParseRescue(Token.Location, ParsedObjects, ref i));
+                            }
+                            else {
+                                throw new SyntaxErrorException($"{Token.Location}: Rescue must follow begin");
                             }
                             break;
                         }
@@ -2274,6 +2367,24 @@ namespace Embers
         class BuildingIfBranches : BuildingBlock {
             public readonly List<BuildingIf> Branches;
             public BuildingIfBranches(DebugLocation location, List<BuildingIf> branches) : base(location) {
+                Branches = branches;
+            }
+            public override void AddStatement(Expression Statement) {
+                Branches[^1].Statements.Add(Statement);
+            }
+        }
+        class BuildingBeginComponent : BuildingBlock {
+            public BuildingBeginComponent(DebugLocation location) : base(location) { }
+        }
+        class BuildingBegin : BuildingBeginComponent {
+            public BuildingBegin(DebugLocation location) : base(location) { }
+        }
+        class BuildingRescue : BuildingBeginComponent {
+            public BuildingRescue(DebugLocation location) : base(location) { }
+        }
+        class BuildingBeginBranches : BuildingBlock {
+            public readonly List<BuildingBeginComponent> Branches;
+            public BuildingBeginBranches(DebugLocation location, List<BuildingBeginComponent> branches) : base(location) {
                 Branches = branches;
             }
             public override void AddStatement(Expression Statement) {

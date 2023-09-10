@@ -1,4 +1,6 @@
-﻿namespace Embers
+﻿using static Embers.Script;
+
+namespace Embers
 {
     public abstract class EmbersException : Exception {
         public EmbersException(string Message) : base(Message) { }
@@ -24,6 +26,12 @@
         }
         private ThrowException(string Message, string identifier) : base(Message) {
             Identifier = identifier;
+        }
+    }
+    public class RaiseException : EmbersException {
+        public readonly ExceptionInstance ExceptionInstance;
+        public RaiseException(ExceptionInstance exceptionInstance, string message) : base(message) {
+            ExceptionInstance = exceptionInstance;
         }
     }
     public abstract class LoopControlException : EmbersException {
