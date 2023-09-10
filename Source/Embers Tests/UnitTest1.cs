@@ -251,6 +251,9 @@ namespace Embers_Tests
             AssertEqual(@"
                 return (5..7).max, (5...7).max
             ", new object[] {7L, 6L});
+            AssertEqual(@"
+                return 'Hi there'[2..10]
+            ", " there");
         }
 
 

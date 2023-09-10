@@ -12,24 +12,13 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() => 
                     Script.Evaluate(@"
-for i in 1..5 do
-    puts i.to_s + '!'
+5.times do |n|
+    next if n % 2 == 0
+    puts n
 end
 
-(1..5).reverse_each do |i|
-    puts i.to_s + '!!'
-end
-
-a = 0...4
-p a.max
-p a.max.object_id
-p a.max.object_id
-
-puts '---'
-p (2..6).to_a
-p (2...6).to_a
-p (2..6).length
-p (2...6).length
+p [1, 2, 3, 4, 5, 6][1..]
+p 'Hi there'[2..10]
                     ")
                 );
                 Console.ReadLine();

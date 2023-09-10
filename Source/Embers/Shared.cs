@@ -2,7 +2,7 @@
 {
     public abstract class EmbersException : Exception {
         public EmbersException(string Message) : base(Message) { }
-        public EmbersException() : base() { }
+        public EmbersException() { }
     }
     public class SyntaxErrorException : EmbersException {
         public SyntaxErrorException(string Message) : base(Message) { }
@@ -26,12 +26,24 @@
             Identifier = identifier;
         }
     }
-    public class BreakException : EmbersException {
-        public BreakException() : base() { }
+    public abstract class LoopControlException : EmbersException {
+        public LoopControlException() { }
+    }
+    public class BreakException : LoopControlException {
+        public BreakException() { }
+    }
+    public class RetryException : LoopControlException {
+        public RetryException() { }
+    }
+    public class RedoException : LoopControlException {
+        public RedoException() { }
+    }
+    public class NextException : LoopControlException {
+        public NextException() { }
     }
     public class ReturnException : EmbersException {
         public readonly Script.Instances Instances;
-        public ReturnException(Script.Instances instances) : base() {
+        public ReturnException(Script.Instances instances) {
             Instances = instances;
         }
     }

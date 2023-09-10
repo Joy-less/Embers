@@ -273,6 +273,12 @@ namespace Embers
                 catch (BreakException) {
                     break;
                 }
+                catch (LoopControlException Ex) when (Ex is RetryException || Ex is RedoException || Ex is NextException) {
+                    continue;
+                }
+                catch (LoopControlException Ex) {
+                    throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in loop do end");
+                }
             }
             return Input.Interpreter.Nil;
         }
@@ -442,17 +448,30 @@ namespace Embers
             public static async Task<Instances> _Indexer(MethodInput Input) {
                 // Get string and index
                 string String = Input.Instance.String;
-                int Index = _RealisticIndex(Input, Input.Arguments[0].Integer);
+                Instance Indexer = Input.Arguments[0];
 
-                // Return value at string index or nil
-                if (Index >= 0 && Index < String.Length) {
-                    return new StringInstance(Input.Interpreter.String, String[Index].ToString());
-                }
-                else if (Index < 0 && Index > -String.Length) {
-                    return new StringInstance(Input.Interpreter.String, String[^(-Index)].ToString());
+                if (Indexer is RangeInstance RangeIndexer) {
+                    // Return substring in range
+                    int StartIndex = RangeIndexer.Min != null ? _RealisticIndex(Input, RangeIndexer.Min.Integer) : 0;
+                    int EndIndex = RangeIndexer.Max != null ? _RealisticIndex(Input, RangeIndexer.Max.Integer) : String.Length - 1;
+                    if (StartIndex < 0) StartIndex = 0;
+                    if (EndIndex >= String.Length) EndIndex = String.Length - 1;
+
+                    return new StringInstance(Input.Interpreter.String, String[StartIndex..(EndIndex + 1)]);
                 }
                 else {
-                    return Input.Interpreter.Nil;
+                    int Index = _RealisticIndex(Input, Input.Arguments[0].Integer);
+
+                    // Return character at string index or nil
+                    if (Index >= 0 && Index < String.Length) {
+                        return new StringInstance(Input.Interpreter.String, String[Index].ToString());
+                    }
+                    else if (Index < 0 && Index > -String.Length) {
+                        return new StringInstance(Input.Interpreter.String, String[^(-Index)].ToString());
+                    }
+                    else {
+                        return Input.Interpreter.Nil;
+                    }
                 }
             }
             public static async Task<Instances> initialize(MethodInput Input) {
@@ -685,16 +704,31 @@ namespace Embers
             public static async Task<Instances> times(MethodInput Input) {
                 if (Input.OnYield != null) {
                     long Times = Input.Instance.Integer;
-                    // x.times do |n|
-                    if (Input.OnYield.ArgumentNames.Count == 1) {
-                        for (long i = 0; i < Times; i++) {
-                            await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i));
+                    bool TakesArgument = Input.OnYield.ArgumentNames.Count == 1;
+
+                    for (long i = 0; i < Times; i++) {
+                        try {
+                            // x.times do |n|
+                            if (TakesArgument) {
+                                await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i), BreakHandleType: BreakHandleType.Rethrow);
+                            }
+                            // x.times do
+                            else {
+                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow);
+                            }
                         }
-                    }
-                    // x.times do
-                    else {
-                        for (long i = 0; i < Times; i++) {
-                            await Input.OnYield.Call(Input.Script, Input.Instance);
+                        catch (BreakException) {
+                            break;
+                        }
+                        catch (RedoException) {
+                            i--;
+                            continue;
+                        }
+                        catch (NextException) {
+                            continue;
+                        }
+                        catch (LoopControlException Ex) {
+                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in {Times}.times do end");
                         }
                     }
                 }
@@ -794,17 +828,32 @@ namespace Embers
                 if (Input.OnYield != null) {
                     LongRange Range = Input.Instance.Range;
                     long Min = (long)(Range.Min != null ? Range.Min : 0);
-                    long Max = (long)(Range.Max != null ? Range.Max : throw new RuntimeException($"{Input.Script.ApproximateLocation}: Cannot call 'each' on range if max is indefinite"));
-                    // x.each do |n|
-                    if (Input.OnYield.ArgumentNames.Count == 1) {
-                        for (long i = Min; i <= Max; i++) {
-                            await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i));
+                    long Max = (long)(Range.Max != null ? Range.Max : throw new RuntimeException($"{Input.Script.ApproximateLocation}: Cannot call 'each' on range if max is endless"));
+                    
+                    bool TakesArgument = Input.OnYield.ArgumentNames.Count == 1;
+                    for (long i = Min; i <= Max; i++) {
+                        try {
+                            // x.each do |n|
+                            if (TakesArgument) {
+                                await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i), BreakHandleType: BreakHandleType.Rethrow);
+                            }
+                            // x.each do
+                            else {
+                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow);
+                            }
                         }
-                    }
-                    // x.each do
-                    else {
-                        for (long i = Min; i <= Max; i++) {
-                            await Input.OnYield.Call(Input.Script, Input.Instance);
+                        catch (BreakException) {
+                            break;
+                        }
+                        catch (RedoException) {
+                            i--;
+                            continue;
+                        }
+                        catch (NextException) {
+                            continue;
+                        }
+                        catch (LoopControlException Ex) {
+                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in range.each do end");
                         }
                     }
                 }
@@ -814,17 +863,32 @@ namespace Embers
                 if (Input.OnYield != null) {
                     LongRange Range = Input.Instance.Range;
                     long Min = (long)(Range.Min != null ? Range.Min : 0);
-                    long Max = (long)(Range.Max != null ? Range.Max : throw new RuntimeException($"{Input.Script.ApproximateLocation}: Cannot call 'reverse_each' on range if max is indefinite"));
-                    // x.reverse_each do |n|
-                    if (Input.OnYield.ArgumentNames.Count == 1) {
-                        for (long i = Max; i >= Min; i--) {
-                            await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i));
+                    long Max = (long)(Range.Max != null ? Range.Max : throw new RuntimeException($"{Input.Script.ApproximateLocation}: Cannot call 'reverse_each' on range if max is endless"));
+                    
+                    bool TakesArgument = Input.OnYield.ArgumentNames.Count == 1;
+                    for (long i = Max; i >= Min; i--) {
+                        try {
+                            // x.reverse_each do |n|
+                            if (TakesArgument) {
+                                await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i), BreakHandleType: BreakHandleType.Rethrow);
+                            }
+                            // x.reverse_each do
+                            else {
+                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow);
+                            }
                         }
-                    }
-                    // x.reverse_each do
-                    else {
-                        for (long i = Max; i >= Min; i--) {
-                            await Input.OnYield.Call(Input.Script, Input.Instance);
+                        catch (BreakException) {
+                            break;
+                        }
+                        catch (RedoException) {
+                            i--;
+                            continue;
+                        }
+                        catch (NextException) {
+                            continue;
+                        }
+                        catch (LoopControlException Ex) {
+                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in range.reverse_each do end");
                         }
                     }
                 }
@@ -834,7 +898,7 @@ namespace Embers
                 List<Instance> Array = new();
                 LongRange Range = Input.Instance.Range;
                 long Min = (long)(Range.Min != null ? Range.Min : 0);
-                long Max = (long)(Range.Max != null ? Range.Max : throw new RuntimeException($"{Input.Script.ApproximateLocation}: Cannot call 'to_a' on range if max is indefinite"));
+                long Max = (long)(Range.Max != null ? Range.Max : throw new RuntimeException($"{Input.Script.ApproximateLocation}: Cannot call 'to_a' on range if max is endless"));
                 for (long i = Min; i <= Max; i++) {
                     Array.Add(new IntegerInstance(Input.Interpreter.Integer, i));
                 }
@@ -865,17 +929,30 @@ namespace Embers
             public static async Task<Instances> _Indexer(MethodInput Input) {
                 // Get array and index
                 List<Instance> Array = Input.Instance.Array;
-                int Index = _RealisticIndex(Input, Input.Arguments[0].Integer);
+                Instance Indexer = Input.Arguments[0];
 
-                // Return value at array index or nil
-                if (Index >= 0 && Index < Array.Count) {
-                    return Array[Index];
-                }
-                else if (Index < 0 && Index > -Array.Count) {
-                    return Array[^(-Index)];
+                if (Indexer is RangeInstance RangeIndexer) {
+                    // Return values in range
+                    int StartIndex = RangeIndexer.Min != null ? _RealisticIndex(Input, RangeIndexer.Min.Integer) : 0;
+                    int EndIndex = RangeIndexer.Max != null ? _RealisticIndex(Input, RangeIndexer.Max.Integer) : Array.Count - 1;
+                    if (StartIndex < 0) StartIndex = 0;
+                    if (EndIndex >= Array.Count) EndIndex = Array.Count - 1;
+
+                    return new ArrayInstance(Input.Interpreter.Array, Array.GetIndexRange(StartIndex, EndIndex));
                 }
                 else {
-                    return Input.Interpreter.Nil;
+                    int Index = _RealisticIndex(Input, Input.Arguments[0].Integer);
+
+                    // Return value at array index or nil
+                    if (Index >= 0 && Index < Array.Count) {
+                        return Array[Index];
+                    }
+                    else if (Index < 0 && Index > -Array.Count) {
+                        return Array[^(-Index)];
+                    }
+                    else {
+                        return Input.Interpreter.Nil;
+                    }
                 }
             }
             public static async Task<Instances> length(MethodInput Input) {
@@ -940,22 +1017,35 @@ namespace Embers
             public static async Task<Instances> each(MethodInput Input) {
                 if (Input.OnYield != null) {
                     List<Instance> Array = Input.Instance.Array;
-                    // x.each do |n, i|
-                    if (Input.OnYield.ArgumentNames.Count == 2) {
-                        for (int i = 0; i < Array.Count; i++) {
-                            await Input.OnYield.Call(Input.Script, Input.Instance, new List<Instance>() { Array[i], new IntegerInstance(Input.Interpreter.Integer, i) });
+                    
+                    int TakesArguments = Input.OnYield.ArgumentNames.Count;
+                    for (int i = 0; i < Array.Count; i++) {
+                        try {
+                            // x.each do |n, i|
+                            if (TakesArguments == 2) {
+                                await Input.OnYield.Call(Input.Script, Input.Instance, new List<Instance>() { Array[i], new IntegerInstance(Input.Interpreter.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow);
+                            }
+                            // x.each do |n|
+                            else if (TakesArguments == 1) {
+                                await Input.OnYield.Call(Input.Script, Input.Instance, Array[i], BreakHandleType: BreakHandleType.Rethrow);
+                            }
+                            // x.each do
+                            else {
+                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow);
+                            }
                         }
-                    }
-                    // x.each do |n|
-                    else if (Input.OnYield.ArgumentNames.Count == 1) {
-                        for (int i = 0; i < Array.Count; i++) {
-                            await Input.OnYield.Call(Input.Script, Input.Instance, Array[i]);
+                        catch (BreakException) {
+                            break;
                         }
-                    }
-                    // x.each do
-                    else {
-                        for (int i = 0; i < Array.Count; i++) {
-                            await Input.OnYield.Call(Input.Script, Input.Instance);
+                        catch (RedoException) {
+                            i--;
+                            continue;
+                        }
+                        catch (NextException) {
+                            continue;
+                        }
+                        catch (LoopControlException Ex) {
+                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in array.each do end");
                         }
                     }
                 }
@@ -964,22 +1054,35 @@ namespace Embers
             public static async Task<Instances> reverse_each(MethodInput Input) {
                 if (Input.OnYield != null) {
                     List<Instance> Array = Input.Instance.Array;
-                    // x.reverse_each do |n, i|
-                    if (Input.OnYield.ArgumentNames.Count == 2) {
-                        for (int i = Array.Count - 1; i >= 0; i--) {
-                            await Input.OnYield.Call(Input.Script, Input.Instance, new List<Instance>() { Array[i], new IntegerInstance(Input.Interpreter.Integer, i) });
+                    
+                    int TakesArguments = Input.OnYield.ArgumentNames.Count;
+                    for (int i = Array.Count - 1; i >= 0; i--) {
+                        try {
+                            // x.reverse_each do |n, i|
+                            if (TakesArguments == 2) {
+                                await Input.OnYield.Call(Input.Script, Input.Instance, new List<Instance>() { Array[i], new IntegerInstance(Input.Interpreter.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow);
+                            }
+                            // x.reverse_each do |n|
+                            else if (TakesArguments == 1) {
+                                await Input.OnYield.Call(Input.Script, Input.Instance, Array[i], BreakHandleType: BreakHandleType.Rethrow);
+                            }
+                            // x.reverse_each do
+                            else {
+                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow);
+                            }
                         }
-                    }
-                    // x.reverse_each do |n|
-                    else if (Input.OnYield.ArgumentNames.Count == 1) {
-                        for (int i = Array.Count - 1; i >= 0; i--) {
-                            await Input.OnYield.Call(Input.Script, Input.Instance, Array[i]);
+                        catch (BreakException) {
+                            break;
                         }
-                    }
-                    // x.reverse_each do
-                    else {
-                        for (int i = Array.Count - 1; i >= 0; i--) {
-                            await Input.OnYield.Call(Input.Script, Input.Instance);
+                        catch (RedoException) {
+                            i--;
+                            continue;
+                        }
+                        catch (NextException) {
+                            continue;
+                        }
+                        catch (LoopControlException Ex) {
+                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in array.reverse_each do end");
                         }
                     }
                 }

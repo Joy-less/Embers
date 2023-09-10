@@ -315,28 +315,43 @@ namespace Embers
             }
         }
         public class RangeInstance : Instance {
-            public IntegerInstance Min;
-            public IntegerInstance Max;
-            public IntegerInstance AppliedMax;
+            public IntegerInstance? Min;
+            public IntegerInstance? Max;
+            public Instance AppliedMin;
+            public Instance AppliedMax;
             public bool IncludesMax;
             public override object? Object { get { return ToLongRange; } }
             public override LongRange Range { get { return ToLongRange; } }
             public override string Inspect() {
-                return $"{Min.Integer}{(IncludesMax ? ".." : "...")}{Max.Integer}";
+                return $"{(Min != null ? Min.Inspect() : "")}{(IncludesMax ? ".." : "...")}{(Max != null ? Max.Inspect() : "")}";
             }
-            public RangeInstance(Class fromClass, IntegerInstance min, IntegerInstance max, bool includesMax) : base(fromClass) {
+            public RangeInstance(Class fromClass, IntegerInstance? min, IntegerInstance? max, bool includesMax) : base(fromClass) {
                 Min = min;
                 Max = max;
                 IncludesMax = includesMax;
-                AppliedMax = IncludesMax ? Max : new IntegerInstance((Class)Max.Module!, Max.Integer - 1);
+                Setup();
             }
             public void SetValue(IntegerInstance min, IntegerInstance max, bool includesMax) {
                 Min = min;
                 Max = max;
                 IncludesMax = includesMax;
-                AppliedMax = IncludesMax ? Max : new IntegerInstance((Class)Max.Module!, Max.Integer - 1);
+                Setup();
             }
-            LongRange ToLongRange => new(Min.Integer, Max.Integer - (IncludesMax ? 0 : 1));
+            void Setup() {
+                if (Min == null) {
+                    AppliedMin = Max!.Module!.Interpreter.Nil;
+                    AppliedMax = IncludesMax ? Max : new IntegerInstance((Class)Max.Module!, Max.Integer - 1);
+                }
+                else if (Max == null) {
+                    AppliedMin = Min;
+                    AppliedMax = Min!.Module!.Interpreter.Nil;
+                }
+                else {
+                    AppliedMin = Min;
+                    AppliedMax = IncludesMax ? Max : new IntegerInstance((Class)Max.Module!, Max.Integer - 1);
+                }
+            }
+            LongRange ToLongRange => new(AppliedMin is IntegerInstance ? AppliedMin.Integer : null, AppliedMax is IntegerInstance ? AppliedMax.Integer : null);
         }
         public class ArrayInstance : Instance {
             List<Instance> Value;
@@ -1094,17 +1109,6 @@ namespace Embers
             }
             return Interpreter.Nil;
         }
-        async Task<Instances> InterpretWhileExpression(WhileExpression WhileExpression) {
-            while ((await InterpretExpressionAsync(WhileExpression.Condition!))[0].IsTruthy != WhileExpression.Inverse) {
-                try {
-                    await InternalInterpretAsync(WhileExpression.Statements);
-                }
-                catch (BreakException) {
-                    break;
-                }
-            }
-            return Interpreter.Nil;
-        }
         async Task<ArrayInstance> InterpretArrayExpression(ArrayExpression ArrayExpression) {
             List<Instance> Items = new();
             foreach (Expression Item in ArrayExpression.Expressions) {
@@ -1118,6 +1122,29 @@ namespace Embers
                 Items.Add(await InterpretExpressionAsync(Item.Key), await InterpretExpressionAsync(Item.Value));
             }
             return new HashInstance(Interpreter.Hash, Items, Interpreter.Nil);
+        }
+        async Task<Instances> InterpretWhileExpression(WhileExpression WhileExpression) {
+            while ((await InterpretExpressionAsync(WhileExpression.Condition!))[0].IsTruthy != WhileExpression.Inverse) {
+                try {
+                    await InternalInterpretAsync(WhileExpression.Statements);
+                }
+                catch (BreakException) {
+                    break;
+                }
+                catch (RetryException) {
+                    throw new SyntaxErrorException($"{ApproximateLocation}: Retry not valid in while loop");
+                }
+                catch (RedoException) {
+                    continue;
+                }
+                catch (NextException) {
+                    continue;
+                }
+                catch (LoopControlException Ex) {
+                    throw new SyntaxErrorException($"{ApproximateLocation}: {Ex.GetType().Name} not valid in while loop");
+                }
+            }
+            return Interpreter.Nil;
         }
         async Task<Instances> InterpretWhileStatement(WhileStatement WhileStatement) {
             await InterpretExpressionAsync(WhileStatement.WhileExpression);
@@ -1262,10 +1289,19 @@ namespace Embers
             return Interpreter.Nil;
         }
         async Task<Instances> InterpretRangeExpression(RangeExpression RangeExpression) {
-            Instance RawMin = await InterpretExpressionAsync(RangeExpression.Min);
-            Instance RawMax = await InterpretExpressionAsync(RangeExpression.Max);
+            Instance? RawMin = null;
+            if (RangeExpression.Min != null) RawMin = await InterpretExpressionAsync(RangeExpression.Min);
+            Instance? RawMax = null;
+            if (RangeExpression.Max != null) RawMax = await InterpretExpressionAsync(RangeExpression.Max);
+
             if (RawMin is IntegerInstance Min && RawMax is IntegerInstance Max) {
                 return new RangeInstance(Interpreter.Range, Min, Max, RangeExpression.IncludesMax);
+            }
+            else if (RawMin == null && RawMax is IntegerInstance MaxOnly) {
+                return new RangeInstance(Interpreter.Range, null, MaxOnly, RangeExpression.IncludesMax);
+            }
+            else if (RawMax == null && RawMin is IntegerInstance MinOnly) {
+                return new RangeInstance(Interpreter.Range, MinOnly, null, RangeExpression.IncludesMax);
             }
             else {
                 throw new RuntimeException($"{RangeExpression.Location}: Range bounds must be integers (got {RawMin.LightInspect()} and {RawMax.LightInspect()})");
@@ -1435,7 +1471,12 @@ namespace Embers
                                                         ReturnStatement.ReturnValue != null
                                                         ? await InterpretExpressionAsync(ReturnStatement.ReturnValue)
                                                         : Interpreter.Nil),
-                BreakStatement => throw new BreakException(),
+                LoopControlStatement LoopControlStatement => LoopControlStatement.Type switch {
+                                                        LoopControlType.Break => throw new BreakException(),
+                                                        LoopControlType.Retry => throw new RetryException(),
+                                                        LoopControlType.Redo => throw new RedoException(),
+                                                        LoopControlType.Next => throw new NextException(),
+                                                        _ => throw new InternalErrorException($"{Expression.Location}: Loop control type not handled: '{LoopControlStatement.Type}'")},
                 YieldStatement YieldStatement => await InterpretYieldStatement(YieldStatement, OnYield),
                 RangeExpression RangeExpression => await InterpretRangeExpression(RangeExpression),
                 IfBranchesStatement IfBranchesStatement => await InterpretIfBranchesStatement(IfBranchesStatement),
@@ -1483,8 +1524,8 @@ namespace Embers
             try {
                 LastExpression = await InternalInterpretAsync(Statements, OnYield);
             }
-            catch (BreakException) {
-                throw new SyntaxErrorException($"{ApproximateLocation}: Invalid break (break must be in a loop)");
+            catch (LoopControlException Ex) {
+                throw new SyntaxErrorException($"{ApproximateLocation}: Invalid {Ex.GetType().Name} (must be in a loop)");
             }
             catch (ReturnException Ex) {
                 return Ex.Instances;

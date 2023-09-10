@@ -193,19 +193,19 @@ namespace Embers
             }
         }
         public class RangeExpression : Expression {
-            public readonly Expression Min;
-            public readonly Expression Max;
+            public readonly Expression? Min;
+            public readonly Expression? Max;
             public readonly bool IncludesMax;
-            public RangeExpression(Expression min, Expression max, bool includesMax) : base(min.Location) {
+            public RangeExpression(DebugLocation location, Expression? min, Expression? max, bool includesMax) : base(location) {
                 Min = min;
                 Max = max;
                 IncludesMax = includesMax;
             }
             public override string Inspect() {
-                return $"{Min.Inspect()}{(IncludesMax ? ".." : "...")}{Max.Inspect()}";
+                return $"{(Min != null ? Min.Inspect() : "")}{(IncludesMax ? ".." : "...")}{(Max != null ? Max.Inspect() : "")}";
             }
             public override string Serialise() {
-                return $"new {PathToSelf}({Min.Serialise()}, {Max.Serialise()}, {(IncludesMax ? "true" : "false")})";
+                return $"new {PathToSelf}({(Min != null ? Min.Serialise() : "null")}, {(Max != null ? Max.Serialise() : "null")}, {(IncludesMax ? "true" : "false")})";
             }
         }
         public class DefinedExpression : Expression {
@@ -500,14 +500,22 @@ namespace Embers
                 return $"new {PathToSelf}({Location.Serialise()}, {(ReturnValue != null ? ReturnValue.Serialise() : "null")})";
             }
         }
-        public class BreakStatement : Statement {
-            public BreakStatement(DebugLocation location) : base(location) {
+        public enum LoopControlType {
+            Break,
+            Retry,
+            Redo,
+            Next
+        }
+        public class LoopControlStatement : Statement {
+            public LoopControlType Type;
+            public LoopControlStatement(DebugLocation location, LoopControlType type) : base(location) {
+                Type = type;
             }
             public override string Inspect() {
-                return "break";
+                return Type.ToString().ToLower();
             }
             public override string Serialise() {
-                return $"new {PathToSelf}({Location.Serialise()}))";
+                return $"new {PathToSelf}({Location.Serialise()}, {Type.PathTo()}))";
             }
         }
         public class IfBranchesStatement : Statement {
@@ -556,7 +564,16 @@ namespace Embers
             }
             Method ToMethod() {
                 return new Method(async Input => {
-                    return await Input.Script.InternalInterpretAsync(BlockStatements);
+                    Redo:
+                    try {
+                        return await Input.Script.InternalInterpretAsync(BlockStatements);
+                    }
+                    catch (RedoException) {
+                        goto Redo;
+                    }
+                    catch (NextException) {
+                        return Input.Interpreter.Nil;
+                    }
                 }, null, new List<MethodArgumentExpression>() {VariableName});
             }
         }
@@ -1872,13 +1889,25 @@ namespace Embers
 
                 if (UnknownObject is Phase2Token Token) {
                     if (Token.Type == Phase2TokenType.InclusiveRange || Token.Type == Phase2TokenType.ExclusiveRange) {
-                        if (LastUnknownObject != null && NextUnknownObject != null && LastUnknownObject is Expression LastExpression && NextUnknownObject is Expression NextExpression) {
-                            i--;
-                            ParsedObjects.RemoveRange(i, 3);
-                            ParsedObjects.Insert(i, new RangeExpression(LastExpression, NextExpression, Token.Type == Phase2TokenType.InclusiveRange));
+                        Expression? Min = LastUnknownObject != null && LastUnknownObject is Expression LastExpression ? LastExpression : null;
+                        Expression? Max = NextUnknownObject != null && NextUnknownObject is Expression NextExpression ? NextExpression : null;
+
+                        if (Min != null || Max != null) {
+                            if (Min != null && Max != null) {
+                                i--;
+                                ParsedObjects.RemoveRange(i, 3);
+                            }
+                            else if (Min != null) {
+                                i--;
+                                ParsedObjects.RemoveRange(i, 2);
+                            }
+                            else if (Max != null) {
+                                ParsedObjects.RemoveRange(i, 2);
+                            }
+                            ParsedObjects.Insert(i, new RangeExpression(Token.Location, Min, Max, Token.Type == Phase2TokenType.InclusiveRange));
                         }
                         else {
-                            throw new SyntaxErrorException($"{Token.Location}: Range operator '{Token.Value!}' must be between two expressions (got {LastUnknownObject?.Inspect()} and {NextUnknownObject?.Inspect()})");
+                            throw new SyntaxErrorException($"{Token.Location}: Range operator '{Token.Value!}' must be next to at least one expression (got {LastUnknownObject?.Inspect()} and {NextUnknownObject?.Inspect()})");
                         }
                     }
                 }
@@ -1972,7 +2001,22 @@ namespace Embers
                         }
                         // Break
                         case Phase2TokenType.Break: {
-                            ParsedObjects[i] = new BreakStatement(Token.Location);
+                            ParsedObjects[i] = new LoopControlStatement(Token.Location, LoopControlType.Break);
+                            break;
+                        }
+                        // Retry
+                        case Phase2TokenType.Retry: {
+                            ParsedObjects[i] = new LoopControlStatement(Token.Location, LoopControlType.Retry);
+                            break;
+                        }
+                        // Redo
+                        case Phase2TokenType.Redo: {
+                            ParsedObjects[i] = new LoopControlStatement(Token.Location, LoopControlType.Redo);
+                            break;
+                        }
+                        // Next
+                        case Phase2TokenType.Next: {
+                            ParsedObjects[i] = new LoopControlStatement(Token.Location, LoopControlType.Next);
                             break;
                         }
                         // Undef
