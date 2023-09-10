@@ -24,8 +24,8 @@ namespace Embers
             Interpreter.RootInstance.InstanceMethods["catch"] = new Method(@catch, 1);
             Interpreter.RootInstance.InstanceMethods["lambda"] = new Method(lambda, 0);
             Interpreter.RootInstance.InstanceMethods["loop"] = new Method(loop, 0);
-            Interpreter.RootInstance.InstanceMethods["rand"] = new Method(Random.rand, 0..1);
-            Interpreter.RootInstance.InstanceMethods["srand"] = new Method(Random.srand, 0..1);
+            Interpreter.RootInstance.InstanceMethods["rand"] = new Method(_Random.rand, 0..1);
+            Interpreter.RootInstance.InstanceMethods["srand"] = new Method(_Random.srand, 0..1);
             Interpreter.RootInstance.InstanceMethods["exit"] = new Method(exit, 0);
             Interpreter.RootInstance.InstanceMethods["quit"] = new Method(exit, 0);
             Interpreter.RootInstance.InstanceMethods["eval"] = new Method(eval, 1);
@@ -114,8 +114,39 @@ namespace Embers
 
             // Random
             Class RandomClass = Script.CreateClass("Random");
-            RandomClass.Methods["rand"] = new Method(Random.rand, 0..1);
-            RandomClass.Methods["srand"] = new Method(Random.srand, 0..1);
+            RandomClass.Methods["rand"] = new Method(_Random.rand, 0..1);
+            RandomClass.Methods["srand"] = new Method(_Random.srand, 0..1);
+
+            // Math
+            Module MathModule = Script.CreateClass("Math");
+            MathModule.Constants["PI"] = new FloatInstance(Interpreter.Float, Math.PI);
+            MathModule.Constants["E"] = new FloatInstance(Interpreter.Float, Math.E);
+            MathModule.Methods["sin"] = new Method(_Math.sin, 1);
+            MathModule.Methods["cos"] = new Method(_Math.cos, 1);
+            MathModule.Methods["tan"] = new Method(_Math.tan, 1);
+            MathModule.Methods["asin"] = new Method(_Math.asin, 1);
+            MathModule.Methods["acos"] = new Method(_Math.acos, 1);
+            MathModule.Methods["atan"] = new Method(_Math.atan, 1);
+            MathModule.Methods["atan2"] = new Method(_Math.atan2, 2);
+            MathModule.Methods["sinh"] = new Method(_Math.sinh, 1);
+            MathModule.Methods["cosh"] = new Method(_Math.cosh, 1);
+            MathModule.Methods["tanh"] = new Method(_Math.tanh, 1);
+            MathModule.Methods["asinh"] = new Method(_Math.asinh, 1);
+            MathModule.Methods["acosh"] = new Method(_Math.acosh, 1);
+            MathModule.Methods["atanh"] = new Method(_Math.atanh, 1);
+            MathModule.Methods["exp"] = new Method(_Math.exp, 1);
+            MathModule.Methods["log"] = new Method(_Math.log, 2);
+            MathModule.Methods["log10"] = new Method(_Math.log10, 1);
+            MathModule.Methods["log2"] = new Method(_Math.log2, 1);
+            MathModule.Methods["frexp"] = new Method(_Math.frexp, 1);
+            MathModule.Methods["ldexp"] = new Method(_Math.ldexp, 2);
+            MathModule.Methods["sqrt"] = new Method(_Math.sqrt, 1);
+            MathModule.Methods["cbrt"] = new Method(_Math.cbrt, 1);
+            MathModule.Methods["hypot"] = new Method(_Math.hypot, 2);
+            MathModule.Methods["erf"] = new Method(_Math.erf, 1);
+            MathModule.Methods["erfc"] = new Method(_Math.erfc, 1);
+            MathModule.Methods["gamma"] = new Method(_Math.gamma, 1);
+            MathModule.Methods["lgamma"] = new Method(_Math.lgamma, 1);
 
             //
             // UNSAFE APIS
@@ -332,6 +363,23 @@ namespace Embers
                 }, 0));
 
                 return Input.Interpreter.Nil;
+            }
+            public static async Task<Instances> attr_writer(MethodInput Input) {
+                string VariableName = Input.Arguments[0].String;
+                // Prevent redefining unsafe API methods
+                if (!Input.Script.AllowUnsafeApi && Input.Instance.InstanceMethods.TryGetValue(VariableName, out Method? ExistingMethod) && ExistingMethod.Unsafe) {
+                    throw new RuntimeException($"{Input.Location}: The instance method '{VariableName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
+                }
+                // Create or overwrite instance method
+                Input.Instance.AddOrUpdateInstanceMethod($"{VariableName}=", new Method(async Input2 => {
+                    return Input2.Instance.InstanceVariables[VariableName] = Input2.Arguments[0];
+                }, 1));
+
+                return Input.Interpreter.Nil;
+            }
+            public static async Task<Instances> attr_accessor(MethodInput Input) {
+                await attr_writer(Input);
+                return await attr_reader(Input);
             }
         }
         static class String {
@@ -784,7 +832,7 @@ namespace Embers
             public static async Task<Instances> insert(MethodInput Input) {
                 List<Instance> Items = Input.Instance.Array;
                 int Index = _RealisticIndex(Input, Input.Arguments[0].Integer);
-                
+
                 if (Input.Arguments.Count == 1) {
                     Items.Add(Input.Arguments[0]);
                 }
@@ -802,7 +850,7 @@ namespace Embers
                     // x.each do |n, i|
                     if (Input.OnYield.ArgumentNames.Count == 2) {
                         for (int i = 0; i < Array.Count; i++) {
-                            await Input.OnYield.Call(Input.Script, Input.Instance, new List<Instance>() {Array[i], new IntegerInstance(Input.Interpreter.Integer, i)});
+                            await Input.OnYield.Call(Input.Script, Input.Instance, new List<Instance>() { Array[i], new IntegerInstance(Input.Interpreter.Integer, i) });
                         }
                     }
                     // x.each do |n|
@@ -826,7 +874,7 @@ namespace Embers
                     // x.reverse_each do |n, i|
                     if (Input.OnYield.ArgumentNames.Count == 2) {
                         for (int i = Array.Count - 1; i >= 0; i--) {
-                            await Input.OnYield.Call(Input.Script, Input.Instance, new List<Instance>() {Array[i], new IntegerInstance(Input.Interpreter.Integer, i)});
+                            await Input.OnYield.Call(Input.Script, Input.Instance, new List<Instance>() { Array[i], new IntegerInstance(Input.Interpreter.Integer, i) });
                         }
                     }
                     // x.reverse_each do |n|
@@ -924,7 +972,7 @@ namespace Embers
             public static async Task<Instances> to_a(MethodInput Input) {
                 List<Instance> Array = new();
                 foreach (KeyValuePair<Instance, Instance> Item in Input.Instance.Hash) {
-                    Array.Add(new ArrayInstance(Input.Interpreter.Array, new List<Instance>() {Item.Key, Item.Value}));
+                    Array.Add(new ArrayInstance(Input.Interpreter.Array, new List<Instance>() { Item.Key, Item.Value }));
                 }
                 return new ArrayInstance(Input.Interpreter.Array, Array);
             }
@@ -932,7 +980,7 @@ namespace Embers
                 return Input.Instance;
             }
         }
-        static class Random {
+        static class _Random {
             public static async Task<Instances> rand(MethodInput Input) {
                 // Integer random
                 if (Input.Arguments.Count == 1 && Input.Arguments[0] is IntegerInstance) {
@@ -966,9 +1014,170 @@ namespace Embers
                 }
 
                 Input.Interpreter.RandomSeed = NewSeed;
-                Input.Interpreter.Random = new System.Random(NewSeed.GetHashCode());
+                Input.Interpreter.Random = new Random(NewSeed.GetHashCode());
 
                 return new IntegerInstance(Input.Interpreter.Integer, PreviousSeed);
+            }
+        }
+        static class _Math {
+            public static async Task<Instances> sin(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Math.Sin(Input.Arguments[0].Float));
+            }
+            public static async Task<Instances> cos(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Math.Cos(Input.Arguments[0].Float));
+            }
+            public static async Task<Instances> tan(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Math.Tan(Input.Arguments[0].Float));
+            }
+            public static async Task<Instances> asin(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Math.Asin(Input.Arguments[0].Float));
+            }
+            public static async Task<Instances> acos(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Math.Acos(Input.Arguments[0].Float));
+            }
+            public static async Task<Instances> atan(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Math.Atan(Input.Arguments[0].Float));
+            }
+            public static async Task<Instances> atan2(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Math.Atan2(Input.Arguments[0].Float, Input.Arguments[1].Float));
+            }
+            public static async Task<Instances> sinh(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Math.Sinh(Input.Arguments[0].Float));
+            }
+            public static async Task<Instances> cosh(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Math.Cosh(Input.Arguments[0].Float));
+            }
+            public static async Task<Instances> tanh(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Math.Tanh(Input.Arguments[0].Float));
+            }
+            public static async Task<Instances> asinh(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Math.Asinh(Input.Arguments[0].Float));
+            }
+            public static async Task<Instances> acosh(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Math.Acosh(Input.Arguments[0].Float));
+            }
+            public static async Task<Instances> atanh(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Math.Atanh(Input.Arguments[0].Float));
+            }
+            public static async Task<Instances> exp(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Math.Exp(Input.Arguments[0].Float));
+            }
+            public static async Task<Instances> log(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Math.Log(Input.Arguments[0].Float, Input.Arguments[1].Float));
+            }
+            public static async Task<Instances> log10(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Math.Log10(Input.Arguments[0].Float));
+            }
+            public static async Task<Instances> log2(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Math.Log2(Input.Arguments[0].Float));
+            }
+            public static async Task<Instances> frexp(MethodInput Input) {
+                double Value = Input.Arguments[0].Float;
+
+                // Calculate fractional exponent
+                // From https://stackoverflow.com/a/390072
+                long Bits = BitConverter.DoubleToInt64Bits(Value);
+                bool Negative = Bits < 0;
+                int Exponent = (int)((Bits >> 52) & 0x7ffL);
+                long Mantissa = Bits & 0xfffffffffffffL;
+                if (Exponent == 0) Exponent++;
+                else Mantissa |= 1L << 52;
+                if (Mantissa == 0)
+                    return new ArrayInstance(Input.Interpreter.Array, new List<Instance>() {
+                        new FloatInstance(Input.Interpreter.Float, 0),
+                        new IntegerInstance(Input.Interpreter.Integer, 0)
+                    });
+                Exponent -= 1075;
+                while ((Mantissa & 1) == 0) {
+                    Mantissa >>= 1;
+                    Exponent++;
+                }
+                double M = Mantissa;
+                long E = Exponent;
+                while (M >= 1) {
+                    M /= 2.0;
+                    E += 1;
+                }
+                if (Negative) M = -M;
+
+                // Return [mantissa, exponent]
+                return new ArrayInstance(Input.Interpreter.Array, new List<Instance>() {
+                    new FloatInstance(Input.Interpreter.Float, M),
+                    new IntegerInstance(Input.Interpreter.Integer, E)
+                });
+            }
+            public static async Task<Instances> ldexp(MethodInput Input) {
+                double Fraction = Input.Arguments[0].Float;
+                long Exponent = Input.Arguments[1].Integer;
+                return new FloatInstance(Input.Interpreter.Float, Fraction * Math.Pow(2, Exponent));
+            }
+            public static async Task<Instances> sqrt(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Math.Sqrt(Input.Arguments[0].Float));
+            }
+            public static async Task<Instances> cbrt(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Math.Cbrt(Input.Arguments[0].Float));
+            }
+            public static async Task<Instances> hypot(MethodInput Input) {
+                double A = Input.Arguments[0].Float;
+                double B = Input.Arguments[1].Float;
+                return new FloatInstance(Input.Interpreter.Float, Math.Sqrt(Math.Pow(A, 2) + Math.Pow(B, 2)));
+            }
+            private static double _Erf(double x) {
+                // Approximate error function
+                // From https://www.johndcook.com/blog/csharp_erf
+
+                // constants
+                double a1 = 0.254829592;
+                double a2 = -0.284496736;
+                double a3 = 1.421413741;
+                double a4 = -1.453152027;
+                double a5 = 1.061405429;
+                double p = 0.3275911;
+
+                // Save the sign of x
+                int sign = 1;
+                if (x < 0)
+                    sign = -1;
+                x = Math.Abs(x);
+
+                // A&S formula 7.1.26
+                double t = 1.0 / (1.0 + p * x);
+                double y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.Exp(-x * x);
+
+                return sign * y;
+            }
+            public static async Task<Instances> erf(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, _Erf(Input.Arguments[0].Float));
+            }
+            public static async Task<Instances> erfc(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, 1.0 - _Erf(Input.Arguments[0].Float));
+            }
+            private static double _Gamma(double z) {
+                // Approximate gamma
+                // From https://stackoverflow.com/a/66193379
+                const int g = 7;
+                double[] p = { 0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7 };
+                if (z < 0.5)
+                    return Math.PI / (Math.Sin(Math.PI * z) * _Gamma(1 - z));
+                z -= 1;
+                double x = p[0];
+                for (var i = 1; i < g + 2; i++)
+                    x += p[i] / (z + i);
+                double t = z + g + 0.5;
+                return Math.Sqrt(2 * Math.PI) * (Math.Pow(t, z + 0.5)) * Math.Exp(-t) * x;
+            }
+            public static async Task<Instances> gamma(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, _Gamma(Input.Arguments[0].Float));
+            }
+            public static async Task<Instances> lgamma(MethodInput Input) {
+                double Value = Input.Arguments[0].Float;
+                double GammaValue = _Gamma(Value);
+                double A = Math.Log(Math.Abs(GammaValue));
+                long B = GammaValue < 0 ? -1 : 1;
+                return new ArrayInstance(Input.Interpreter.Float, new List<Instance>() {
+                    new FloatInstance(Input.Interpreter.Float, A),
+                    new IntegerInstance(Input.Interpreter.Float, B)
+                });
             }
         }
     }

@@ -52,8 +52,29 @@ quit
 eval(code)
 	Evaluates the given code in the current context.
 
+object.inspect
+	Returns a string describing the object in detail.
+
+object.class
+	Returns the class of the object.
+
 object.to_s
 	Returns a string representation of the object.
+
+object.method(method_name)
+	Returns a proc containing the method that can be called with call(*args).
+
+object.object_id
+	Returns an integer to uniquely identify the given object.
+
+instance.attr_reader(instance_variable_name)
+	Creates an instance method called "{the given name}" which returns the given instance variable.
+
+instance.attr_writer(instance_variable_name)
+	Creates an instance method called "{the given name}=" which takes a single value and sets the given instance variable to the value.
+
+instance.attr_accessor(instance_variable_name)
+	Calls attr_writer and attr_reader.
 
 string.to_str
 	Returns the string.
@@ -180,6 +201,22 @@ hash.to_a
 
 hash.to_hash
 	Returns the hash.
+
+Math::PI
+	A constant containig 17 digits of pi.
+
+Math::E
+	A constant containig 17 digits of e.
+
+Math.sqrt(number)
+	Returns the square root of the number.
+
+Math.cbrt(number)
+	Returns the cube root of the number.
+
+Math.sin, Math.cos, Math.tan, Math.asin, Math.acos, Math.atan, Math.atan2, Math.sinh, Math.cosh, Math.tanh, Math.asinh, Math.acosh,
+Math.atanh, Math.exp, Math.log, Math.log10, Math.log2, Math.frexp, Math.ldexp, Math.hypot, Math.erf, Math.erfc, Math.gamma, Math.lgamma
+	Various nerdy maths methods. Math.erf, Math.erfc, Math.gamma and Math.lgamma are only approximations.
 ```
 
 ## Unsafe methods
