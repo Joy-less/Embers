@@ -12,25 +12,20 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() => 
                     Script.Evaluate(@"
-begin
-    raise StandardError.new('hi')
-rescue Exception => ex
-    puts ""rescued #{ex.class}""
-else
-    puts 'Runs if not rescued'
-ensure
-    puts 'Runs regardless'
-end
+puts __LINE__
 
-begin
-    
-rescue Exception => ex
-    puts ""rescued #{ex.class}""
-else
-    puts 'Runs if not rescued'
-ensure
-    puts 'Runs regardless'
-end
+puts '---'
+
+puts EMBERS_VERSION
+puts EMBERS_RELEASE_DATE
+puts EMBERS_PLATFORM
+puts EMBERS_COPYRIGHT
+puts RUBY_COPYRIGHT
+
+puts '---'
+
+p ""\u0059\x59""
+p ""\u00A9""
                     ")
                 );
                 Console.ReadLine();

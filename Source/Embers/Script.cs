@@ -1397,7 +1397,7 @@ namespace Embers
                 // Run statements
                 await InternalInterpretAsync(BeginBranch.Statements);
             }
-            catch (Exception Ex) {
+            catch (Exception Ex) when (Ex is not (ExitException or LoopControlException)) {
                 ExceptionToRescue = Ex;
             }
             finally {
@@ -1586,7 +1586,15 @@ namespace Embers
                 Interpreter
             );
         }
-        
+        async Task<Instances> InterpretEnvironmentInfoExpression(EnvironmentInfoExpression EnvironmentInfoExpression) {
+            if (EnvironmentInfoExpression.Type == EnvironmentInfoType.__LINE__) {
+                return new IntegerInstance(Interpreter.Integer, ApproximateLocation.Line);
+            }
+            else {
+                throw new InternalErrorException($"{ApproximateLocation}: Environment info type not handled: '{EnvironmentInfoExpression.Type}'");
+            }
+        }
+
         public enum BreakHandleType {
             Invalid,
             Rethrow,
@@ -1633,6 +1641,7 @@ namespace Embers
                 UndefineMethodStatement UndefineMethodStatement => await InterpretUndefineMethodStatement(UndefineMethodStatement),
                 DefinedExpression DefinedExpression => await InterpretDefinedExpression(DefinedExpression),
                 HashArgumentsExpression HashArgumentsExpression => await InterpretHashArgumentsExpression(HashArgumentsExpression),
+                EnvironmentInfoExpression EnvironmentInfoExpression => await InterpretEnvironmentInfoExpression(EnvironmentInfoExpression),
                 _ => throw new InternalErrorException($"{Expression.Location}: Not sure how to interpret expression {Expression.GetType().Name} ({Expression.Inspect()})"),
             };
         }

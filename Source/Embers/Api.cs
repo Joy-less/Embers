@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using System.Runtime.InteropServices;
 using static Embers.Script;
 
 #pragma warning disable CS1998
@@ -29,6 +30,13 @@ namespace Embers
             Interpreter.RootInstance.InstanceMethods["exit"] = new Method(exit, 0);
             Interpreter.RootInstance.InstanceMethods["quit"] = new Method(exit, 0);
             Interpreter.RootInstance.InstanceMethods["eval"] = new Method(eval, 1);
+
+            // Global constants
+            Interpreter.RootScope.Constants["EMBERS_VERSION"] = new StringInstance(Interpreter.String, Info.Version);
+            Interpreter.RootScope.Constants["EMBERS_RELEASE_DATE"] = new StringInstance(Interpreter.String, Info.ReleaseDate);
+            Interpreter.RootScope.Constants["EMBERS_PLATFORM"] = new StringInstance(Interpreter.String, $"{RuntimeInformation.OSArchitecture}-{RuntimeInformation.OSDescription}");
+            Interpreter.RootScope.Constants["EMBERS_COPYRIGHT"] = new StringInstance(Interpreter.String, Info.Copyright);
+            Interpreter.RootScope.Constants["RUBY_COPYRIGHT"] = new StringInstance(Interpreter.String, Info.RubyCopyright);
 
             // String
             Interpreter.String.InstanceMethods["[]"] = new Method(String._Indexer, 1);

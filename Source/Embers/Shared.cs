@@ -2,6 +2,13 @@
 
 namespace Embers
 {
+    public static class Info {
+        public const string Version = "N/A";
+        public const string ReleaseDate = "N/A";
+        public const string Copyright = "Embers - Copyright © 2023 Joyless";
+        public const string RubyCopyright = "Ruby - Copyright © Yukihiro Matsumoto";
+    }
+
     public abstract class EmbersException : Exception {
         public EmbersException(string Message) : base(Message) { }
         public EmbersException() { }
@@ -31,21 +38,13 @@ namespace Embers
     public abstract class LoopControlException : EmbersException {
         public LoopControlException() { }
     }
-    public class BreakException : LoopControlException {
-        public BreakException() { }
-    }
-    public class RetryException : LoopControlException {
-        public RetryException() { }
-    }
-    public class RedoException : LoopControlException {
-        public RedoException() { }
-    }
-    public class NextException : LoopControlException {
-        public NextException() { }
-    }
+    public class BreakException : LoopControlException { }
+    public class RetryException : LoopControlException { }
+    public class RedoException : LoopControlException { }
+    public class NextException : LoopControlException { }
     public class ReturnException : EmbersException {
-        public readonly Script.Instances Instances;
-        public ReturnException(Script.Instances instances) {
+        public readonly Instances Instances;
+        public ReturnException(Instances instances) {
             Instances = instances;
         }
     }

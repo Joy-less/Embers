@@ -33,6 +33,7 @@ namespace Embers
 
             // Keywords
             Alias, Begin, Break, Case, Class, Def, Defined, Do, Else, Elsif, End, Ensure, False, For, If, In, Module, Next, Nil, Redo, Rescue, Retry, Return, Self, Super, Then, True, Undef, Unless, Until, When, While, Yield,
+            __LINE__,
 
             // Temporary
             Dot,
@@ -84,7 +85,8 @@ namespace Embers
             {"until", Phase2TokenType.Until},
             {"when", Phase2TokenType.When},
             {"while", Phase2TokenType.While},
-            {"yield", Phase2TokenType.Yield}
+            {"yield", Phase2TokenType.Yield},
+            {"__LINE__", Phase2TokenType.__LINE__},
         };
         public readonly static string[][] OperatorPrecedence = new[] {
             new[] {"**"},
@@ -218,6 +220,21 @@ namespace Embers
             }
             public override string Serialise() {
                 return $"new {PathToSelf}({Expression.Serialise()})";
+            }
+        }
+        public enum EnvironmentInfoType {
+            __LINE__,
+        }
+        public class EnvironmentInfoExpression : Expression {
+            public readonly EnvironmentInfoType Type;
+            public EnvironmentInfoExpression(DebugLocation location, EnvironmentInfoType type) : base(location) {
+                Type = type;
+            }
+            public override string Inspect() {
+                return Type.ToString();
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({Location}, {Type})";
             }
         }
         public class MethodArgumentExpression : Expression {
@@ -1750,6 +1767,15 @@ namespace Embers
                     // Token -> ObjectTokenExpression
                     else if (IsVariableToken(Token) || Token.IsObjectToken) {
                         ParsedObjects[i] = new ObjectTokenExpression(Token);
+                    }
+                }
+            }
+
+            // Environment Info
+            for (int i = 0; i < ParsedObjects.Count; i++) {
+                if (ParsedObjects[i] is Phase2Token Token) {
+                    if (Token.Type == Phase2TokenType.__LINE__) {
+                        ParsedObjects[i] = new EnvironmentInfoExpression(Token.Location, EnvironmentInfoType.__LINE__);
                     }
                 }
             }

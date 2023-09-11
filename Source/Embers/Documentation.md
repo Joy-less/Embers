@@ -247,6 +247,24 @@ Exception.new([message = ""])
 
 exception.message
 	Returns the exception's message.
+
+__LINE__
+	Returns the current script line as an integer.
+
+EMBERS_VERSION
+	The current version of Embers.
+
+EMBERS_RELEASE_DATE
+	The release date of the current version of Embers as a string.
+
+EMBERS_PLATFORM
+	The local platform's architecture followed by the platform.
+
+EMBERS_COPYRIGHT
+	Me!
+
+RUBY_COPYRIGHT
+	Matz.
 ```
 
 ## Unsafe methods

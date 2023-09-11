@@ -97,7 +97,7 @@
                     }
                     return false;
                 }
-                static string EscapeString(string String) {
+                string EscapeString(string String) {
                     for (int i = 0; i < String.Length; i++) {
                         /*bool NextCharactersAre(string Characters) {
                             int Offset = 0;
@@ -113,11 +113,14 @@
                         bool NextCharacterIs(char Character) {
                             return i + 1 < String.Length && String[i + 1] == Character;
                         }
-                        bool NextThreeCharactersAreOctal(out string? Characters) {
+                        static string ConvertOctalToChar(string? OctalDigits) {
+                            return ((char)Convert.ToInt32(OctalDigits, 8)).ToString();
+                        }
+                        bool TryGetOctalCharacterEscape(out string? Characters) {
                             int OctalDigitCounter = 0;
                             for (int i2 = i + 1; i2 < String.Length; i2++) {
                                 char CurrentChara = String[i2];
-                                if (CurrentChara >= '0' || CurrentChara <= '7') {
+                                if ("01234567".Contains(CurrentChara)) {
                                     OctalDigitCounter++;
                                 }
                                 else {
@@ -131,35 +134,27 @@
                             Characters = null;
                             return false;
                         }
-                        string ConvertOctalToChar(string? OctalDigits) {
-                            return ((char)Convert.ToInt32(OctalDigits, 8)).ToString();
-                        }
-                        string ConvertHexadecimalToChar(string? HexadecimalDigits) {
+                        static string ConvertHexadecimalToChar(string? HexadecimalDigits) {
                             return ((char)Convert.ToInt32(HexadecimalDigits, 16)).ToString();
                         }
-                        bool NextThreeCharactersAreHexadecimal(out string? Characters) {
-                            int HexadecimalDigitCounter = 0;
-                            for (int i2 = i + 1; i2 < String.Length; i2++) {
-                                char CurrentChara = String[i2];
-                                if (HexadecimalDigitCounter == 0) {
-                                    if (CurrentChara == 'x') {
-                                        HexadecimalDigitCounter++;
+                        bool TryGetHexadecimalCharacterEscape(out string? Characters) {
+                            int StartIndex = i + 1;
+                            if (StartIndex < String.Length && (String[StartIndex] == 'u' || String[StartIndex] == 'x')) {
+                                int ExpectDigitCount = String[StartIndex] == 'u' ? 4 : 2;
+                                StartIndex++;
+
+                                if (StartIndex + ExpectDigitCount - 1 < String.Length) {
+                                    string HexDigits = String[StartIndex..(StartIndex + ExpectDigitCount)];
+                                    if (HexDigits.All(c => "0123456789ABCDEF".Contains(char.ToUpper(c)))) {
+                                        Characters = HexDigits;
+                                        return true;
                                     }
                                     else {
-                                        break;
+                                        throw new SyntaxErrorException($"{CurrentLine}: Invalid escape (expected {ExpectDigitCount}-digit integer, got '{HexDigits}')");
                                     }
                                 }
                                 else {
-                                    if ((CurrentChara >= '0' && CurrentChara <= '9') || (CurrentChara >= 'A' && CurrentChara <= 'F') || (CurrentChara >= 'a' && CurrentChara <= 'f')) {
-                                        HexadecimalDigitCounter++;
-                                    }
-                                    else {
-                                        break;
-                                    }
-                                }
-                                if (HexadecimalDigitCounter == 3) {
-                                    Characters = String.Substring(i + 2, 2);
-                                    return true;
+                                    throw new SyntaxErrorException($"{CurrentLine}: Invalid escape (expected {ExpectDigitCount} digits, got {String.Length - StartIndex})");
                                 }
                             }
                             Characters = null;
@@ -188,11 +183,13 @@
                             else if (NextCharacterIs('\\')) RemoveAndInsert(2, "\\");
                             else if (NextCharacterIs('"')) RemoveAndInsert(2, "\"");
                             else if (NextCharacterIs('\'')) RemoveAndInsert(2, "\'");
-                            else if (NextThreeCharactersAreOctal(out string? OctDigits)) {
-                                RemoveAndInsert(4, ConvertOctalToChar(OctDigits));
+                            else if (TryGetOctalCharacterEscape(out string? OctDigits)) {
+                                // "\000"
+                                RemoveAndInsert(1 + 3, ConvertOctalToChar(OctDigits));
                             }
-                            else if (NextThreeCharactersAreHexadecimal(out string? HexDigits)) {
-                                RemoveAndInsert(4, ConvertHexadecimalToChar(HexDigits));
+                            else if (TryGetHexadecimalCharacterEscape(out string? HexDigits)) {
+                                // "\x00", "\u0000"
+                                RemoveAndInsert(1 + HexDigits!.Length + 1, ConvertHexadecimalToChar(HexDigits));
                             }
                             else Remove(1);
                         }
@@ -582,6 +579,8 @@
                         case ']':
                             Tokens.Add(new(Location, Phase1TokenType.EndSquare, "]", FollowsWhitespace));
                             break;
+                        case '\\':
+                            throw new SyntaxErrorException($"{Location}: Unexpected '\\'");
                         default:
                             // Skip whitespace
                             if (char.IsWhiteSpace(Chara)) {
