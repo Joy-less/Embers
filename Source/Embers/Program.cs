@@ -37,6 +37,12 @@ puts y <= 5
 
 puts 'Less than or equal to result: ' + (2 <= 3.15).to_s
 puts 'Spaceship result: ' + (2 <=> 3.15).to_s
+
+arr = [""a"", ""b"", ""c""]
+arr = arr.sort do |a, b|
+    if a < b; 1; else -1; end
+end
+p arr
                     ")
                 );
                 Console.ReadLine();

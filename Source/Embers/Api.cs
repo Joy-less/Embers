@@ -43,6 +43,11 @@ namespace Embers
             Interpreter.String.InstanceMethods["+"] = new Method(String._Add, 1);
             Interpreter.String.InstanceMethods["*"] = new Method(String._Multiply, 1);
             Interpreter.String.InstanceMethods["=="] = new Method(String._Equals, 1);
+            Interpreter.String.InstanceMethods["<"] = new Method(String._LessThan, 1);
+            Interpreter.String.InstanceMethods[">"] = new Method(String._GreaterThan, 1);
+            Interpreter.String.InstanceMethods["<="] = new Method(String._LessThanOrEqualTo, 1);
+            Interpreter.String.InstanceMethods[">="] = new Method(String._GreaterThanOrEqualTo, 1);
+            Interpreter.String.InstanceMethods["<=>"] = new Method(String._Spaceship, 1);
             Interpreter.String.InstanceMethods["initialize"] = new Method(String.initialize, 0..1);
             Interpreter.String.InstanceMethods["to_str"] = new Method(String.to_str, 0);
             Interpreter.String.InstanceMethods["to_i"] = new Method(String.to_i, 0);
@@ -122,6 +127,7 @@ namespace Embers
             Interpreter.Array.InstanceMethods["each"] = new Method(Array.each, 0);
             Interpreter.Array.InstanceMethods["reverse_each"] = new Method(Array.reverse_each, 0);
             Interpreter.Array.InstanceMethods["map"] = new Method(Array.map, 0);
+            Interpreter.Array.InstanceMethods["sort"] = new Method(Array.sort, 0);
             Interpreter.Array.InstanceMethods["contains?"] = new Method(Array.contains, 1);
             Interpreter.Array.InstanceMethods["include?"] = new Method(Array.contains, 1);
 
@@ -192,6 +198,7 @@ namespace Embers
         public static readonly IReadOnlyDictionary<string, Method> DefaultClassAndInstanceMethods = new Dictionary<string, Method>() {
             {"==", new Method(ClassInstance._Equals, 1)},
             {"!=", new Method(ClassInstance._NotEquals, 1)},
+            {"<=>", new Method(ClassInstance._Spaceship, 1)},
             {"inspect", new Method(ClassInstance.inspect, 0)},
             {"class", new Method(ClassInstance.@class, 0)},
             {"to_s", new Method(ClassInstance.to_s, 0)},
@@ -367,6 +374,9 @@ namespace Embers
                 Instance Right = Input.Arguments[0];
                 return (await Left.TryCallInstanceMethod(Input.Script, "==", Right)).IsTruthy ? Input.Interpreter.False : Input.Interpreter.True;
             }
+            public static async Task<Instance> _Spaceship(MethodInput Input) {
+                return Input.Interpreter.Nil;
+            }
             public static async Task<Instance> inspect(MethodInput Input) {
                 return new StringInstance(Input.Interpreter.String, Input.Instance.Inspect());
             }
@@ -514,6 +524,58 @@ namespace Embers
                         return Input.Interpreter.Nil;
                     }
                 }
+            }
+            public static async Task<Instance> _LessThan(MethodInput Input) {
+                Instance Left = Input.Instance;
+                Instance Right = Input.Arguments[0];
+                if ((Right is StringInstance) && string.Compare(Left.String, Right.String) < 0) {
+                    return Input.Interpreter.True;
+                }
+                else {
+                    return Input.Interpreter.False;
+                }
+            }
+            public static async Task<Instance> _GreaterThan(MethodInput Input) {
+                Instance Left = Input.Instance;
+                Instance Right = Input.Arguments[0];
+                if ((Right is StringInstance) && string.Compare(Left.String, Right.String) > 0) {
+                    return Input.Interpreter.True;
+                }
+                else {
+                    return Input.Interpreter.False;
+                }
+            }
+            public static async Task<Instance> _LessThanOrEqualTo(MethodInput Input) {
+                Instance Left = Input.Instance;
+                Instance Right = Input.Arguments[0];
+                if ((Right is StringInstance) && string.Compare(Left.String, Right.String) <= 0) {
+                    return Input.Interpreter.True;
+                }
+                else {
+                    return Input.Interpreter.False;
+                }
+            }
+            public static async Task<Instance> _GreaterThanOrEqualTo(MethodInput Input) {
+                Instance Left = Input.Instance;
+                Instance Right = Input.Arguments[0];
+                if ((Right is StringInstance) && string.Compare(Left.String, Right.String) >= 0) {
+                    return Input.Interpreter.True;
+                }
+                else {
+                    return Input.Interpreter.False;
+                }
+            }
+            public static async Task<Instance> _Spaceship(MethodInput Input) {
+                if ((await _LessThan(Input)).IsTruthy) {
+                    return new IntegerInstance(Input.Interpreter.Integer, -1);
+                }
+                else if ((await _Equals(Input)).IsTruthy) {
+                    return new IntegerInstance(Input.Interpreter.Integer, 0);
+                }
+                else if ((await _GreaterThan(Input)).IsTruthy) {
+                    return new IntegerInstance(Input.Interpreter.Integer, 1);
+                }
+                return Input.Interpreter.Nil;
             }
             public static async Task<Instance> initialize(MethodInput Input) {
                 if (Input.Arguments.Count == 1) {
@@ -1151,6 +1213,33 @@ namespace Embers
                     return new ArrayInstance(Input.Interpreter.Array, MappedArray);
                 }
                 return Input.Instance;
+            }
+            public static async Task<Instance> sort(MethodInput Input) {
+                // Get sort methods
+                List<Instance> Array = Input.Instance.Array;
+                Func<Instance, Instance, Task<bool>> SortFunction;
+                if (Input.OnYield != null) {
+                    SortFunction = async (A, B) => {
+                        return (await Input.OnYield.Call(Input.Script, null, new Instances(A, B))).Integer < 0;
+                    };
+                }
+                else {
+                    SortFunction = async (A, B) => {
+                        return (await A.TryCallInstanceMethod(Input.Script, "<=>", B)).Integer < 0;
+                    };
+                }
+                // Sort array
+                List<Instance> SortedArray = new(Array);
+                for (int i = 0; i < SortedArray.Count; i++) {
+                    for (int i2 = i + 1; i2 < SortedArray.Count; i2++) {
+                        if (!await SortFunction(SortedArray[i], SortedArray[i2])) {
+                            // Swap elements if they are out of order
+                            (SortedArray[i2], SortedArray[i]) = (SortedArray[i], SortedArray[i2]);
+                        }
+                    }
+                }
+                // Return new sorted array
+                return new ArrayInstance(Input.Interpreter.Array, SortedArray);
             }
             public static async Task<Instance> contains(MethodInput Input) {
                 Instance ItemToFind = Input.Arguments[0];

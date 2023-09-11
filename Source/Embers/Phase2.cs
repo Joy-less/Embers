@@ -282,7 +282,7 @@ namespace Embers
                 Method = ToMethod();
             }
             public override string Inspect() {
-                return $"method with {ArgumentCount} arguments";
+                return $"|{Arguments.Inspect()}| {Statements.Inspect()} end";
             }
             public override string Serialise() {
                 return $"new {PathToSelf}({Location.Serialise()}, {Statements.Serialise()}, {ArgumentCount.Serialise()}, {Arguments.Serialise()})";
@@ -337,7 +337,7 @@ namespace Embers
             public IfExpression(DebugLocation location, Expression? condition, List<Expression> statements, bool inverse = false) : base(location, condition, statements, inverse) { }
             public override string Inspect() {
                 if (Condition != null) {
-                    if (Inverse) {
+                    if (!Inverse) {
                         return $"if {Condition.Inspect()} then {Statements.Inspect()} end";
                     }
                     else {

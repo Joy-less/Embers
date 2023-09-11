@@ -196,6 +196,10 @@ array.reverse_each |item, index|
 array.map |item|
 	Returns a new array containing the values returned by the given block.
 
+array.sort |a, b|
+	If a block is given, returns a new array sorted by the block's return value. It should return -1 if a -> b, 0 if a and b are the same, and 1 if b -> a.
+	If a block is not given, returns a new array sorted in ascending order by the "<=>" operator.
+
 array.contains?(item)
 	Returns true if the array contains the item.
 

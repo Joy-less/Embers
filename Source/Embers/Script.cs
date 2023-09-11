@@ -719,6 +719,10 @@ namespace Embers
                 InstanceList = instanceList;
                 Count = instanceList.Count;
             }
+            public Instances(params Instance[] instanceArray) {
+                InstanceList = instanceArray.ToList();
+                Count = InstanceList.Count;
+            }
             public static implicit operator Instances(Instance Instance) {
                 return new Instances(Instance);
             }
