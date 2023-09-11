@@ -35,22 +35,24 @@
             public Phase1TokenType Type;
             public string? Value;
             public readonly bool FollowsWhitespace;
+            public readonly bool FollowedByWhitespace;
             public readonly bool ProcessFormatting;
-            public Phase1Token(DebugLocation location, Phase1TokenType type, string? value, bool followsWhitespace, bool processFormatting = false) {
+            public Phase1Token(DebugLocation location, Phase1TokenType type, string? value, bool followsWhitespace, bool followedByWhitespace, bool processFormatting = false) {
                 Location = location;
                 Type = type;
                 Value = value;
                 FollowsWhitespace = followsWhitespace;
+                FollowedByWhitespace = followedByWhitespace;
                 ProcessFormatting = processFormatting;
             }
             public string NonNullValue {
                 get { return Value ?? throw new InternalErrorException("Value was null"); }
             }
             public string Inspect() {
-                return Type + (Value != null ? ":" : "") + Value?.Replace("\n", "\\n").Replace("\r", "\\r") + (FollowsWhitespace ? " (true)" : "");
+                return Type + (Value != null ? ":" : "") + Value?.Replace("\n", "\\n").Replace("\r", "\\r") + (FollowsWhitespace ? " (follows whitespace)" : "") + (FollowedByWhitespace ? " (followed by whitespace)" : "");
             }
             public string Serialise() {
-                return $"new {typeof(Phase1Token).PathTo()}({Location.Serialise()}, {typeof(Phase1TokenType).PathTo()}.{Type}, \"{Value}\", {(FollowsWhitespace ? "true" : "false")}, {(ProcessFormatting ? "true" : "false")})";
+                return $"new {typeof(Phase1Token).PathTo()}({Location.Serialise()}, {typeof(Phase1TokenType).PathTo()}.{Type}, \"{Value}\", {(FollowsWhitespace ? "true" : "false")}, {(FollowedByWhitespace ? "true" : "false")}, {(ProcessFormatting ? "true" : "false")})";
             }
         }
 
@@ -81,7 +83,8 @@
                     return Build;
                 }
                 static bool IsWhitespace(char Chara) {
-                    return Chara == ' ' || Chara == '\t';
+                    // return Chara is ' ' or '\t';
+                    return char.IsWhiteSpace(Chara);
                 }
                 bool LastTokenWas(Phase1TokenType Type) {
                     return Tokens.Count != 0 && Tokens[^1].Type == Type;
@@ -265,10 +268,15 @@
                 char? NextChara = i + 1 < Code.Length ? Code[i + 1] : null;
                 char? NextNextChara = i + 2 < Code.Length ? Code[i + 2] : null;
                 bool FollowsWhitespace = i - 1 >= 0 && IsWhitespace(Code[i - 1]);
+                bool FollowedByWhitespace = i + 1 < Code.Length && IsWhitespace(Code[i + 1]);
 
                 // Get debug location
                 int CurrentColumn = i - IndexOfLastNewline;
                 DebugLocation Location = new(CurrentLine, CurrentColumn);
+
+                void AddToken(Phase1TokenType Type, string? Value) {
+                    Tokens.Add(new(Location, Type, Value, FollowsWhitespace, FollowedByWhitespace));
+                }
 
                 // Integer
                 if (char.IsAsciiDigit(Chara)) {
@@ -283,7 +291,7 @@
                         Number = long.Parse(Number[2..], System.Globalization.NumberStyles.HexNumber).ToString();
                     }
                     // Add integer to tokens
-                    Tokens.Add(new(Location, Phase1TokenType.Integer, Number, FollowsWhitespace));
+                    Tokens.Add(new(Location, Phase1TokenType.Integer, Number, FollowsWhitespace, FollowedByWhitespace));
                     i--;
                 }
                 // Special character
@@ -293,35 +301,35 @@
                             RemoveEndOfStatement();
                             if (NextChara == '.') {
                                 if (NextNextChara == '.') {
-                                    Tokens.Add(new(Location, Phase1TokenType.ExclusiveRange, "...", FollowsWhitespace));
+                                    Tokens.Add(new(Location, Phase1TokenType.ExclusiveRange, "...", FollowsWhitespace, FollowedByWhitespace));
                                     i += 2;
                                 }
                                 else {
-                                    Tokens.Add(new(Location, Phase1TokenType.InclusiveRange, "..", FollowsWhitespace));
+                                    AddToken(Phase1TokenType.InclusiveRange, "..");
                                     i++;
                                 }
                             }
                             else {
-                                Tokens.Add(new(Location, Phase1TokenType.Dot, ".", FollowsWhitespace));
+                                AddToken(Phase1TokenType.Dot, ".");
                             }
                             break;
                         case ',':
                             RemoveEndOfStatement();
-                            Tokens.Add(new(Location, Phase1TokenType.Comma, ",", FollowsWhitespace));
+                            AddToken(Phase1TokenType.Comma, ",");
                             break;
                         case '(':
-                            Tokens.Add(new(Location, Phase1TokenType.OpenBracket, "(", FollowsWhitespace));
+                            AddToken(Phase1TokenType.OpenBracket, "(");
                             Brackets.Push('(');
                             break;
                         case ')':
                             RemoveEndOfStatement();
-                            Tokens.Add(new(Location, Phase1TokenType.CloseBracket, ")", FollowsWhitespace));
+                            AddToken(Phase1TokenType.CloseBracket, ")");
                             // Handle unexpected close bracket
                             if (Brackets.TryPop(out char Opener) == false || Opener != '(')
                                 throw new SyntaxErrorException($"{Location}: Unexpected close bracket: )");
                             // Add EndOfStatement after def method name
                             if (IsDefMethodName())
-                                Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
+                                AddToken(Phase1TokenType.EndOfStatement, null);
                             break;
                         case '"':
                         case '\'':
@@ -384,7 +392,7 @@
                         case ';':
                             // Add EndOfStatement if there isn't already one
                             if (!LastTokenWas(Phase1TokenType.EndOfStatement))
-                                Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, Chara.ToString(), FollowsWhitespace));
+                                AddToken(Phase1TokenType.EndOfStatement, Chara.ToString());
                             // \r + \n --> \r\n
                             else if (Chara == '\n' && Tokens[^1].Value == "\r")
                                 Tokens[^1].Value += "\n";
@@ -397,149 +405,155 @@
                             break;
                         case ':':
                             if (NextChara == ':') {
-                                Tokens.Add(new(Location, Phase1TokenType.DoubleColon, "::", FollowsWhitespace));
+                                AddToken(Phase1TokenType.DoubleColon, "::");
                                 i++;
                             }
                             else {
-                                Tokens.Add(new(Location, Phase1TokenType.Colon, ":", FollowsWhitespace));
+                                AddToken(Phase1TokenType.Colon, ":");
                             }
                             break;
                         case '=':
                             RemoveEndOfStatement();
                             if (NextChara == '=') {
                                 if (NextNextChara == '=') {
-                                    Tokens.Add(new(Location, Phase1TokenType.Operator, "===", FollowsWhitespace));
+                                    AddToken(Phase1TokenType.Operator, "===");
                                     i += 2;
                                 }
                                 else {
-                                    Tokens.Add(new(Location, Phase1TokenType.Operator, "==", FollowsWhitespace));
+                                    AddToken(Phase1TokenType.Operator, "==");
                                     i++;
                                 }
                             }
                             else if (NextChara == '>') {
-                                Tokens.Add(new(Location, Phase1TokenType.RightArrow, "=>", FollowsWhitespace));
+                                AddToken(Phase1TokenType.RightArrow, "=>");
                                 i++;
                             }
                             else {
-                                Tokens.Add(new(Location, Phase1TokenType.AssignmentOperator, "=", FollowsWhitespace));
+                                AddToken(Phase1TokenType.AssignmentOperator, "=");
                             }
                             break;
                         case '+':
                             RemoveEndOfStatement();
                             if (NextChara == '=') {
-                                Tokens.Add(new(Location, Phase1TokenType.AssignmentOperator, "+=", FollowsWhitespace));
+                                AddToken(Phase1TokenType.AssignmentOperator, "+=");
                                 i++;
                             }
                             else {
-                                Tokens.Add(new(Location, Phase1TokenType.Operator, "+", FollowsWhitespace));
+                                AddToken(Phase1TokenType.Operator, "+");
                             }
                             break;
                         case '-':
                             RemoveEndOfStatement();
                             if (NextChara == '=') {
-                                Tokens.Add(new(Location, Phase1TokenType.AssignmentOperator, "-=", FollowsWhitespace));
+                                AddToken(Phase1TokenType.AssignmentOperator, "-=");
                                 i++;
                             }
                             else {
-                                Tokens.Add(new(Location, Phase1TokenType.Operator, "-", FollowsWhitespace));
+                                AddToken(Phase1TokenType.Operator, "-");
                             }
                             break;
                         case '*':
                             if (IsDefStatement()) {
                                 if (NextChara == '*') {
-                                    Tokens.Add(new(Location, Phase1TokenType.SplatOperator, "**", FollowsWhitespace));
+                                    AddToken(Phase1TokenType.SplatOperator, "**");
                                     i++;
                                 }
                                 else
-                                    Tokens.Add(new(Location, Phase1TokenType.SplatOperator, "*", FollowsWhitespace));
+                                    AddToken(Phase1TokenType.SplatOperator, "*");
                             }
                             else {
                                 RemoveEndOfStatement();
                                 if (NextChara == '*') {
                                     if (NextNextChara == '=') {
-                                        Tokens.Add(new(Location, Phase1TokenType.AssignmentOperator, "**=", FollowsWhitespace));
+                                        AddToken(Phase1TokenType.AssignmentOperator, "**=");
                                         i += 2;
                                     }
                                     else {
-                                        Tokens.Add(new(Location, Phase1TokenType.Operator, "**", FollowsWhitespace));
+                                        AddToken(Phase1TokenType.Operator, "**");
                                         i++;
                                     }
                                 }
                                 else if (NextChara == '=') {
-                                    Tokens.Add(new(Location, Phase1TokenType.AssignmentOperator, "*=", FollowsWhitespace));
+                                    AddToken(Phase1TokenType.AssignmentOperator, "*=");
                                     i++;
                                 }
                                 else {
-                                    Tokens.Add(new(Location, Phase1TokenType.Operator, "*", FollowsWhitespace));
+                                    AddToken(Phase1TokenType.Operator, "*");
                                 }
                             }
                             break;
                         case '/':
                             RemoveEndOfStatement();
                             if (NextChara == '=') {
-                                Tokens.Add(new(Location, Phase1TokenType.AssignmentOperator, "/=", FollowsWhitespace));
+                                AddToken(Phase1TokenType.AssignmentOperator, "/=");
                                 i++;
                             }
                             else {
-                                Tokens.Add(new(Location, Phase1TokenType.Operator, "/", FollowsWhitespace));
+                                AddToken(Phase1TokenType.Operator, "/");
                             }
                             break;
                         case '%':
                             RemoveEndOfStatement();
                             if (NextChara == '=') {
-                                Tokens.Add(new(Location, Phase1TokenType.AssignmentOperator, "%=", FollowsWhitespace));
+                                AddToken(Phase1TokenType.AssignmentOperator, "%=");
                                 i++;
                             }
                             else {
-                                Tokens.Add(new(Location, Phase1TokenType.Operator, "%", FollowsWhitespace));
+                                AddToken(Phase1TokenType.Operator, "%");
                             }
                             break;
                         case '>':
                             RemoveEndOfStatement();
                             if (NextChara == '=') {
-                                Tokens.Add(new(Location, Phase1TokenType.Operator, ">=", FollowsWhitespace));
+                                AddToken(Phase1TokenType.Operator, ">=");
                                 i++;
                             }
                             else {
-                                Tokens.Add(new(Location, Phase1TokenType.Operator, ">", FollowsWhitespace));
+                                AddToken(Phase1TokenType.Operator, ">");
                             }
                             break;
                         case '<':
                             RemoveEndOfStatement();
                             if (NextChara == '=') {
-                                Tokens.Add(new(Location, Phase1TokenType.Operator, "<=", FollowsWhitespace));
-                                i++;
+                                if (NextNextChara == '>') {
+                                    AddToken(Phase1TokenType.Operator, "<=>");
+                                    i += 2;
+                                }
+                                else {
+                                    AddToken(Phase1TokenType.Operator, "<=");
+                                    i++;
+                                }
                             }
                             else {
-                                Tokens.Add(new(Location, Phase1TokenType.Operator, "<", FollowsWhitespace));
+                                AddToken(Phase1TokenType.Operator, "<");
                             }
                             break;
                         case '&':
                             RemoveEndOfStatement();
                             if (NextChara == '&') {
-                                Tokens.Add(new(Location, Phase1TokenType.Operator, "&&", FollowsWhitespace));
+                                AddToken(Phase1TokenType.Operator, "&&");
                                 i++;
                             }
                             else {
-                                Tokens.Add(new(Location, Phase1TokenType.Operator, "&", FollowsWhitespace));
+                                AddToken(Phase1TokenType.Operator, "&");
                             }
                             break;
                         case '|':
                             RemoveEndOfStatement();
                             if (NextChara == '|') {
-                                Tokens.Add(new(Location, Phase1TokenType.Operator, "||", FollowsWhitespace));
+                                AddToken(Phase1TokenType.Operator, "||");
                                 i++;
                             }
                             else if (IsPipeStatement()) {
-                                Tokens.Add(new(Location, Phase1TokenType.Pipe, "|", FollowsWhitespace));
+                                AddToken(Phase1TokenType.Pipe, "|");
                             }
                             else {
-                                Tokens.Add(new(Location, Phase1TokenType.Operator, "|", FollowsWhitespace));
+                                AddToken(Phase1TokenType.Operator, "|");
                             }
                             break;
                         case '^':
                             RemoveEndOfStatement();
-                            Tokens.Add(new(Location, Phase1TokenType.Operator, "^", FollowsWhitespace));
+                            AddToken(Phase1TokenType.Operator, "^");
                             break;
                         case '#':
                             do {
@@ -556,28 +570,28 @@
                             }
                         case '!':
                             if (NextChara == '=') {
-                                Tokens.Add(new(Location, Phase1TokenType.Operator, "!=", FollowsWhitespace));
+                                AddToken(Phase1TokenType.Operator, "!=");
                                 i++;
                             }
                             else {
-                                Tokens.Add(new(Location, Phase1TokenType.Operator, "!", FollowsWhitespace));
+                                AddToken(Phase1TokenType.Operator, "!");
                             }
                             break;
                         case '{':
-                            Tokens.Add(new(Location, Phase1TokenType.StartCurly, "{", FollowsWhitespace));
+                            AddToken(Phase1TokenType.StartCurly, "{");
                             break;
                         case '}':
                             // Add EndOfStatement before }
                             if (!LastTokenWas(Phase1TokenType.EndOfStatement))
-                                Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
+                                AddToken(Phase1TokenType.EndOfStatement, null);
                             // Add end curly bracket
-                            Tokens.Add(new(Location, Phase1TokenType.EndCurly, "}", FollowsWhitespace));
+                            AddToken(Phase1TokenType.EndCurly, "}");
                             break;
                         case '[':
-                            Tokens.Add(new(Location, Phase1TokenType.StartSquare, "[", FollowsWhitespace));
+                            AddToken(Phase1TokenType.StartSquare, "[");
                             break;
                         case ']':
-                            Tokens.Add(new(Location, Phase1TokenType.EndSquare, "]", FollowsWhitespace));
+                            AddToken(Phase1TokenType.EndSquare, "]");
                             break;
                         case '\\':
                             throw new SyntaxErrorException($"{Location}: Unexpected '\\'");
@@ -586,7 +600,7 @@
                             if (char.IsWhiteSpace(Chara)) {
                                 // Add EndOfStatement after class statement
                                 if (!(LastTokenWas(Phase1TokenType.Identifier) && Tokens[^1].Value == ClassKeyword) && IsClassName())
-                                    Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
+                                    AddToken(Phase1TokenType.EndOfStatement, null);
                                 break;
                             }
                             // Build identifier
@@ -601,12 +615,12 @@
                             }
                             // Add EndOfStatement before end keyword
                             if (Identifier == EndKeyword && !LastTokenWas(Phase1TokenType.EndOfStatement))
-                                Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
+                                AddToken(Phase1TokenType.EndOfStatement, null);
                             // Add identifier
-                            Tokens.Add(new(Location, Phase1TokenType.Identifier, Identifier, FollowsWhitespace));
+                            AddToken(Phase1TokenType.Identifier, Identifier);
                             // Add EndOfStatement after else keyword
                             if (Identifier == ElseKeyword)
-                                Tokens.Add(new(Location, Phase1TokenType.EndOfStatement, null, FollowsWhitespace));
+                                AddToken(Phase1TokenType.EndOfStatement, null);
                             //
                             i--;
                             break;
@@ -616,7 +630,7 @@
             for (int i = 0; i < Tokens.Count; i++) {
                 Phase1Token Token = Tokens[i];
                 if (Token.Type == Phase1TokenType.Identifier) {
-                    if (Token.Value == "or" || Token.Value == "and" || Token.Value == "not") {
+                    if (Token.Value is "or" or "and" or "not") {
                         Token.Type = Phase1TokenType.Operator;
                     }
                 }

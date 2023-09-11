@@ -43,9 +43,9 @@ namespace Embers
     public class RedoException : LoopControlException { }
     public class NextException : LoopControlException { }
     public class ReturnException : EmbersException {
-        public readonly Instances Instances;
-        public ReturnException(Instances instances) {
-            Instances = instances;
+        public readonly Instance Instance;
+        public ReturnException(Instance instance) {
+            Instance = instance;
         }
     }
     public class ExitException : EmbersException {

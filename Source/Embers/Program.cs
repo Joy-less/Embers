@@ -12,20 +12,31 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() => 
                     Script.Evaluate(@"
-puts __LINE__
+class A
+    def a=(value)
+        @a = value
+    end
+    attr_accessor :a
+end
+b = A.new
+b.a = 'Some'
+b.a += 'thing'
+puts b.a
 
-puts '---'
+class Z
+    def +(value)
+        'Zzz' + value
+    end
+    def <=(value)
+        'No idea'
+    end
+end
+y = Z.new
+puts y + '...'
+puts y <= 5
 
-puts EMBERS_VERSION
-puts EMBERS_RELEASE_DATE
-puts EMBERS_PLATFORM
-puts EMBERS_COPYRIGHT
-puts RUBY_COPYRIGHT
-
-puts '---'
-
-p ""\u0059\x59""
-p ""\u00A9""
+puts 'Less than or equal to result: ' + (2 <= 3.15).to_s
+puts 'Spaceship result: ' + (2 <=> 3.15).to_s
                     ")
                 );
                 Console.ReadLine();

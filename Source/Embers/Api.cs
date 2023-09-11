@@ -69,9 +69,12 @@ namespace Embers
             Interpreter.Integer.InstanceMethods["/"] = new Method(Integer._Divide, 1);
             Interpreter.Integer.InstanceMethods["%"] = new Method(Integer._Modulo, 1);
             Interpreter.Integer.InstanceMethods["**"] = new Method(Integer._Exponentiate, 1);
-            Interpreter.Integer.InstanceMethods["=="] = new Method(Integer._Equals, 1);
-            Interpreter.Integer.InstanceMethods["<"] = new Method(Integer._LessThan, 1);
-            Interpreter.Integer.InstanceMethods[">"] = new Method(Integer._GreaterThan, 1);
+            Interpreter.Integer.InstanceMethods["=="] = new Method(Float._Equals, 1);
+            Interpreter.Integer.InstanceMethods["<"] = new Method(Float._LessThan, 1);
+            Interpreter.Integer.InstanceMethods[">"] = new Method(Float._GreaterThan, 1);
+            Interpreter.Integer.InstanceMethods["<="] = new Method(Float._LessThanOrEqualTo, 1);
+            Interpreter.Integer.InstanceMethods[">="] = new Method(Float._GreaterThanOrEqualTo, 1);
+            Interpreter.Integer.InstanceMethods["<=>"] = new Method(Float._Spaceship, 1);
             Interpreter.Integer.InstanceMethods["+@"] = new Method(Integer._UnaryPlus, 0);
             Interpreter.Integer.InstanceMethods["-@"] = new Method(Integer._UnaryMinus, 0);
             Interpreter.Integer.InstanceMethods["to_i"] = new Method(Integer.to_i, 0);
@@ -86,6 +89,11 @@ namespace Embers
             Interpreter.Float.InstanceMethods["%"] = new Method(Float._Modulo, 1);
             Interpreter.Float.InstanceMethods["**"] = new Method(Float._Exponentiate, 1);
             Interpreter.Float.InstanceMethods["=="] = new Method(Float._Equals, 1);
+            Interpreter.Float.InstanceMethods["<"] = new Method(Float._LessThan, 1);
+            Interpreter.Float.InstanceMethods[">"] = new Method(Float._GreaterThan, 1);
+            Interpreter.Float.InstanceMethods["<="] = new Method(Float._LessThanOrEqualTo, 1);
+            Interpreter.Float.InstanceMethods[">="] = new Method(Float._GreaterThanOrEqualTo, 1);
+            Interpreter.Float.InstanceMethods["<=>"] = new Method(Float._Spaceship, 1);
             Interpreter.Float.InstanceMethods["+@"] = new Method(Float._UnaryPlus, 0);
             Interpreter.Float.InstanceMethods["-@"] = new Method(Float._UnaryMinus, 0);
             Interpreter.Float.InstanceMethods["to_i"] = new Method(Float.to_i, 0);
@@ -129,9 +137,9 @@ namespace Embers
             Interpreter.Hash.InstanceMethods["to_hash"] = new Method(Hash.to_hash, 0);
 
             // Random
-            Class RandomClass = Script.CreateClass("Random");
-            RandomClass.Methods["rand"] = new Method(_Random.rand, 0..1);
-            RandomClass.Methods["srand"] = new Method(_Random.srand, 0..1);
+            Module RandomModule = Script.CreateModule("Random");
+            RandomModule.Methods["rand"] = new Method(_Random.rand, 0..1);
+            RandomModule.Methods["srand"] = new Method(_Random.srand, 0..1);
 
             // Math
             Module MathModule = Script.CreateModule("Math");
@@ -193,10 +201,12 @@ namespace Embers
         };
         public static readonly IReadOnlyDictionary<string, Method> DefaultInstanceMethods = new Dictionary<string, Method>() {
             {"attr_reader", new Method(ClassInstance.attr_reader, 1)},
+            {"attr_writer", new Method(ClassInstance.attr_writer, 1)},
+            {"attr_accessor", new Method(ClassInstance.attr_accessor, 1)},
         };
 
         // API
-        static async Task<Instances> puts(MethodInput Input) {
+        static async Task<Instance> puts(MethodInput Input) {
             if (Input.Arguments.Count != 0) {
                 foreach (Instance Message in Input.Arguments) {
                     Console.WriteLine(Message.LightInspect());
@@ -207,28 +217,28 @@ namespace Embers
             }
             return Input.Interpreter.Nil;
         }
-        static async Task<Instances> print(MethodInput Input) {
+        static async Task<Instance> print(MethodInput Input) {
             foreach (Instance Message in Input.Arguments) {
                 Console.Write(Message.LightInspect());
             }
             return Input.Interpreter.Nil;
         }
-        static async Task<Instances> p(MethodInput Input) {
+        static async Task<Instance> p(MethodInput Input) {
             foreach (Instance Message in Input.Arguments) {
                 Console.WriteLine(Message.Inspect());
             }
             return Input.Interpreter.Nil;
         }
-        static async Task<Instances> gets(MethodInput Input) {
+        static async Task<Instance> gets(MethodInput Input) {
             string? UserInput = Console.ReadLine();
             UserInput = UserInput != null ? UserInput + "\n" : "";
             return new StringInstance(Input.Interpreter.String, UserInput);
         }
-        static async Task<Instances> getc(MethodInput Input) {
+        static async Task<Instance> getc(MethodInput Input) {
             string UserInput = Console.ReadKey().KeyChar.ToString();
             return new StringInstance(Input.Interpreter.String, UserInput);
         }
-        static async Task<Instances> warn(MethodInput Input) {
+        static async Task<Instance> warn(MethodInput Input) {
             ConsoleColor PreviousForegroundColour = Console.ForegroundColor;
             Console.ForegroundColor = ConsoleColor.Yellow;
             foreach (Instance Message in Input.Arguments) {
@@ -237,7 +247,7 @@ namespace Embers
             Console.ForegroundColor = PreviousForegroundColour;
             return Input.Interpreter.Nil;
         }
-        static async Task<Instances> sleep(MethodInput Input) {
+        static async Task<Instance> sleep(MethodInput Input) {
             if (Input.Arguments.Count == 1) {
                 double SecondsToSleep = Input.Arguments[0].Float;
                 await Task.Delay((int)(SecondsToSleep * 1000));
@@ -247,7 +257,7 @@ namespace Embers
             }
             return Input.Interpreter.Nil;
         }
-        static async Task<Instances> raise(MethodInput Input) {
+        static async Task<Instance> raise(MethodInput Input) {
             if (Input.Arguments.Count == 1) {
                 Instance Argument = Input.Arguments[0];
                 if (Argument is ExceptionInstance ExceptionInstance) {
@@ -263,10 +273,10 @@ namespace Embers
                 throw new RuntimeException("");
             }
         }
-        static async Task<Instances> @throw(MethodInput Input) {
+        static async Task<Instance> @throw(MethodInput Input) {
             throw ThrowException.New(Input.Arguments[0]);
         }
-        static async Task<Instances> @catch(MethodInput Input) {
+        static async Task<Instance> @catch(MethodInput Input) {
             Method? OnYield = Input.OnYield ?? throw new RuntimeException($"{Input.Location}: No block given for catch");
 
             string CatchIdentifier = Input.Arguments[0].String;
@@ -279,7 +289,7 @@ namespace Embers
             }
             return Input.Interpreter.Nil;
         }
-        static async Task<Instances> lambda(MethodInput Input) {
+        static async Task<Instance> lambda(MethodInput Input) {
             Method? OnYield = Input.OnYield ?? throw new RuntimeException($"{Input.Location}: No block given for lambda");
 
             Instance NewProc = new ProcInstance(Input.Interpreter.Proc, new Method(
@@ -288,7 +298,7 @@ namespace Embers
             ));
             return NewProc;
         }
-        static async Task<Instances> loop(MethodInput Input) {
+        static async Task<Instance> loop(MethodInput Input) {
             Method? OnYield = Input.OnYield ?? throw new RuntimeException($"{Input.Location}: No block given for loop");
 
             while (true) {
@@ -298,7 +308,7 @@ namespace Embers
                 catch (BreakException) {
                     break;
                 }
-                catch (LoopControlException Ex) when (Ex is RetryException || Ex is RedoException || Ex is NextException) {
+                catch (LoopControlException Ex) when (Ex is RetryException or RedoException or NextException) {
                     continue;
                 }
                 catch (LoopControlException Ex) {
@@ -307,7 +317,7 @@ namespace Embers
             }
             return Input.Interpreter.Nil;
         }
-        static async Task<Instances> system(MethodInput Input) {
+        static async Task<Instance> system(MethodInput Input) {
             string Command = Input.Arguments[0].String;
 
             // Start command line process
@@ -335,14 +345,14 @@ namespace Embers
             // Return output
             return new StringInstance(Input.Interpreter.String, Output);
         }
-        static async Task<Instances> exit(MethodInput Input) {
+        static async Task<Instance> exit(MethodInput Input) {
             throw new ExitException();
         }
-        static async Task<Instances> eval(MethodInput Input) {
+        static async Task<Instance> eval(MethodInput Input) {
             return await Input.Script.InternalEvaluateAsync(Input.Arguments[0].String);
         }
         static class ClassInstance {
-            public static async Task<Instances> _Equals(MethodInput Input) {
+            public static async Task<Instance> _Equals(MethodInput Input) {
                 Instance Left = Input.Instance;
                 Instance Right = Input.Arguments[0];
                 if (Left is ModuleReference LeftModule && Right is ModuleReference RightModule) {
@@ -352,21 +362,21 @@ namespace Embers
                     return Left == Right ? Input.Interpreter.True : Input.Interpreter.False;
                 }
             }
-            public static async Task<Instances> _NotEquals(MethodInput Input) {
+            public static async Task<Instance> _NotEquals(MethodInput Input) {
                 Instance Left = Input.Instance;
                 Instance Right = Input.Arguments[0];
-                return (await Left.TryCallInstanceMethod(Input.Script, "==", Right)).SingleInstance.IsTruthy ? Input.Interpreter.False : Input.Interpreter.True;
+                return (await Left.TryCallInstanceMethod(Input.Script, "==", Right)).IsTruthy ? Input.Interpreter.False : Input.Interpreter.True;
             }
-            public static async Task<Instances> inspect(MethodInput Input) {
+            public static async Task<Instance> inspect(MethodInput Input) {
                 return new StringInstance(Input.Interpreter.String, Input.Instance.Inspect());
             }
-            public static async Task<Instances> @class(MethodInput Input) {
+            public static async Task<Instance> @class(MethodInput Input) {
                 return new ModuleReference(Input.Instance.Module!);
             }
-            public static async Task<Instances> to_s(MethodInput Input) {
+            public static async Task<Instance> to_s(MethodInput Input) {
                 return new StringInstance(Input.Interpreter.String, Input.Instance.LightInspect());
             }
-            public static async Task<Instances> method(MethodInput Input) {
+            public static async Task<Instance> method(MethodInput Input) {
                 // Find method
                 string MethodName = Input.Arguments[0].String;
                 Method? FindMethod;
@@ -388,10 +398,10 @@ namespace Embers
                     throw new RuntimeException($"{Input.Location}: Undefined method '{MethodName}' for {Input.Instance.LightInspect()}");
                 }
             }
-            public static async Task<Instances> object_id(MethodInput Input) {
+            public static async Task<Instance> object_id(MethodInput Input) {
                 return new IntegerInstance(Input.Interpreter.Integer, Input.Instance.ObjectId);
             }
-            public static async Task<Instances> methods(MethodInput Input) {
+            public static async Task<Instance> methods(MethodInput Input) {
                 List<Instance> MethodsDictToSymbolsArray(Dictionary<string, Method> MethodDict) {
                     List<Instance> Symbols = new();
                     foreach (string MethodName in MethodDict.Keys) {
@@ -408,7 +418,7 @@ namespace Embers
                     return new ArrayInstance(Input.Interpreter.Array, MethodsDictToSymbolsArray(Input.Instance.InstanceMethods));
                 }
             }
-            public static async Task<Instances> attr_reader(MethodInput Input) {
+            public static async Task<Instance> attr_reader(MethodInput Input) {
                 string VariableName = Input.Arguments[0].String;
                 // Prevent redefining unsafe API methods
                 if (!Input.Script.AllowUnsafeApi && Input.Instance.InstanceMethods.TryGetValue(VariableName, out Method? ExistingMethod) && ExistingMethod.Unsafe) {
@@ -416,12 +426,17 @@ namespace Embers
                 }
                 // Create or overwrite instance method
                 Input.Instance.AddOrUpdateInstanceMethod(VariableName, new Method(async Input2 => {
-                    return Input2.Instance.InstanceVariables[VariableName];
+                    if (Input2.Instance.InstanceVariables.TryGetValue(VariableName, out Instance? Value)) {
+                        return Value;
+                    }
+                    else {
+                        return Input.Interpreter.Nil;
+                    }
                 }, 0));
 
                 return Input.Interpreter.Nil;
             }
-            public static async Task<Instances> attr_writer(MethodInput Input) {
+            public static async Task<Instance> attr_writer(MethodInput Input) {
                 string VariableName = Input.Arguments[0].String;
                 // Prevent redefining unsafe API methods
                 if (!Input.Script.AllowUnsafeApi && Input.Instance.InstanceMethods.TryGetValue(VariableName, out Method? ExistingMethod) && ExistingMethod.Unsafe) {
@@ -434,17 +449,18 @@ namespace Embers
 
                 return Input.Interpreter.Nil;
             }
-            public static async Task<Instances> attr_accessor(MethodInput Input) {
+            public static async Task<Instance> attr_accessor(MethodInput Input) {
                 await attr_writer(Input);
-                return await attr_reader(Input);
+                await attr_reader(Input);
+                return Input.Interpreter.Nil;
             }
         }
         static class String {
-            public static async Task<Instances> _Add(MethodInput Input) {
+            public static async Task<Instance> _Add(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
                 return new StringInstance(Input.Interpreter.String, Input.Instance.String + Right.String);
             }
-            public static async Task<Instances> _Multiply(MethodInput Input) {
+            public static async Task<Instance> _Multiply(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
                 StringBuilder JoinedString = new();
                 long RepeatCount = Right.Integer;
@@ -453,7 +469,7 @@ namespace Embers
                 }
                 return new StringInstance(Input.Interpreter.String, JoinedString.ToString());
             }
-            public static async Task<Instances> _Equals(MethodInput Input) {
+            public static async Task<Instance> _Equals(MethodInput Input) {
                 Instance Left = Input.Instance;
                 Instance Right = Input.Arguments[0];
                 if (Right is StringInstance RightString && Left.String == RightString.String) {
@@ -470,7 +486,7 @@ namespace Embers
                 int Index = (int)RawIndex;
                 return Index;
             }
-            public static async Task<Instances> _Indexer(MethodInput Input) {
+            public static async Task<Instance> _Indexer(MethodInput Input) {
                 // Get string and index
                 string String = Input.Instance.String;
                 Instance Indexer = Input.Arguments[0];
@@ -499,16 +515,16 @@ namespace Embers
                     }
                 }
             }
-            public static async Task<Instances> initialize(MethodInput Input) {
+            public static async Task<Instance> initialize(MethodInput Input) {
                 if (Input.Arguments.Count == 1) {
                     ((StringInstance)Input.Instance).SetValue(Input.Arguments[0].String);
                 }
                 return Input.Interpreter.Nil;
             }
-            public static async Task<Instances> to_str(MethodInput Input) {
+            public static async Task<Instance> to_str(MethodInput Input) {
                 return await ClassInstance.to_s(Input);
             }
-            public static async Task<Instances> to_i(MethodInput Input) {
+            public static async Task<Instance> to_i(MethodInput Input) {
                 string IntegerAsString = Input.Instance.LightInspect();
                 StringBuilder IntegerString = new();
                 for (int i = 0; i < IntegerAsString.Length; i++) {
@@ -524,7 +540,7 @@ namespace Embers
                 if (IntegerString.Length == 0) return new IntegerInstance(Input.Interpreter.Integer, 0);
                 return new IntegerInstance(Input.Interpreter.Integer, long.Parse(IntegerString.ToString()));
             }
-            public static async Task<Instances> to_f(MethodInput Input) {
+            public static async Task<Instance> to_f(MethodInput Input) {
                 string FloatAsString = Input.Instance.LightInspect();
                 StringBuilder FloatString = new();
                 bool SeenDot = false;
@@ -547,17 +563,17 @@ namespace Embers
                 if (!SeenDot) FloatString.Append(".0");
                 return new FloatInstance(Input.Interpreter.Float, double.Parse(FloatString.ToString()));
             }
-            public static async Task<Instances> to_sym(MethodInput Input) {
+            public static async Task<Instance> to_sym(MethodInput Input) {
                 return new SymbolInstance(Input.Interpreter.Symbol, Input.Instance.LightInspect());
             }
-            public static async Task<Instances> to_a(MethodInput Input) {
+            public static async Task<Instance> to_a(MethodInput Input) {
                 List<Instance> Array = new();
                 foreach (char Chara in Input.Instance.String) {
                     Array.Add(new StringInstance(Input.Interpreter.Array, Chara.ToString()));
                 }
                 return new ArrayInstance(Input.Interpreter.Array, Array);
             }
-            public static async Task<Instances> chomp(MethodInput Input) {
+            public static async Task<Instance> chomp(MethodInput Input) {
                 string String = Input.Instance.String;
                 if (Input.Arguments.Count == 0) {
                     if (String.EndsWith("\r\n")) {
@@ -575,7 +591,7 @@ namespace Embers
                 }
                 return Input.Instance;
             }
-            static async Task<Instances> ModifyString(MethodInput Input, Func<string, string> Modifier) {
+            static async Task<Instance> ModifyString(MethodInput Input, Func<string, string> Modifier) {
                 string OriginalString = Input.Instance.String;
                 string ModifiedString = Modifier(OriginalString);
                 if (ModifiedString != OriginalString) {
@@ -583,16 +599,16 @@ namespace Embers
                 }
                 return Input.Instance;
             }
-            public static async Task<Instances> strip(MethodInput Input) {
+            public static async Task<Instance> strip(MethodInput Input) {
                 return await ModifyString(Input, Str => Str.Trim());
             }
-            public static async Task<Instances> lstrip(MethodInput Input) {
+            public static async Task<Instance> lstrip(MethodInput Input) {
                 return await ModifyString(Input, Str => Str.TrimStart());
             }
-            public static async Task<Instances> rstrip(MethodInput Input) {
+            public static async Task<Instance> rstrip(MethodInput Input) {
                 return await ModifyString(Input, Str => Str.TrimEnd());
             }
-            public static async Task<Instances> squeeze(MethodInput Input) {
+            public static async Task<Instance> squeeze(MethodInput Input) {
                 return await ModifyString(Input, Str => {
                     StringBuilder SqueezedString = new();
                     char? LastChara = null;
@@ -606,13 +622,13 @@ namespace Embers
                     return SqueezedString.ToString();
                 });
             }
-            public static async Task<Instances> chop(MethodInput Input) {
+            public static async Task<Instance> chop(MethodInput Input) {
                 return await ModifyString(Input, Str => Str.Length != 0 ? Str[..^1] : Str);
             }
-            public static async Task<Instances> chr(MethodInput Input) {
+            public static async Task<Instance> chr(MethodInput Input) {
                 return await ModifyString(Input, Str => Str.Length != 0 ? Str[0].ToString() : Str);
             }
-            public static async Task<Instances> capitalize(MethodInput Input) {
+            public static async Task<Instance> capitalize(MethodInput Input) {
                 return await ModifyString(Input, Str => {
                     if (Str.Length == 0) {
                         return Str;
@@ -625,18 +641,18 @@ namespace Embers
                     }
                 });
             }
-            public static async Task<Instances> upcase(MethodInput Input) {
+            public static async Task<Instance> upcase(MethodInput Input) {
                 return await ModifyString(Input, Str => Str.ToUpperInvariant());
             }
-            public static async Task<Instances> downcase(MethodInput Input) {
+            public static async Task<Instance> downcase(MethodInput Input) {
                 return await ModifyString(Input, Str => Str.ToLowerInvariant());
             }
-            public static async Task<Instances> sub(MethodInput Input) {
+            public static async Task<Instance> sub(MethodInput Input) {
                 string Replace = Input.Arguments[0].String;
                 string With = Input.Arguments[1].String;
                 return await ModifyString(Input, Str => Str.ReplaceFirst(Replace, With));
             }
-            public static async Task<Instances> gsub(MethodInput Input) {
+            public static async Task<Instance> gsub(MethodInput Input) {
                 string Replace = Input.Arguments[0].String;
                 string With = Input.Arguments[1].String;
                 return await ModifyString(Input, Str => Str.Replace(Replace, With));
@@ -651,82 +667,43 @@ namespace Embers
                     return new FloatInstance(Interpreter.Float, Result);
                 }
             }
-            public static async Task<Instances> _Add(MethodInput Input) {
+            public static async Task<Instance> _Add(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
                 return _GetResult(Input.Interpreter, Input.Instance.Integer + Right.Float, Right is IntegerInstance);
             }
-            public static async Task<Instances> _Subtract(MethodInput Input) {
+            public static async Task<Instance> _Subtract(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
                 return _GetResult(Input.Interpreter, Input.Instance.Integer - Right.Float, Right is IntegerInstance);
             }
-            public static async Task<Instances> _Multiply(MethodInput Input) {
+            public static async Task<Instance> _Multiply(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
                 return _GetResult(Input.Interpreter, Input.Instance.Integer * Right.Float, Right is IntegerInstance);
             }
-            public static async Task<Instances> _Divide(MethodInput Input) {
+            public static async Task<Instance> _Divide(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
                 return _GetResult(Input.Interpreter, Input.Instance.Integer / Right.Float, Right is IntegerInstance);
             }
-            public static async Task<Instances> _Modulo(MethodInput Input) {
+            public static async Task<Instance> _Modulo(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
                 return _GetResult(Input.Interpreter, Input.Instance.Integer % Right.Float, Right is IntegerInstance);
             }
-            public static async Task<Instances> _Exponentiate(MethodInput Input) {
+            public static async Task<Instance> _Exponentiate(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
                 return _GetResult(Input.Interpreter, Math.Pow(Input.Instance.Integer, Right.Float), Right is IntegerInstance);
             }
-            public static async Task<Instances> _Equals(MethodInput Input) {
-                Instance Left = Input.Instance;
-                Instance Right = Input.Arguments[0];
-                if (Right is IntegerInstance RightInteger && Left.Integer == RightInteger.Integer) {
-                    return Input.Interpreter.True;
-                }
-                else if (Right is FloatInstance RightFloat && Left.Float == RightFloat.Float) {
-                    return Input.Interpreter.True;
-                }
-                else {
-                    return Input.Interpreter.False;
-                }
-            }
-            public static async Task<Instances> _LessThan(MethodInput Input) {
-                Instance Left = Input.Instance;
-                Instance Right = Input.Arguments[0];
-                if (Right is IntegerInstance RightInteger && Left.Integer < RightInteger.Integer) {
-                    return Input.Interpreter.True;
-                }
-                else if (Right is FloatInstance RightFloat && Left.Float < RightFloat.Float) {
-                    return Input.Interpreter.True;
-                }
-                else {
-                    return Input.Interpreter.False;
-                }
-            }
-            public static async Task<Instances> _GreaterThan(MethodInput Input) {
-                Instance Left = Input.Instance;
-                Instance Right = Input.Arguments[0];
-                if (Right is IntegerInstance RightInteger && Left.Integer > RightInteger.Integer) {
-                    return Input.Interpreter.True;
-                }
-                else if (Right is FloatInstance RightFloat && Left.Float > RightFloat.Float) {
-                    return Input.Interpreter.True;
-                }
-                else {
-                    return Input.Interpreter.False;
-                }
-            }
-            public static async Task<Instances> _UnaryPlus(MethodInput Input) {
+            public static async Task<Instance> _UnaryPlus(MethodInput Input) {
                 return Input.Instance;
             }
-            public static async Task<Instances> _UnaryMinus(MethodInput Input) {
+            public static async Task<Instance> _UnaryMinus(MethodInput Input) {
                 return new IntegerInstance(Input.Interpreter.Integer, -Input.Instance.Integer);
             }
-            public static async Task<Instances> to_i(MethodInput Input) {
+            public static async Task<Instance> to_i(MethodInput Input) {
                 return Input.Instance;
             }
-            public static async Task<Instances> to_f(MethodInput Input) {
+            public static async Task<Instance> to_f(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Input.Instance.Float);
             }
-            public static async Task<Instances> times(MethodInput Input) {
+            public static async Task<Instance> times(MethodInput Input) {
                 if (Input.OnYield != null) {
                     long Times = Input.Instance.Integer;
                     bool TakesArgument = Input.OnYield.ArgumentNames.Count == 1;
@@ -761,58 +738,107 @@ namespace Embers
             }
         }
         static class Float {
-            public static async Task<Instances> _Add(MethodInput Input) {
+            public static async Task<Instance> _Add(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
                 return new FloatInstance(Input.Interpreter.Float, Input.Instance.Float + Right.Float);
             }
-            public static async Task<Instances> _Subtract(MethodInput Input) {
+            public static async Task<Instance> _Subtract(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
                 return new FloatInstance(Input.Interpreter.Float, Input.Instance.Float - Right.Float);
             }
-            public static async Task<Instances> _Multiply(MethodInput Input) {
+            public static async Task<Instance> _Multiply(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
                 return new FloatInstance(Input.Interpreter.Float, Input.Instance.Float * Right.Float);
             }
-            public static async Task<Instances> _Divide(MethodInput Input) {
+            public static async Task<Instance> _Divide(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
                 return new FloatInstance(Input.Interpreter.Float, Input.Instance.Float / Right.Float);
             }
-            public static async Task<Instances> _Modulo(MethodInput Input) {
+            public static async Task<Instance> _Modulo(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
                 return new FloatInstance(Input.Interpreter.Float, Input.Instance.Float % Right.Float);
             }
-            public static async Task<Instances> _Exponentiate(MethodInput Input) {
+            public static async Task<Instance> _Exponentiate(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
                 return new FloatInstance(Input.Interpreter.Float, Math.Pow(Input.Instance.Float, Right.Float));
             }
-            public static async Task<Instances> _Equals(MethodInput Input) {
+            public static async Task<Instance> _Equals(MethodInput Input) {
                 Instance Left = Input.Instance;
                 Instance Right = Input.Arguments[0];
-                if (Right is IntegerInstance RightInteger && Left.Float == RightInteger.Float) {
-                    return Input.Interpreter.True;
-                }
-                else if (Right is FloatInstance RightFloat && Left.Float == RightFloat.Float) {
+                if ((Right is IntegerInstance or FloatInstance) && Left.Float == Right.Float) {
                     return Input.Interpreter.True;
                 }
                 else {
                     return Input.Interpreter.False;
                 }
             }
-            public static async Task<Instances> _UnaryPlus(MethodInput Input) {
+            public static async Task<Instance> _LessThan(MethodInput Input) {
+                Instance Left = Input.Instance;
+                Instance Right = Input.Arguments[0];
+                if ((Right is IntegerInstance or FloatInstance) && Left.Float < Right.Float) {
+                    return Input.Interpreter.True;
+                }
+                else {
+                    return Input.Interpreter.False;
+                }
+            }
+            public static async Task<Instance> _GreaterThan(MethodInput Input) {
+                Instance Left = Input.Instance;
+                Instance Right = Input.Arguments[0];
+                if ((Right is IntegerInstance or FloatInstance) && Left.Float > Right.Float) {
+                    return Input.Interpreter.True;
+                }
+                else {
+                    return Input.Interpreter.False;
+                }
+            }
+            public static async Task<Instance> _LessThanOrEqualTo(MethodInput Input) {
+                Instance Left = Input.Instance;
+                Instance Right = Input.Arguments[0];
+                if ((Right is IntegerInstance or FloatInstance) && Left.Float <= Right.Float) {
+                    return Input.Interpreter.True;
+                }
+                else {
+                    return Input.Interpreter.False;
+                }
+            }
+            public static async Task<Instance> _GreaterThanOrEqualTo(MethodInput Input) {
+                Instance Left = Input.Instance;
+                Instance Right = Input.Arguments[0];
+                if ((Right is IntegerInstance or FloatInstance) && Left.Float >= Right.Float) {
+                    return Input.Interpreter.True;
+                }
+                else {
+                    return Input.Interpreter.False;
+                }
+            }
+            public static async Task<Instance> _Spaceship(MethodInput Input) {
+                if ((await _LessThan(Input)).IsTruthy) {
+                    return new IntegerInstance(Input.Interpreter.Integer, -1);
+                }
+                else if ((await _Equals(Input)).IsTruthy) {
+                    return new IntegerInstance(Input.Interpreter.Integer, 0);
+                }
+                else if ((await _GreaterThan(Input)).IsTruthy) {
+                    return new IntegerInstance(Input.Interpreter.Integer, 1);
+                }
+                return Input.Interpreter.Nil;
+            }
+            public static async Task<Instance> _UnaryPlus(MethodInput Input) {
                 return Input.Instance;
             }
-            public static async Task<Instances> _UnaryMinus(MethodInput Input) {
+            public static async Task<Instance> _UnaryMinus(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, -Input.Instance.Float);
             }
-            public static async Task<Instances> to_i(MethodInput Input) {
+            public static async Task<Instance> to_i(MethodInput Input) {
                 return new IntegerInstance(Input.Interpreter.Integer, Input.Instance.Integer);
             }
-            public static async Task<Instances> to_f(MethodInput Input) {
+            public static async Task<Instance> to_f(MethodInput Input) {
                 return Input.Instance;
             }
         }
         static class File {
-            public static async Task<Instances> read(MethodInput Input) {
+            public static async Task<Instance> read(MethodInput Input) {
                 string FilePath = Input.Arguments[0].String;
                 try {
                     string FileContents = System.IO.File.ReadAllText(FilePath);
@@ -825,7 +851,7 @@ namespace Embers
                     throw new RuntimeException($"{Input.Location}: Error reading file: '{Ex.Message}'");
                 }
             }
-            public static async Task<Instances> write(MethodInput Input) {
+            public static async Task<Instance> write(MethodInput Input) {
                 string FilePath = Input.Arguments[0].String;
                 string Text = Input.Arguments[1].String;
                 try {
@@ -838,18 +864,18 @@ namespace Embers
             }
         }
         static class Proc {
-            public static async Task<Instances> call(MethodInput Input) {
+            public static async Task<Instance> call(MethodInput Input) {
                 return await Input.Instance.Proc.Call(Input.Script, Input.Instance, Input.Arguments, Input.OnYield);
             }
         }
         static class Range {
-            public static async Task<Instances> min(MethodInput Input) {
+            public static async Task<Instance> min(MethodInput Input) {
                 return ((RangeInstance)Input.Instance).AppliedMin;
             }
-            public static async Task<Instances> max(MethodInput Input) {
+            public static async Task<Instance> max(MethodInput Input) {
                 return ((RangeInstance)Input.Instance).AppliedMax;
             }
-            public static async Task<Instances> each(MethodInput Input) {
+            public static async Task<Instance> each(MethodInput Input) {
                 if (Input.OnYield != null) {
                     LongRange Range = Input.Instance.Range;
                     long Min = (long)(Range.Min != null ? Range.Min : 0);
@@ -884,7 +910,7 @@ namespace Embers
                 }
                 return Input.Interpreter.Nil;
             }
-            public static async Task<Instances> reverse_each(MethodInput Input) {
+            public static async Task<Instance> reverse_each(MethodInput Input) {
                 if (Input.OnYield != null) {
                     LongRange Range = Input.Instance.Range;
                     long Min = (long)(Range.Min != null ? Range.Min : 0);
@@ -919,7 +945,7 @@ namespace Embers
                 }
                 return Input.Interpreter.Nil;
             }
-            public static async Task<Instances> to_a(MethodInput Input) {
+            public static async Task<Instance> to_a(MethodInput Input) {
                 List<Instance> Array = new();
                 LongRange Range = Input.Instance.Range;
                 long Min = (long)(Range.Min != null ? Range.Min : 0);
@@ -929,7 +955,7 @@ namespace Embers
                 }
                 return new ArrayInstance(Input.Interpreter.Array, Array);
             }
-            public static async Task<Instances> length(MethodInput Input) {
+            public static async Task<Instance> length(MethodInput Input) {
                 LongRange Range = Input.Instance.Range;
                 if (Range.Min != null && Range.Max != null) {
                     return new IntegerInstance(Input.Interpreter.Integer, (long)Range.Max - (long)Range.Min + 1);
@@ -940,7 +966,7 @@ namespace Embers
             }
         }
         static class Array {
-            private static async Task<Instances> _GetIndex(MethodInput Input, int ArrayIndex) {
+            private static async Task<Instance> _GetIndex(MethodInput Input, int ArrayIndex) {
                 Instance Index = new IntegerInstance(Input.Interpreter.Integer, ArrayIndex);
                 return await Input.Instance.InstanceMethods["[]"].Call(Input.Script, Input.Instance, new Instances(Index));
             }
@@ -951,7 +977,7 @@ namespace Embers
                 int Index = (int)RawIndex;
                 return Index;
             }
-            public static async Task<Instances> _Indexer(MethodInput Input) {
+            public static async Task<Instance> _Indexer(MethodInput Input) {
                 // Get array and index
                 List<Instance> Array = Input.Instance.Array;
                 Instance Indexer = Input.Arguments[0];
@@ -980,11 +1006,11 @@ namespace Embers
                     }
                 }
             }
-            public static async Task<Instances> length(MethodInput Input) {
+            public static async Task<Instance> length(MethodInput Input) {
                 List<Instance> Items = Input.Instance.Array;
                 return new IntegerInstance(Input.Interpreter.Integer, Items.Count);
             }
-            public static async Task<Instances> count(MethodInput Input) {
+            public static async Task<Instance> count(MethodInput Input) {
                 if (Input.Arguments.Count == 0) {
                     return await length(Input);
                 }
@@ -1006,16 +1032,16 @@ namespace Embers
                     return new IntegerInstance(Input.Interpreter.Integer, Count);
                 }
             }
-            public static async Task<Instances> first(MethodInput Input) {
+            public static async Task<Instance> first(MethodInput Input) {
                 return await _GetIndex(Input, 0);
             }
-            public static async Task<Instances> last(MethodInput Input) {
+            public static async Task<Instance> last(MethodInput Input) {
                 return await _GetIndex(Input, -1);
             }
-            public static async Task<Instances> forty_two(MethodInput Input) {
+            public static async Task<Instance> forty_two(MethodInput Input) {
                 return await _GetIndex(Input, 41);
             }
-            public static async Task<Instances> sample(MethodInput Input) {
+            public static async Task<Instance> sample(MethodInput Input) {
                 List<Instance> Items = Input.Instance.Array;
                 if (Items.Count != 0) {
                     return Items[Input.Interpreter.InternalRandom.Next(0, Items.Count)];
@@ -1024,7 +1050,7 @@ namespace Embers
                     return Input.Interpreter.Nil;
                 }
             }
-            public static async Task<Instances> insert(MethodInput Input) {
+            public static async Task<Instance> insert(MethodInput Input) {
                 List<Instance> Items = Input.Instance.Array;
                 int Index = _RealisticIndex(Input, Input.Arguments[0].Integer);
 
@@ -1039,7 +1065,7 @@ namespace Embers
                 }
                 return Input.Instance;
             }
-            public static async Task<Instances> each(MethodInput Input) {
+            public static async Task<Instance> each(MethodInput Input) {
                 if (Input.OnYield != null) {
                     List<Instance> Array = Input.Instance.Array;
                     
@@ -1076,7 +1102,7 @@ namespace Embers
                 }
                 return Input.Interpreter.Nil;
             }
-            public static async Task<Instances> reverse_each(MethodInput Input) {
+            public static async Task<Instance> reverse_each(MethodInput Input) {
                 if (Input.OnYield != null) {
                     List<Instance> Array = Input.Instance.Array;
                     
@@ -1113,7 +1139,7 @@ namespace Embers
                 }
                 return Input.Interpreter.Nil;
             }
-            public static async Task<Instances> map(MethodInput Input) {
+            public static async Task<Instance> map(MethodInput Input) {
                 if (Input.OnYield != null) {
                     List<Instance> Array = Input.Instance.Array;
                     List<Instance> MappedArray = new();
@@ -1126,10 +1152,10 @@ namespace Embers
                 }
                 return Input.Instance;
             }
-            public static async Task<Instances> contains(MethodInput Input) {
+            public static async Task<Instance> contains(MethodInput Input) {
                 Instance ItemToFind = Input.Arguments[0];
                 foreach (Instance Item in Input.Instance.Array) {
-                    if ((await Item.InstanceMethods["=="].Call(Input.Script, Item, ItemToFind))[0].IsTruthy) {
+                    if ((await Item.InstanceMethods["=="].Call(Input.Script, Item, ItemToFind)).IsTruthy) {
                         return Input.Interpreter.True;
                     }
                 }
@@ -1137,7 +1163,7 @@ namespace Embers
             }
         }
         static class Hash {
-            public static async Task<Instances> _Indexer(MethodInput Input) {
+            public static async Task<Instance> _Indexer(MethodInput Input) {
                 // Get hash and key
                 Dictionary<Instance, Instance> Hash = Input.Instance.Hash;
                 Instance Key = Input.Arguments[0];
@@ -1148,61 +1174,61 @@ namespace Embers
                 }
                 else {
                     foreach (KeyValuePair<Instance, Instance> Item in Hash) {
-                        if ((await Item.Key.InstanceMethods["=="].Call(Input.Script, Item.Key, Key))[0].IsTruthy) {
+                        if ((await Item.Key.InstanceMethods["=="].Call(Input.Script, Item.Key, Key)).IsTruthy) {
                             return Item.Value;
                         }
                     }
                     return ((HashInstance)Input.Instance).DefaultValue;
                 }
             }
-            public static async Task<Instances> initialize(MethodInput Input) {
+            public static async Task<Instance> initialize(MethodInput Input) {
                 if (Input.Arguments.Count == 1) {
                     ((HashInstance)Input.Instance).SetValue(Input.Instance.Hash, Input.Arguments[0]);
                 }
                 return Input.Interpreter.Nil;
             }
-            public static async Task<Instances> has_key(MethodInput Input) {
+            public static async Task<Instance> has_key(MethodInput Input) {
                 Instance ItemToFind = Input.Arguments[0];
                 foreach (Instance Item in Input.Instance.Hash.Keys) {
-                    if ((await Item.InstanceMethods["=="].Call(Input.Script, Item, ItemToFind))[0].IsTruthy) {
+                    if ((await Item.InstanceMethods["=="].Call(Input.Script, Item, ItemToFind)).IsTruthy) {
                         return Input.Interpreter.True;
                     }
                 }
                 return Input.Interpreter.False;
             }
-            public static async Task<Instances> has_value(MethodInput Input) {
+            public static async Task<Instance> has_value(MethodInput Input) {
                 Instance ItemToFind = Input.Arguments[0];
                 foreach (Instance Item in Input.Instance.Hash.Values) {
-                    if ((await Item.InstanceMethods["=="].Call(Input.Script, Item, ItemToFind))[0].IsTruthy) {
+                    if ((await Item.InstanceMethods["=="].Call(Input.Script, Item, ItemToFind)).IsTruthy) {
                         return Input.Interpreter.True;
                     }
                 }
                 return Input.Interpreter.False;
             }
-            public static async Task<Instances> keys(MethodInput Input) {
+            public static async Task<Instance> keys(MethodInput Input) {
                 return new ArrayInstance(Input.Interpreter.Array, Input.Instance.Hash.Keys.ToList());
             }
-            public static async Task<Instances> values(MethodInput Input) {
+            public static async Task<Instance> values(MethodInput Input) {
                 return new ArrayInstance(Input.Interpreter.Array, Input.Instance.Hash.Values.ToList());
             }
-            public static async Task<Instances> invert(MethodInput Input) {
+            public static async Task<Instance> invert(MethodInput Input) {
                 HashInstance Hash = (HashInstance)Input.Instance;
                 Dictionary<Instance, Instance> Inverted = Hash.Hash.ToDictionary(kv => kv.Value, kv => kv.Key);
                 return new HashInstance(Input.Interpreter.Hash, Inverted, Hash.DefaultValue);
             }
-            public static async Task<Instances> to_a(MethodInput Input) {
+            public static async Task<Instance> to_a(MethodInput Input) {
                 List<Instance> Array = new();
                 foreach (KeyValuePair<Instance, Instance> Item in Input.Instance.Hash) {
                     Array.Add(new ArrayInstance(Input.Interpreter.Array, new List<Instance>() { Item.Key, Item.Value }));
                 }
                 return new ArrayInstance(Input.Interpreter.Array, Array);
             }
-            public static async Task<Instances> to_hash(MethodInput Input) {
+            public static async Task<Instance> to_hash(MethodInput Input) {
                 return Input.Instance;
             }
         }
         static class _Random {
-            public static async Task<Instances> rand(MethodInput Input) {
+            public static async Task<Instance> rand(MethodInput Input) {
                 // Integer random
                 if (Input.Arguments.Count == 1 && Input.Arguments[0] is IntegerInstance) {
                     long IncludingMin = 0;
@@ -1224,7 +1250,7 @@ namespace Embers
                     return new FloatInstance(Input.Interpreter.Float, RandomNumber);
                 }
             }
-            public static async Task<Instances> srand(MethodInput Input) {
+            public static async Task<Instance> srand(MethodInput Input) {
                 long PreviousSeed = Input.Interpreter.RandomSeed;
                 long NewSeed;
                 if (Input.Arguments.Count == 1) {
@@ -1241,58 +1267,58 @@ namespace Embers
             }
         }
         static class _Math {
-            public static async Task<Instances> sin(MethodInput Input) {
+            public static async Task<Instance> sin(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Math.Sin(Input.Arguments[0].Float));
             }
-            public static async Task<Instances> cos(MethodInput Input) {
+            public static async Task<Instance> cos(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Math.Cos(Input.Arguments[0].Float));
             }
-            public static async Task<Instances> tan(MethodInput Input) {
+            public static async Task<Instance> tan(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Math.Tan(Input.Arguments[0].Float));
             }
-            public static async Task<Instances> asin(MethodInput Input) {
+            public static async Task<Instance> asin(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Math.Asin(Input.Arguments[0].Float));
             }
-            public static async Task<Instances> acos(MethodInput Input) {
+            public static async Task<Instance> acos(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Math.Acos(Input.Arguments[0].Float));
             }
-            public static async Task<Instances> atan(MethodInput Input) {
+            public static async Task<Instance> atan(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Math.Atan(Input.Arguments[0].Float));
             }
-            public static async Task<Instances> atan2(MethodInput Input) {
+            public static async Task<Instance> atan2(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Math.Atan2(Input.Arguments[0].Float, Input.Arguments[1].Float));
             }
-            public static async Task<Instances> sinh(MethodInput Input) {
+            public static async Task<Instance> sinh(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Math.Sinh(Input.Arguments[0].Float));
             }
-            public static async Task<Instances> cosh(MethodInput Input) {
+            public static async Task<Instance> cosh(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Math.Cosh(Input.Arguments[0].Float));
             }
-            public static async Task<Instances> tanh(MethodInput Input) {
+            public static async Task<Instance> tanh(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Math.Tanh(Input.Arguments[0].Float));
             }
-            public static async Task<Instances> asinh(MethodInput Input) {
+            public static async Task<Instance> asinh(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Math.Asinh(Input.Arguments[0].Float));
             }
-            public static async Task<Instances> acosh(MethodInput Input) {
+            public static async Task<Instance> acosh(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Math.Acosh(Input.Arguments[0].Float));
             }
-            public static async Task<Instances> atanh(MethodInput Input) {
+            public static async Task<Instance> atanh(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Math.Atanh(Input.Arguments[0].Float));
             }
-            public static async Task<Instances> exp(MethodInput Input) {
+            public static async Task<Instance> exp(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Math.Exp(Input.Arguments[0].Float));
             }
-            public static async Task<Instances> log(MethodInput Input) {
+            public static async Task<Instance> log(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Math.Log(Input.Arguments[0].Float, Input.Arguments[1].Float));
             }
-            public static async Task<Instances> log10(MethodInput Input) {
+            public static async Task<Instance> log10(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Math.Log10(Input.Arguments[0].Float));
             }
-            public static async Task<Instances> log2(MethodInput Input) {
+            public static async Task<Instance> log2(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Math.Log2(Input.Arguments[0].Float));
             }
-            public static async Task<Instances> frexp(MethodInput Input) {
+            public static async Task<Instance> frexp(MethodInput Input) {
                 double Value = Input.Arguments[0].Float;
 
                 // Calculate fractional exponent
@@ -1327,18 +1353,18 @@ namespace Embers
                     new IntegerInstance(Input.Interpreter.Integer, E)
                 });
             }
-            public static async Task<Instances> ldexp(MethodInput Input) {
+            public static async Task<Instance> ldexp(MethodInput Input) {
                 double Fraction = Input.Arguments[0].Float;
                 long Exponent = Input.Arguments[1].Integer;
                 return new FloatInstance(Input.Interpreter.Float, Fraction * Math.Pow(2, Exponent));
             }
-            public static async Task<Instances> sqrt(MethodInput Input) {
+            public static async Task<Instance> sqrt(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Math.Sqrt(Input.Arguments[0].Float));
             }
-            public static async Task<Instances> cbrt(MethodInput Input) {
+            public static async Task<Instance> cbrt(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Math.Cbrt(Input.Arguments[0].Float));
             }
-            public static async Task<Instances> hypot(MethodInput Input) {
+            public static async Task<Instance> hypot(MethodInput Input) {
                 double A = Input.Arguments[0].Float;
                 double B = Input.Arguments[1].Float;
                 return new FloatInstance(Input.Interpreter.Float, Math.Sqrt(Math.Pow(A, 2) + Math.Pow(B, 2)));
@@ -1367,10 +1393,10 @@ namespace Embers
 
                 return sign * y;
             }
-            public static async Task<Instances> erf(MethodInput Input) {
+            public static async Task<Instance> erf(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, _Erf(Input.Arguments[0].Float));
             }
-            public static async Task<Instances> erfc(MethodInput Input) {
+            public static async Task<Instance> erfc(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, 1.0 - _Erf(Input.Arguments[0].Float));
             }
             private static double _Gamma(double z) {
@@ -1387,10 +1413,10 @@ namespace Embers
                 double t = z + g + 0.5;
                 return Math.Sqrt(2 * Math.PI) * (Math.Pow(t, z + 0.5)) * Math.Exp(-t) * x;
             }
-            public static async Task<Instances> gamma(MethodInput Input) {
+            public static async Task<Instance> gamma(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, _Gamma(Input.Arguments[0].Float));
             }
-            public static async Task<Instances> lgamma(MethodInput Input) {
+            public static async Task<Instance> lgamma(MethodInput Input) {
                 double Value = Input.Arguments[0].Float;
                 double GammaValue = _Gamma(Value);
                 double A = Math.Log(Math.Abs(GammaValue));
@@ -1402,13 +1428,13 @@ namespace Embers
             }
         }
         static class _Exception {
-            public static async Task<Instances> initialize(MethodInput Input) {
+            public static async Task<Instance> initialize(MethodInput Input) {
                 if (Input.Arguments.Count == 1) {
                     ((ExceptionInstance)Input.Instance).SetValue(Input.Arguments[0].String);
                 }
                 return Input.Interpreter.Nil;
             }
-            public static async Task<Instances> message(MethodInput Input) {
+            public static async Task<Instance> message(MethodInput Input) {
                 return new StringInstance(Input.Interpreter.String, Input.Instance.Exception.Message);
             }
         }

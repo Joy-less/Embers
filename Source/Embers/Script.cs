@@ -205,22 +205,25 @@ namespace Embers
                     InstanceMethods[Name] =
                     Module.InstanceMethods[Name] = Method;
             }
-            public async Task<Instances> TryCallInstanceMethod(Script Script, string MethodName, Instances? Arguments = null) {
+            public async Task<Instance> TryCallInstanceMethod(Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
                 // Found
                 if (InstanceMethods.TryGetValue(MethodName, out Method? FindMethod)) {
                     return await Script.CreateTemporaryClassScope(Module!, async () =>
-                        await FindMethod.Call(Script, this, Arguments)
+                        await FindMethod.Call(Script, this, Arguments, OnYield)
                     );
                 }
                 // Error
                 else {
-                    throw new RuntimeException($"{DebugLocation.Unknown}: Undefined method '{MethodName}' for {Module?.Name}");
+                    throw new RuntimeException($"{Script.ApproximateLocation}: Undefined method '{MethodName}' for {Module?.Name}");
                 }
             }
         }
         public class NilInstance : Instance {
             public override string Inspect() {
                 return "nil";
+            }
+            public override string LightInspect() {
+                return "";
             }
             public NilInstance(Class fromClass) : base(fromClass) { }
         }
@@ -485,29 +488,29 @@ namespace Embers
             }
         }
         public class Method {
-            Func<MethodInput, Task<Instances>> Function;
+            Func<MethodInput, Task<Instance>> Function;
             public readonly IntRange ArgumentCountRange;
             public readonly List<MethodArgumentExpression> ArgumentNames;
             public readonly bool Unsafe;
-            public Method(Func<MethodInput, Task<Instances>> function, IntRange? argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false) {
+            public Method(Func<MethodInput, Task<Instance>> function, IntRange? argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false) {
                 Function = function;
                 ArgumentCountRange = argumentCountRange ?? new IntRange();
                 ArgumentNames = argumentNames ?? new();
                 Unsafe = IsUnsafe;
             }
-            public Method(Func<MethodInput, Task<Instances>> function, Range argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false) {
+            public Method(Func<MethodInput, Task<Instance>> function, Range argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false) {
                 Function = function;
                 ArgumentCountRange = new IntRange(argumentCountRange);
                 ArgumentNames = argumentNames ?? new();
                 Unsafe = IsUnsafe;
             }
-            public Method(Func<MethodInput, Task<Instances>> function, int argumentCount, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false) {
+            public Method(Func<MethodInput, Task<Instance>> function, int argumentCount, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false) {
                 Function = function;
                 ArgumentCountRange = new IntRange(argumentCount, argumentCount);
                 ArgumentNames = argumentNames ?? new();
                 Unsafe = IsUnsafe;
             }
-            public async Task<Instances> Call(Script Script, Instance? OnInstance, Instances? Arguments = null, Method? OnYield = null, BreakHandleType BreakHandleType = BreakHandleType.Invalid) {
+            public async Task<Instance> Call(Script Script, Instance? OnInstance, Instances? Arguments = null, Method? OnYield = null, BreakHandleType BreakHandleType = BreakHandleType.Invalid) {
                 if (Unsafe && !Script.AllowUnsafeApi)
                     throw new RuntimeException($"{Script.ApproximateLocation}: This method is unavailable since 'AllowUnsafeApi' is disabled for this script.");
 
@@ -566,36 +569,36 @@ namespace Embers
                         }
                     }
                     // Call method
-                    Instances ReturnValues;
+                    Instance ReturnValue;
                     try {
-                        ReturnValues = await Function(new MethodInput(Script, OnInstance, Arguments, OnYield));
+                        ReturnValue = await Function(new MethodInput(Script, OnInstance, Arguments, OnYield));
                     }
                     catch (BreakException) {
                         if (BreakHandleType == BreakHandleType.Rethrow) {
                             throw;
                         }
                         else if (BreakHandleType == BreakHandleType.Destroy) {
-                            ReturnValues = Script.Interpreter.Nil;
+                            ReturnValue = Script.Interpreter.Nil;
                         }
                         else {
                             throw new SyntaxErrorException($"{Script.ApproximateLocation}: Invalid break (break must be in a loop)");
                         }
                     }
                     catch (ReturnException Ex) {
-                        ReturnValues = Ex.Instances;
+                        ReturnValue = Ex.Instance;
                     }
                     finally {
                         // Step back a scope
                         Script.CurrentObject.Pop();
                     }
                     // Return method return value
-                    return ReturnValues;
+                    return ReturnValue;
                 }
                 else {
                     throw new RuntimeException($"{Script.ApproximateLocation}: Wrong number of arguments (given {Arguments.Count}, expected {ArgumentCountRange})");
                 }
             }
-            public void ChangeFunction(Func<MethodInput, Task<Instances>> function) {
+            public void ChangeFunction(Func<MethodInput, Task<Instance>> function) {
                 Function = function;
             }
         }
@@ -847,7 +850,7 @@ namespace Embers
             return false;
         }
 
-        async Task<Instances> InterpretMethodCallExpression(MethodCallExpression MethodCallExpression) {
+        async Task<Instance> InterpretMethodCallExpression(MethodCallExpression MethodCallExpression) {
             Instance MethodPath = await InterpretExpressionAsync(MethodCallExpression.MethodPath, ReturnType.FoundVariable);
             if (MethodPath is VariableReference MethodReference) {
                 // Static method
@@ -914,7 +917,7 @@ namespace Embers
                 throw new InternalErrorException($"{MethodCallExpression.Location}: MethodPath should be VariableReference, not {MethodPath.GetType().Name}");
             }
         }
-        async Task<Instances> InterpretObjectTokenExpression(ObjectTokenExpression ObjectTokenExpression, ReturnType ReturnType) {
+        async Task<Instance> InterpretObjectTokenExpression(ObjectTokenExpression ObjectTokenExpression, ReturnType ReturnType) {
             // Path
             if (ObjectTokenExpression is PathExpression PathExpression) {
                 Instance ParentInstance = await InterpretExpressionAsync(PathExpression.ParentObject);
@@ -1134,8 +1137,8 @@ namespace Embers
                 }
             }
         }
-        async Task<Instances> InterpretIfExpression(IfExpression IfExpression) {
-            if (IfExpression.Condition == null || (await InterpretExpressionAsync(IfExpression.Condition))[0].IsTruthy != IfExpression.Inverse) {
+        async Task<Instance> InterpretIfExpression(IfExpression IfExpression) {
+            if (IfExpression.Condition == null || (await InterpretExpressionAsync(IfExpression.Condition)).IsTruthy != IfExpression.Inverse) {
                 return await InternalInterpretAsync(IfExpression.Statements);
             }
             return Interpreter.Nil;
@@ -1154,8 +1157,8 @@ namespace Embers
             }
             return new HashInstance(Interpreter.Hash, Items, Interpreter.Nil);
         }
-        async Task<Instances> InterpretWhileExpression(WhileExpression WhileExpression) {
-            while ((await InterpretExpressionAsync(WhileExpression.Condition!))[0].IsTruthy != WhileExpression.Inverse) {
+        async Task<Instance> InterpretWhileExpression(WhileExpression WhileExpression) {
+            while ((await InterpretExpressionAsync(WhileExpression.Condition!)).IsTruthy != WhileExpression.Inverse) {
                 try {
                     await InternalInterpretAsync(WhileExpression.Statements);
                 }
@@ -1177,7 +1180,7 @@ namespace Embers
             }
             return Interpreter.Nil;
         }
-        async Task<Instances> InterpretWhileStatement(WhileStatement WhileStatement) {
+        async Task<Instance> InterpretWhileStatement(WhileStatement WhileStatement) {
             try {
                 // Create scope
                 CurrentObject.Push(new Scope(CurrentObject));
@@ -1191,7 +1194,7 @@ namespace Embers
             //
             return Interpreter.Nil;
         }
-        async Task<Instances> InterpretForStatement(ForStatement ForStatement) {
+        async Task<Instance> InterpretForStatement(ForStatement ForStatement) {
             Instance InResult = await InterpretExpressionAsync(ForStatement.InExpression);
             if (InResult.InstanceMethods.TryGetValue("each", out Method? EachMethod)) {
                 await EachMethod.Call(this, InResult, OnYield: ForStatement.BlockStatementsMethod);
@@ -1201,15 +1204,15 @@ namespace Embers
             }
             return Interpreter.Nil;
         }
-        async Task<Instances> InterpretLogicalExpression(LogicalExpression LogicalExpression) {
-            Instance Left = (await InterpretExpressionAsync(LogicalExpression.Left)).SingleInstance;
+        async Task<Instance> InterpretLogicalExpression(LogicalExpression LogicalExpression) {
+            Instance Left = await InterpretExpressionAsync(LogicalExpression.Left);
             switch (LogicalExpression.LogicType) {
                 case LogicalExpression.LogicalExpressionType.And:
                     if (!Left.IsTruthy)
                         return Left;
                     break;
             }
-            Instance Right = (await InterpretExpressionAsync(LogicalExpression.Right)).SingleInstance;
+            Instance Right = await InterpretExpressionAsync(LogicalExpression.Right);
             switch (LogicalExpression.LogicType) {
                 case LogicalExpression.LogicalExpressionType.And:
                     return Right;
@@ -1229,7 +1232,7 @@ namespace Embers
                     throw new InternalErrorException($"{LogicalExpression.Location}: Unhandled logical expression type: '{LogicalExpression.LogicType}'");
             }
         }
-        async Task<Instances> InterpretDefineMethodStatement(DefineMethodStatement DefineMethodStatement) {
+        async Task<Instance> InterpretDefineMethodStatement(DefineMethodStatement DefineMethodStatement) {
             Instance MethodNameObject = await InterpretExpressionAsync(DefineMethodStatement.MethodName, ReturnType.HypotheticalVariable);
             if (MethodNameObject is VariableReference MethodNameRef) {
                 string MethodName = MethodNameRef.Token.Value!;
@@ -1260,7 +1263,7 @@ namespace Embers
             }
             return Interpreter.Nil;
         }
-        async Task<Instances> InterpretDefineClassStatement(DefineClassStatement DefineClassStatement) {
+        async Task<Instance> InterpretDefineClassStatement(DefineClassStatement DefineClassStatement) {
             Instance ClassNameObject = await InterpretExpressionAsync(DefineClassStatement.ClassName, ReturnType.HypotheticalVariable);
             if (ClassNameObject is VariableReference ClassNameRef) {
                 string ClassName = ClassNameRef.Token.Value!;
@@ -1317,7 +1320,7 @@ namespace Embers
             }
             return Interpreter.Nil;
         }
-        async Task<Instances> InterpretYieldStatement(YieldStatement YieldStatement, Method? OnYield) {
+        async Task<Instance> InterpretYieldStatement(YieldStatement YieldStatement, Method? OnYield) {
             if (OnYield != null) {
                 List<Instance> YieldArgs = YieldStatement.YieldValues != null
                     ? await InterpretExpressionsAsync(YieldStatement.YieldValues)
@@ -1329,7 +1332,7 @@ namespace Embers
             }
             return Interpreter.Nil;
         }
-        async Task<Instances> InterpretRangeExpression(RangeExpression RangeExpression) {
+        async Task<Instance> InterpretRangeExpression(RangeExpression RangeExpression) {
             Instance? RawMin = null;
             if (RangeExpression.Min != null) RawMin = await InterpretExpressionAsync(RangeExpression.Min);
             Instance? RawMax = null;
@@ -1348,7 +1351,7 @@ namespace Embers
                 throw new RuntimeException($"{RangeExpression.Location}: Range bounds must be integers (got '{RawMin?.LightInspect()}' and '{RawMax?.LightInspect()}')");
             }
         }
-        async Task<Instances> InterpretIfBranchesStatement(IfBranchesStatement IfStatement) {
+        async Task<Instance> InterpretIfBranchesStatement(IfBranchesStatement IfStatement) {
             for (int i = 0; i < IfStatement.Branches.Count; i++) {
                 IfExpression Branch = IfStatement.Branches[i];
                 // If / elsif
@@ -1387,7 +1390,7 @@ namespace Embers
             }
             return Interpreter.Nil;
         }
-        async Task<Instances> InterpretBeginBranchesStatement(BeginBranchesStatement BeginBranchesStatement) {
+        async Task<Instance> InterpretBeginBranchesStatement(BeginBranchesStatement BeginBranchesStatement) {
             // Begin
             BeginStatement BeginBranch = (BeginStatement)BeginBranchesStatement.Branches[0];
             Exception? ExceptionToRescue = null;
@@ -1470,12 +1473,19 @@ namespace Embers
 
             return Interpreter.Nil;
         }
-        async Task<Instances> InterpretAssignmentExpression(AssignmentExpression AssignmentExpression, ReturnType ReturnType) {
+        async Task<Instance> InterpretAssignmentExpression(AssignmentExpression AssignmentExpression, ReturnType ReturnType) {
             async Task AssignToVariable(VariableReference Variable, Instance Value) {
                 switch (Variable.Token.Type) {
                     case Phase2TokenType.LocalVariableOrMethod:
-                        lock (CurrentBlock.LocalVariables)
-                            CurrentBlock.LocalVariables[Variable.Token.Value!] = Value;
+                        // call variable=
+                        if (Variable.Instance != null) {
+                            await Variable.Instance.TryCallInstanceMethod(this, Variable.Token.Value! + "=", Value);
+                        }
+                        // set variable =
+                        else {
+                            lock (CurrentBlock.LocalVariables)
+                                CurrentBlock.LocalVariables[Variable.Token.Value!] = Value;
+                        }
                         break;
                     case Phase2TokenType.GlobalVariable:
                         lock (Interpreter.GlobalVariables)
@@ -1524,7 +1534,7 @@ namespace Embers
                 throw new RuntimeException($"{AssignmentExpression.Left.Location}: {Left.GetType()} cannot be the target of an assignment");
             }
         }
-        async Task<Instances> InterpretUndefineMethodStatement(UndefineMethodStatement UndefineMethodStatement) {
+        async Task<Instance> InterpretUndefineMethodStatement(UndefineMethodStatement UndefineMethodStatement) {
             string MethodName = UndefineMethodStatement.MethodName.Token.Value!;
             if (MethodName == "initialize") {
                 await Warn($"{UndefineMethodStatement.MethodName.Token.Location}: undefining 'initialize' may cause serious problems");
@@ -1534,7 +1544,7 @@ namespace Embers
             }
             return Interpreter.Nil;
         }
-        async Task<Instances> InterpretDefinedExpression(DefinedExpression DefinedExpression) {
+        async Task<Instance> InterpretDefinedExpression(DefinedExpression DefinedExpression) {
             if (DefinedExpression.Expression is MethodCallExpression || DefinedExpression.Expression is PathExpression) {
                 return new StringInstance(Interpreter.String, "method");
             }
@@ -1580,13 +1590,13 @@ namespace Embers
                 throw new InternalErrorException($"{DefinedExpression.Location}: Unknown expression type for defined?: {DefinedExpression.Expression.GetType().Name}");
             }
         }
-        async Task<Instances> InterpretHashArgumentsExpression(HashArgumentsExpression HashArgumentsExpression) {
+        async Task<Instance> InterpretHashArgumentsExpression(HashArgumentsExpression HashArgumentsExpression) {
             return new HashArgumentsInstance(
                 await InterpretHashExpression(HashArgumentsExpression.HashExpression),
                 Interpreter
             );
         }
-        async Task<Instances> InterpretEnvironmentInfoExpression(EnvironmentInfoExpression EnvironmentInfoExpression) {
+        async Task<Instance> InterpretEnvironmentInfoExpression(EnvironmentInfoExpression EnvironmentInfoExpression) {
             if (EnvironmentInfoExpression.Type == EnvironmentInfoType.__LINE__) {
                 return new IntegerInstance(Interpreter.Integer, ApproximateLocation.Line);
             }
@@ -1605,7 +1615,7 @@ namespace Embers
             FoundVariable,
             HypotheticalVariable
         }
-        async Task<Instances> InterpretExpressionAsync(Expression Expression, ReturnType ReturnType = ReturnType.InterpretResult, Method? OnYield = null) {
+        async Task<Instance> InterpretExpressionAsync(Expression Expression, ReturnType ReturnType = ReturnType.InterpretResult, Method? OnYield = null) {
             // Set approximate location
             ApproximateLocation = Expression.Location;
 
@@ -1654,7 +1664,7 @@ namespace Embers
         }
         internal async Task<Instance> InternalInterpretAsync(List<Expression> Statements, Method? OnYield = null) {
             // Interpret statements
-            Instances LastInstance = Interpreter.Nil;
+            Instance LastInstance = Interpreter.Nil;
             for (int Index = 0; Index < Statements.Count; Index++) {
                 // Interpret expression and store the result
                 Expression Statement = Statements[Index];
@@ -1686,7 +1696,7 @@ namespace Embers
                 throw new SyntaxErrorException($"{ApproximateLocation}: Invalid {Ex.GetType().Name} (must be in a loop)");
             }
             catch (ReturnException Ex) {
-                return Ex.Instances;
+                return Ex.Instance;
             }
             catch (ExitException) {
                 return Interpreter.Nil;

@@ -107,8 +107,9 @@ namespace Embers
 
         public class Phase2Token : Phase2Object {
             public readonly Phase2TokenType Type;
-            public readonly string? Value;
+            public string? Value;
             public readonly bool FollowsWhitespace;
+            public readonly bool FollowedByWhitespace;
             public readonly bool ProcessFormatting;
 
             public readonly bool IsObjectToken;
@@ -123,6 +124,7 @@ namespace Embers
                 if (fromPhase1Token != null) {
                     FromPhase1Token = fromPhase1Token;
                     FollowsWhitespace = fromPhase1Token.FollowsWhitespace;
+                    FollowedByWhitespace = fromPhase1Token.FollowedByWhitespace;
                     ProcessFormatting = fromPhase1Token.ProcessFormatting;
                 }
 
@@ -766,40 +768,28 @@ namespace Embers
             return SplitObjects;
         }*/
         public static bool IsObjectToken(Phase2TokenType? Type) {
-            return Type == Phase2TokenType.Nil
-                || Type == Phase2TokenType.True
-                || Type == Phase2TokenType.False
-                || Type == Phase2TokenType.String
-                || Type == Phase2TokenType.Integer
-                || Type == Phase2TokenType.Float;
+            return Type is Phase2TokenType.Nil
+                or Phase2TokenType.True
+                or Phase2TokenType.False
+                or Phase2TokenType.String
+                or Phase2TokenType.Integer
+                or Phase2TokenType.Float;
         }
         public static bool IsObjectToken(Phase2Token? Token) {
             return Token != null && IsObjectToken(Token.Type);
         }
         public static bool IsVariableToken(Phase2TokenType? Type) {
-            return Type == Phase2TokenType.LocalVariableOrMethod
-                || Type == Phase2TokenType.GlobalVariable
-                || Type == Phase2TokenType.ConstantOrMethod
-                || Type == Phase2TokenType.InstanceVariable
-                || Type == Phase2TokenType.ClassVariable
-                || Type == Phase2TokenType.Symbol
-                || Type == Phase2TokenType.Self;
+            return Type is Phase2TokenType.LocalVariableOrMethod
+                or Phase2TokenType.GlobalVariable
+                or Phase2TokenType.ConstantOrMethod
+                or Phase2TokenType.InstanceVariable
+                or Phase2TokenType.ClassVariable
+                or Phase2TokenType.Symbol
+                or Phase2TokenType.Self;
         }
         public static bool IsVariableToken(Phase2Token? Token) {
             return Token != null && IsVariableToken(Token.Type);
         }
-        /*public static bool IsStartBlockToken(Phase2TokenType? Type) {
-            return Type == Phase2TokenType.Def
-                || Type == Phase2TokenType.Module
-                || Type == Phase2TokenType.Class
-                || Type == Phase2TokenType.Do
-                || Type == Phase2TokenType.StartCurly
-                || Type == Phase2TokenType.If
-                || Type == Phase2TokenType.While;
-        }
-        public static bool IsStartBlockToken(Phase2Token? Token) {
-            return Token != null && IsStartBlockToken(Token.Type);
-        }*/
 
         static List<Phase2Token> TokensToPhase2(List<Phase1Token> Tokens) {
             // Phase 1 tokens to phase 2 tokens
@@ -891,8 +881,8 @@ namespace Embers
             // No brackets e.g. puts "hi"
             else {
                 ArgumentObjects = GetObjectsUntil(Objects, ref Index, Object => (Object is Phase2Token Token
-                    && (Token.Type == Phase2TokenType.EndOfStatement || Token.Type == Phase2TokenType.If || Token.Type == Phase2TokenType.Unless
-                    || Token.Type == Phase2TokenType.While || Token.Type == Phase2TokenType.Until)) || Object is Statement || (Object is DoExpression Do && !Do.HighPriority)
+                    && (Token.Type is Phase2TokenType.EndOfStatement or Phase2TokenType.If or Phase2TokenType.Unless
+                    or Phase2TokenType.While or Phase2TokenType.Until)) || Object is Statement || (Object is DoExpression Do && !Do.HighPriority)
                 );
                 Index--;
             }
@@ -996,10 +986,24 @@ namespace Embers
                             throw new SyntaxErrorException($"{Token.Location}: Expected expression before and after .");
                         }
                     }
-                    else if (Token.IsObjectToken || Token.Type == Phase2TokenType.OpenBracket
-                        || Token.Type == Phase2TokenType.SplatOperator || Token.Type == Phase2TokenType.EndOfStatement)
-                    {
+                    else if (Token.IsObjectToken || Token.Type is Phase2TokenType.OpenBracket or Phase2TokenType.SplatOperator or Phase2TokenType.EndOfStatement) {
                         break;
+                    }
+                    // def variable=
+                    else if (Token.Type == Phase2TokenType.AssignmentOperator) {
+                        if (Token.Value! == "=" && MethodNamePath.Count >= 1 && IsVariableToken(MethodNamePath[^1])) {
+                            MethodNamePath[^1].Value += "=";
+                            Index++;
+                            break;
+                        }
+                    }
+                    // def +, def -, def *, def /, def %, def **, def ==, def <, def >, def <=, def >=, def <<, def <=>
+                    else if (Token.Type == Phase2TokenType.Operator) {
+                        if (Token.Value is "+" or "-" or "*" or "/" or "%" or "<" or ">" or "**" or "==" or "<=" or ">=" or "<<" or "<=>") {
+                            MethodNamePath.Add(new Phase2Token(Token.Location, Phase2TokenType.LocalVariableOrMethod, Token.Value));
+                            Index++;
+                            break;
+                        }
                     }
                 }
                 else if (Object is ObjectTokenExpression ObjectToken) {
@@ -1094,7 +1098,7 @@ namespace Embers
                         List<Phase2Object> DefaultValueObjects = new();
                         for (Index++; Index < Phase2Objects.Count; Index++) {
                             if (Phase2Objects[Index] is Phase2Token Tok
-                                && (Tok.Type == Phase2TokenType.Comma || Tok.Type == Phase2TokenType.CloseBracket || Tok.Type == Phase2TokenType.Pipe || Tok.Type == Phase2TokenType.EndOfStatement))
+                                && (Tok.Type is Phase2TokenType.Comma or Phase2TokenType.CloseBracket or Phase2TokenType.Pipe or Phase2TokenType.EndOfStatement))
                             {
                                 Index--;
                                 break;
@@ -1307,39 +1311,6 @@ namespace Embers
 
                 MethodExpression OnYield = new(DoBlock.Location, DoBlock.Statements, null, DoBlock.Arguments);
                 return new DoExpression(OnYield, DoBlock.DoIsCurly);
-
-                /*// Get last block
-                BuildingBlock LastBlock = CurrentBlocks.Peek();
-                if (LastBlock != null && LastBlock.Statements.Count != 0) {
-                    // Get last expression in last statement
-                    Expression LastStatement = LastBlock.Statements[^1];
-
-                    MethodExpression OnYield = new(DoBlock.Location, DoBlock.Statements, null, DoBlock.Arguments);
-
-                    // Set on yield for previously known method call
-                    if (LastStatement is MethodCallExpression LastMethodCallExpression) {
-                        LastMethodCallExpression.OnYield = OnYield;
-                        return null;
-                    }
-                    // Set on yield for LocalVariableOrMethod/ConstantOrMethod which we now know is a method call
-                    else if (LastStatement is ObjectTokenExpression LastObjectTokenExpression) {
-                        if (LastObjectTokenExpression.Token.Type == Phase2TokenType.LocalVariableOrMethod || LastObjectTokenExpression.Token.Type == Phase2TokenType.ConstantOrMethod) {
-                            // Create method call from LocalVariableOrMethod/ConstantOrMethod
-                            MethodCallExpression DeducedMethodCallExpression = new(LastObjectTokenExpression, null, OnYield);
-                            LastBlock.Statements[^1] = DeducedMethodCallExpression;
-                            return null;
-                        }
-                        else {
-                            throw new SyntaxErrorException($"{DoBlock.Location}: Do block must follow method call, not {LastObjectTokenExpression.Token.Type}");
-                        }
-                    }
-                    else {
-                        throw new SyntaxErrorException($"{DoBlock.Location}: Do block must follow method call, not {LastStatement.GetType().Name}");
-                    }
-                }
-                else {
-                    throw new SyntaxErrorException($"{DoBlock.Location}: Do block must follow method call");
-                }*/
             }
             // End If Block
             else if (Block is BuildingIfBranches IfBranches) {
@@ -1428,7 +1399,7 @@ namespace Embers
         static BuildingIf ParseIf(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index, bool Inverse = false) {
             // Get condition
             Index++;
-            List<Phase2Object> ConditionObjects = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type == Phase2TokenType.Then || Tok.Type == Phase2TokenType.EndOfStatement));
+            List<Phase2Object> ConditionObjects = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type is Phase2TokenType.Then or Phase2TokenType.EndOfStatement));
             Expression ConditionExpression = ObjectsToExpression(ConditionObjects);
 
             // Open if block
@@ -1441,7 +1412,7 @@ namespace Embers
             Phase2Token? ExceptionVariable = null;
             {
                 // Get exception
-                List<Phase2Object> ExceptionObjects = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type == Phase2TokenType.RightArrow || Tok.Type == Phase2TokenType.EndOfStatement));
+                List<Phase2Object> ExceptionObjects = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type is Phase2TokenType.RightArrow or Phase2TokenType.EndOfStatement));
                 if (ExceptionObjects.Count != 0) {
                     ExceptionExpression = ObjectsToExpression(ExceptionObjects) as ObjectTokenExpression
                         ?? throw new SyntaxErrorException($"{Location}: Expected exception or end of statement after 'rescue', got '{ExceptionObjects.Inspect()}'");
@@ -1479,7 +1450,7 @@ namespace Embers
                 if (Index < StatementTokens.Count && StatementTokens[Index] is Phase2Token Tok && Tok.Type == Phase2TokenType.In) {
                     // Get in expression
                     Index++;
-                    List<Phase2Object> In = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type == Phase2TokenType.Do || Tok.Type == Phase2TokenType.EndOfStatement));
+                    List<Phase2Object> In = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type is Phase2TokenType.Do or Phase2TokenType.EndOfStatement));
                     Expression InExpression = ObjectsToExpression(In);
 
                     // Open for block
@@ -1584,7 +1555,7 @@ namespace Embers
 
                             i++;
                             List<Phase2Object> Condition = GetObjectsUntil(ParsedObjects, ref i, Obj =>
-                                Obj is Phase2Token Tok && (Tok.Type == Phase2TokenType.EndOfStatement || Tok.Type == Phase2TokenType.Do));
+                                Obj is Phase2Token Tok && (Tok.Type is Phase2TokenType.EndOfStatement or Phase2TokenType.Do));
 
                             // Open while/until block
                             if (Token.Type == Phase2TokenType.While) {
@@ -1800,7 +1771,7 @@ namespace Embers
             for (int i = 0; i < ParsedObjects.Count; i++) {
                 Phase2Object UnknownObject = ParsedObjects[i];
 
-                if (UnknownObject is ObjectTokenExpression ObjectToken && (ObjectToken.Token.Type == Phase2TokenType.LocalVariableOrMethod || ObjectToken.Token.Type == Phase2TokenType.ConstantOrMethod)) {
+                if (UnknownObject is ObjectTokenExpression ObjectToken && (ObjectToken.Token.Type is Phase2TokenType.LocalVariableOrMethod or Phase2TokenType.ConstantOrMethod)) {
                     if (i + 1 < ParsedObjects.Count && ParsedObjects[i + 1] is Phase2Token NextToken && NextToken.Type == Phase2TokenType.OpenBracket) {
                         ParseMethodCall(ObjectToken, i, true);
                     }
@@ -1848,7 +1819,7 @@ namespace Embers
                     }
                     // Set on yield for LocalVariableOrMethod/ConstantOrMethod which we now know is a method call
                     else if (LastObject is ObjectTokenExpression LastObjectTokenExpression) {
-                        if (LastObjectTokenExpression.Token.Type == Phase2TokenType.LocalVariableOrMethod || LastObjectTokenExpression.Token.Type == Phase2TokenType.ConstantOrMethod) {
+                        if (LastObjectTokenExpression.Token.Type is Phase2TokenType.LocalVariableOrMethod or Phase2TokenType.ConstantOrMethod) {
                             // Create method call from LocalVariableOrMethod/ConstantOrMethod
                             MethodCallExpression DeducedMethodCallExpression = new(LastObjectTokenExpression, null, DoExpression.OnYield);
                             ParsedObjects[Index - 1] = DeducedMethodCallExpression;
@@ -1947,7 +1918,7 @@ namespace Embers
 
                 if (Object is Phase2Token Token) {
                     // Path or Constant Path
-                    if (Token.Type == Phase2TokenType.Dot || Token.Type == Phase2TokenType.DoubleColon) {
+                    if (Token.Type is Phase2TokenType.Dot or Phase2TokenType.DoubleColon) {
                         if (LastObject != null) {
                             // e.g. A + . + b = A.b
                             if (LastObject is Expression LastExpression && NextObject is ObjectTokenExpression NextToken) {
@@ -2024,8 +1995,8 @@ namespace Embers
 
                         // Add method call expression for unary operator
                         if (NextObjectToken != null) {
-                            bool DoesNotFollowExpression = LastUnknownObject == null || LastUnknownObject is not Expression;
-                            bool HasNoWhitespace = !NextObjectToken.Token.FollowsWhitespace;
+                            bool DoesNotFollowExpression = LastUnknownObject is null or not Expression;
+                            bool HasNoWhitespace = !Token.FollowedByWhitespace;
 
                             if (DoesNotFollowExpression || HasNoWhitespace) {
                                 ParsedObjects.RemoveRange(i, 2);
@@ -2135,7 +2106,7 @@ namespace Embers
             for (int i = 0; i < ParsedObjects.Count; i++) {
                 Phase2Object UnknownObject = ParsedObjects[i];
 
-                if (UnknownObject is ObjectTokenExpression ObjectToken && (ObjectToken.Token.Type == Phase2TokenType.LocalVariableOrMethod || ObjectToken.Token.Type == Phase2TokenType.ConstantOrMethod)) {
+                if (UnknownObject is ObjectTokenExpression ObjectToken && (ObjectToken.Token.Type is Phase2TokenType.LocalVariableOrMethod or Phase2TokenType.ConstantOrMethod)) {
                     ParseMethodCall(ObjectToken, i, false);
                 }
             }
@@ -2230,7 +2201,7 @@ namespace Embers
                 Phase2Object UnknownObject = ParsedObjects[i];
 
                 if (UnknownObject is Phase2Token Token) {
-                    if (Token.Type == Phase2TokenType.If || Token.Type == Phase2TokenType.Unless || Token.Type == Phase2TokenType.While || Token.Type == Phase2TokenType.Until) {
+                    if (Token.Type is Phase2TokenType.If or Phase2TokenType.Unless or Phase2TokenType.While or Phase2TokenType.Until) {
                         if (i - 1 >= 0 && ParsedObjects[i - 1] is Expression Statement) {
                             if (i + 1 < ParsedObjects.Count && ParsedObjects[i + 1] is Expression Condition) {
                                 // Remove three expressions
@@ -2312,7 +2283,7 @@ namespace Embers
                         if (ParsedObject is Statement ParsedStatement) {
                             throw new SyntaxErrorException($"{ParsedObject.Location}: Unexpected statement: {ParsedStatement.Inspect()}");
                         }
-                        else if (ParsedObject is Expression ParsedExpression && (Phase == 0 || Phase == 2)) {
+                        else if (ParsedObject is Expression ParsedExpression && (Phase is 0 or 2)) {
                             Expressions.Add(ParsedExpression);
                             Phase++;
                             if (Phase == 1) {

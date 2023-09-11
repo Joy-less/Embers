@@ -255,6 +255,20 @@ namespace Embers_Tests
             AssertEqual(@"
                 return 'Hi there'[2..10]
             ", " there");
+
+            // Operator overloading
+            AssertEqual(@"
+class Z
+    def +(value)
+        'Zzz' + value
+    end
+    def <=(value)
+        'No idea'
+    end
+end
+y = Z.new
+return y + '...', y <= 5
+", new object[] {"Zzz...", "No idea"});
         }
 
 
