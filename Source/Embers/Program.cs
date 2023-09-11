@@ -25,8 +25,11 @@ namespace Embers
 begin
     raise Exception.new('hi')
 rescue # rescue Exception => ex
-    puts ex.message
+    p 'rescued' # ex.message
 end
+
+p 1.728e21
+p 0x234
                     ")
                 );
                 Console.ReadLine();

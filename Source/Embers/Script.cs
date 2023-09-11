@@ -1,5 +1,5 @@
-﻿using static Embers.Phase2;
-using static Embers.Script;
+﻿using System.Runtime.CompilerServices;
+using static Embers.Phase2;
 
 #pragma warning disable CS1998
 
@@ -18,28 +18,30 @@ namespace Embers
         Module CurrentModule => (Module)CurrentObject.First(obj => obj is Module);
         Instance CurrentInstance => (Instance)CurrentObject.First(obj => obj is Instance);
 
+        internal readonly ConditionalWeakTable<Exception, ExceptionInstance> ExceptionsTable = new();
+
         public Instance CreateInstanceWithNew(Class Class) {
-            if (Class == Interpreter.NilClass)
+            if (Class.InheritsFrom(Interpreter.NilClass))
                 return new NilInstance(Interpreter.NilClass);
-            else if (Class == Interpreter.TrueClass)
+            else if (Class.InheritsFrom(Interpreter.TrueClass))
                 return new TrueInstance(Interpreter.TrueClass);
-            else if (Class == Interpreter.FalseClass)
+            else if (Class.InheritsFrom(Interpreter.FalseClass))
                 return new FalseInstance(Interpreter.FalseClass);
-            else if (Class == Interpreter.String)
+            else if (Class.InheritsFrom(Interpreter.String))
                 return new StringInstance(Interpreter.String, "");
-            else if (Class == Interpreter.Symbol)
+            else if (Class.InheritsFrom(Interpreter.Symbol))
                 return new SymbolInstance(Interpreter.Symbol, "");
-            else if (Class == Interpreter.Integer)
+            else if (Class.InheritsFrom(Interpreter.Integer))
                 return new IntegerInstance(Interpreter.Integer, 0);
-            else if (Class == Interpreter.Float)
+            else if (Class.InheritsFrom(Interpreter.Float))
                 return new FloatInstance(Interpreter.Float, 0);
-            else if (Class == Interpreter.Proc)
+            else if (Class.InheritsFrom(Interpreter.Proc))
                 throw new RuntimeException($"{ApproximateLocation}: Tried to create Proc object without a block");
-            else if (Class == Interpreter.Array)
+            else if (Class.InheritsFrom(Interpreter.Array))
                 return new ArrayInstance(Interpreter.Array, new List<Instance>());
-            else if (Class == Interpreter.Hash)
+            else if (Class.InheritsFrom(Interpreter.Hash))
                 return new HashInstance(Interpreter.Hash, new Dictionary<Instance, Instance>(), Interpreter.Nil);
-            else if (Class == Interpreter.Exception)
+            else if (Class.InheritsFrom(Interpreter.Exception))
                 return new ExceptionInstance(Interpreter.Exception, "");
             else
                 return new Instance(Class);
@@ -77,6 +79,18 @@ namespace Embers
                 Api.DefaultClassAndInstanceMethods.CopyTo(InstanceMethods);
                 Api.DefaultClassAndInstanceMethods.CopyTo(Methods);
                 Api.DefaultInstanceMethods.CopyTo(InstanceMethods);
+            }
+            public bool InheritsFrom(Module Ancestor) {
+                Module CurrentAncestor = this;
+                while (true) {
+                    if (CurrentAncestor == Ancestor)
+                        return true;
+
+                    if (CurrentAncestor.Parent is Module ModuleAncestor)
+                        CurrentAncestor = ModuleAncestor;
+                    else
+                        return false;
+                }
             }
         }
         public class Class : Module {
@@ -128,7 +142,7 @@ namespace Embers
             public virtual LongRange Range { get { throw new RuntimeException("Instance is not a range"); } }
             public virtual List<Instance> Array { get { throw new RuntimeException("Instance is not an array"); } }
             public virtual Dictionary<Instance, Instance> Hash { get { throw new RuntimeException("Instance is not a hash"); } }
-            public virtual RaiseException Exception { get { throw new RuntimeException("Instance is not an exception"); } }
+            public virtual Exception Exception { get { throw new RuntimeException("Instance is not an exception"); } }
             public virtual Module ModuleRef { get { throw new ApiException("Instance is not a class/module reference"); } }
             public virtual Method MethodRef { get { throw new ApiException("Instance is not a method reference"); } }
             public virtual string Inspect() {
@@ -400,17 +414,17 @@ namespace Embers
             }
         }
         public class ExceptionInstance : Instance {
-            RaiseException Value;
+            Exception Value;
             public override object? Object { get { return Value; } }
-            public override RaiseException Exception { get { return Value; } }
+            public override Exception Exception { get { return Value; } }
             public override string Inspect() {
                 return $"Exception('{Value.Message}')";
             }
             public ExceptionInstance(Class fromClass, string message) : base(fromClass) {
-                Value = new RaiseException(this, message);
+                Value = new Exception(message);
             }
             public void SetValue(string message) {
-                Value = new RaiseException(this, message);
+                Value = new Exception(message);
             }
         }
         public abstract class PseudoInstance : Instance {
@@ -1340,29 +1354,33 @@ namespace Embers
                 if (Branch.Condition != null) {
                     Instance ConditionResult = await InterpretExpressionAsync(Branch.Condition);
                     if (ConditionResult.IsTruthy != Branch.Inverse) {
+                        Instance LastInstance;
                         try {
                             // Create scope
                             CurrentObject.Push(new Scope(CurrentObject));
                             // Run statements
-                            await InternalInterpretAsync(Branch.Statements);
+                            LastInstance = await InternalInterpretAsync(Branch.Statements);
                         }
                         finally {
                             // Step back a scope
                             CurrentObject.Pop();
                         }
+                        return LastInstance;
                     }
                 }
                 else {
+                    Instance LastInstance;
                     try {
                         // Create scope
                         CurrentObject.Push(new Scope(CurrentObject));
                         // Run statements
-                        await InternalInterpretAsync(Branch.Statements);
+                        LastInstance = await InternalInterpretAsync(Branch.Statements);
                     }
                     finally {
                         // Step back a scope
                         CurrentObject.Pop();
                     }
+                    return LastInstance;
                 }
             }
             return Interpreter.Nil;
@@ -1381,14 +1399,14 @@ namespace Embers
 
             // Begin
             BeginStatement BeginBranch = (BeginStatement)BeginBranchesStatement.Branches[0];
-            RaiseException? ExceptionToRescue = null;
+            Exception? ExceptionToRescue = null;
             try {
                 // Create scope
                 CurrentObject.Push(new Scope(CurrentObject));
                 // Run statements
                 await InternalInterpretAsync(BeginBranch.Statements);
             }
-            catch (RaiseException Ex) {
+            catch (Exception Ex) {
                 ExceptionToRescue = Ex;
             }
             finally {
@@ -1402,23 +1420,28 @@ namespace Embers
                 for (int i = 1; i < BeginBranchesStatement.Branches.Count; i++) {
                     BeginComponentStatement Branch = BeginBranchesStatement.Branches[i];
                     if (Branch is RescueStatement RescueStatement) {
+                        // Get or create the exception to rescue
+                        ExceptionsTable.TryGetValue(ExceptionToRescue, out ExceptionInstance? ExceptionInstance);
+                        ExceptionInstance ??= new(Interpreter.StandardError, ExceptionToRescue.Message);
+                        // Check whether rescue applies to this exception
                         bool CanRescue = false;
                         if (RescueStatement.Exception == null) {
                             CanRescue = true;
                         }
                         else {
                             Instance RescuingException = await InterpretExpressionAsync(RescueStatement.Exception, ReturnType.FoundVariable);
-                            if (RescuingException.Module == ExceptionToRescue.ExceptionInstance.Module) {
+                            if (RescuingException.Module == ExceptionInstance.Module) {
                                 CanRescue = true;
                             }
                         }
+                        // Run the statements in the rescue block
                         if (CanRescue) {
                             try {
                                 // Create scope
                                 CurrentObject.Push(new Scope(CurrentObject));
                                 // Set exception variable to exception instance
                                 if (RescueStatement.ExceptionVariable != null) {
-                                    CurrentScope.LocalVariables[RescueStatement.ExceptionVariable.Value!] = ExceptionToRescue.ExceptionInstance;
+                                    CurrentScope.LocalVariables[RescueStatement.ExceptionVariable.Value!] = ExceptionInstance;
                                 }
                                 // Run statements
                                 await InternalInterpretAsync(RescueStatement.Statements);
@@ -1610,14 +1633,14 @@ namespace Embers
         }
         internal async Task<Instance> InternalInterpretAsync(List<Expression> Statements, Method? OnYield = null) {
             // Interpret statements
-            Instances LastExpression = Interpreter.Nil;
+            Instances LastInstance = Interpreter.Nil;
             for (int Index = 0; Index < Statements.Count; Index++) {
                 // Interpret expression and store the result
                 Expression Statement = Statements[Index];
-                LastExpression = await InterpretExpressionAsync(Statement, OnYield: OnYield);
+                LastInstance = await InterpretExpressionAsync(Statement, OnYield: OnYield);
             }
             // Return last expression
-            return LastExpression;
+            return LastInstance;
         }
         internal async Task<Instance> InternalEvaluateAsync(string Code) {
             // Get statements from code
@@ -1634,9 +1657,9 @@ namespace Embers
             Running = true;
 
             // Interpret statements and store the result
-            Instances LastExpression;
+            Instance LastInstance;
             try {
-                LastExpression = await InternalInterpretAsync(Statements, OnYield);
+                LastInstance = await InternalInterpretAsync(Statements, OnYield);
             }
             catch (LoopControlException Ex) {
                 throw new SyntaxErrorException($"{ApproximateLocation}: Invalid {Ex.GetType().Name} (must be in a loop)");
@@ -1651,7 +1674,7 @@ namespace Embers
                 // Deactivate debounce
                 Running = false;
             }
-            return LastExpression;
+            return LastInstance;
         }
         public Instance Interpret(List<Expression> Statements) {
             return InterpretAsync(Statements).Result;

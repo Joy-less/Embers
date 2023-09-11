@@ -24,6 +24,7 @@ namespace Embers
         public readonly Class Array;
         public readonly Class Hash;
         public readonly Class Exception;
+        public readonly Class StandardError;
 
         public readonly NilInstance Nil;
         public readonly TrueInstance True;
@@ -61,6 +62,7 @@ namespace Embers
             Array = MainScript.CreateClass("Array");
             Hash = MainScript.CreateClass("Hash");
             Exception = MainScript.CreateClass("Exception");
+            StandardError = CreateClass(Exception, "StandardError");
 
             RandomSeed = InternalRandom.NextInt64();
             Random = new Random(RandomSeed.GetHashCode());

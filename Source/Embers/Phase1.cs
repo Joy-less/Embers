@@ -276,10 +276,15 @@
                 // Integer
                 if (char.IsAsciiDigit(Chara)) {
                     // Build integer
-                    string Number = BuildWhile(c => char.IsAsciiDigit(c) || c == '_');
+                    string Number = BuildWhile(c => char.IsAsciiDigit(c) || c == '_' || c == 'e' || c == 'x');
                     // Remove '_'
                     if (Number.EndsWith('_')) throw new SyntaxErrorException($"{Location}: Trailing '_' in number");
                     Number = Number.Replace("_", "");
+                    // Hexadecimal notation
+                    if (Number.StartsWith("0x")) {
+                        if (Number.Length == 2) throw new SyntaxErrorException($"{Location}: '0x' is not a valid number");
+                        Number = long.Parse(Number[2..], System.Globalization.NumberStyles.HexNumber).ToString();
+                    }
                     // Add integer to tokens
                     Tokens.Add(new(Location, Phase1TokenType.Integer, Number, FollowsWhitespace));
                     i--;

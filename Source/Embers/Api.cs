@@ -19,7 +19,7 @@ namespace Embers
             Interpreter.RootInstance.InstanceMethods["getc"] = new Method(getc, 0);
             Interpreter.RootInstance.InstanceMethods["warn"] = new Method(warn, null);
             Interpreter.RootInstance.InstanceMethods["sleep"] = new Method(sleep, 0..1);
-            Interpreter.RootInstance.InstanceMethods["raise"] = new Method(@raise, 1);
+            Interpreter.RootInstance.InstanceMethods["raise"] = new Method(@raise, 0..1);
             Interpreter.RootInstance.InstanceMethods["throw"] = new Method(@throw, 1);
             Interpreter.RootInstance.InstanceMethods["catch"] = new Method(@catch, 1);
             Interpreter.RootInstance.InstanceMethods["lambda"] = new Method(lambda, 0);
@@ -240,12 +240,19 @@ namespace Embers
             return Input.Interpreter.Nil;
         }
         static async Task<Instances> raise(MethodInput Input) {
-            Instance Argument = Input.Arguments[0];
-            if (Input.Arguments[0] is ExceptionInstance) {
-                throw Input.Arguments[0].Exception;
+            if (Input.Arguments.Count == 1) {
+                Instance Argument = Input.Arguments[0];
+                if (Argument is ExceptionInstance ExceptionInstance) {
+                    Exception ExceptionToRaise = Argument.Exception;
+                    Input.Script.ExceptionsTable.TryAdd(ExceptionToRaise, ExceptionInstance);
+                    throw ExceptionToRaise;
+                }
+                else {
+                    throw new RuntimeException(Argument.String);
+                }
             }
             else {
-                throw new RuntimeException(Input.Arguments[0].String);
+                throw new RuntimeException("");
             }
         }
         static async Task<Instances> @throw(MethodInput Input) {
@@ -829,7 +836,7 @@ namespace Embers
         }
         static class Range {
             public static async Task<Instances> min(MethodInput Input) {
-                return ((RangeInstance)Input.Instance).Min;
+                return ((RangeInstance)Input.Instance).AppliedMin;
             }
             public static async Task<Instances> max(MethodInput Input) {
                 return ((RangeInstance)Input.Instance).AppliedMax;

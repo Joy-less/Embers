@@ -20,18 +20,12 @@ namespace Embers
     }
     public class ThrowException : EmbersException {
         public readonly string Identifier;
-        public static ThrowException New(Script.Instance Identifier) {
+        public static ThrowException New(Instance Identifier) {
             string Message = $"uncaught throw {Identifier.Inspect()}";
             return new ThrowException(Message, Identifier.String);
         }
         private ThrowException(string Message, string identifier) : base(Message) {
             Identifier = identifier;
-        }
-    }
-    public class RaiseException : EmbersException {
-        public readonly ExceptionInstance ExceptionInstance;
-        public RaiseException(ExceptionInstance exceptionInstance, string message) : base(message) {
-            ExceptionInstance = exceptionInstance;
         }
     }
     public abstract class LoopControlException : EmbersException {

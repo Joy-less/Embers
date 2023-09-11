@@ -93,6 +93,7 @@ namespace Embers_Tests
                 else
                     $result += 20
                 end
+                # should return $result implicitly
             ", -99L);
 
             // Unless
