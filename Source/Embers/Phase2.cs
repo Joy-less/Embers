@@ -557,6 +557,24 @@ namespace Embers
                 return $"new {PathToSelf}({Location.Serialise()}, {Statements.Serialise()}, {(Exception != null ? Exception.Serialise() : "null")}, {(ExceptionVariable != null ? ExceptionVariable.Serialise() : "null")})";
             }
         }
+        public class RescueElseStatement : BeginComponentStatement {
+            public RescueElseStatement(DebugLocation location, List<Expression> statements) : base(location, statements) { }
+            public override string Inspect() {
+                return $"else; {Statements.Inspect()}";
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({Location.Serialise()}, {Statements.Serialise()})";
+            }
+        }
+        public class EnsureStatement : BeginComponentStatement {
+            public EnsureStatement(DebugLocation location, List<Expression> statements) : base(location, statements) { }
+            public override string Inspect() {
+                return $"ensure; {Statements.Inspect()}";
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({Location.Serialise()}, {Statements.Serialise()})";
+            }
+        }
         public class IfBranchesStatement : Statement {
             public readonly List<IfExpression> Branches;
             public IfBranchesStatement(DebugLocation location, List<IfExpression> branches) : base(location) {
@@ -1327,7 +1345,13 @@ namespace Embers
                         BeginStatements.Add(new BeginStatement(Branch.Location, Branch.Statements));
                     }
                     else if (Branch is BuildingRescue BuildingRescue) {
-                        BeginStatements.Add(new RescueStatement(Branch.Location, Branch.Statements, null, null));
+                        BeginStatements.Add(new RescueStatement(Branch.Location, Branch.Statements, BuildingRescue.Exception, BuildingRescue.ExceptionVariable));
+                    }
+                    else if (Branch is BuildingRescueElse) {
+                        BeginStatements.Add(new RescueElseStatement(Branch.Location, Branch.Statements));
+                    }
+                    else if (Branch is BuildingEnsure) {
+                        BeginStatements.Add(new EnsureStatement(Branch.Location, Branch.Statements));
                     }
                     else {
                         throw new InternalErrorException($"{Branch.Location}: {Branch.GetType().Name} not handled");
@@ -1387,19 +1411,47 @@ namespace Embers
         static BuildingIf ParseIf(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index, bool Inverse = false) {
             // Get condition
             Index++;
-            List<Phase2Object> Condition = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type == Phase2TokenType.Then || Tok.Type == Phase2TokenType.EndOfStatement));
-            Expression ConditionExpression = ObjectsToExpression(Condition);
+            List<Phase2Object> ConditionObjects = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type == Phase2TokenType.Then || Tok.Type == Phase2TokenType.EndOfStatement));
+            Expression ConditionExpression = ObjectsToExpression(ConditionObjects);
 
             // Open if block
             return new BuildingIf(Location, ConditionExpression, Inverse);
         }
         static BuildingRescue ParseRescue(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index) {
-            // Get error
+            // Get exception and exception variable
             Index++;
-            
+            ObjectTokenExpression? ExceptionExpression = null;
+            Phase2Token? ExceptionVariable = null;
+            {
+                // Get exception
+                List<Phase2Object> ExceptionObjects = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type == Phase2TokenType.RightArrow || Tok.Type == Phase2TokenType.EndOfStatement));
+                if (ExceptionObjects.Count != 0) {
+                    ExceptionExpression = ObjectsToExpression(ExceptionObjects) as ObjectTokenExpression
+                        ?? throw new SyntaxErrorException($"{Location}: Expected exception or end of statement after 'rescue', got '{ExceptionObjects.Inspect()}'");
+
+                    // Get right arrow
+                    if (StatementTokens[Index] is Phase2Token Tok && Tok.Type == Phase2TokenType.RightArrow) {
+                        Index++;
+                        // Get exception variable after right arrow
+                        List<Phase2Object> ExceptionVariableObjects = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type == Phase2TokenType.EndOfStatement));
+                        if (ExceptionVariableObjects.Count != 0) {
+                            Expression ExceptionVariableObject = ObjectsToExpression(ExceptionVariableObjects);
+                            if (ExceptionVariableObject.GetType() == typeof(ObjectTokenExpression)) {
+                                ExceptionVariable = ((ObjectTokenExpression)ExceptionVariableObject).Token;
+                            }
+                            else {
+                                throw new SyntaxErrorException($"{Location}: Expected exception name after '=>' after 'rescue', got {ExceptionVariableObject.GetType().Name}");
+                            }
+                        }
+                        else {
+                            throw new SyntaxErrorException($"{Location}: Expected exception name after '=>' after 'rescue', got nothing");
+                        }
+                    }
+                }
+            }
 
             // Open rescue block
-            return new BuildingRescue(Location);
+            return new BuildingRescue(Location, ExceptionExpression, ExceptionVariable);
         }
         static BuildingFor ParseFor(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index) {
             // Get variable name
@@ -1554,7 +1606,7 @@ namespace Embers
                                 IfBlock.Branches.Add(ParseIf(Token.Location, ParsedObjects, ref i));
                             }
                             else {
-                                throw new SyntaxErrorException($"{Token.Location}: Elsif must follow if");
+                                throw new SyntaxErrorException($"{Token.Location}: 'Elsif' must follow 'if'");
                             }
                             break;
                         }
@@ -1564,8 +1616,15 @@ namespace Embers
                                 ResolveStatementsWithoutEndingBlock();
                                 IfBlock.Branches.Add(new BuildingIf(Token.Location, null));
                             }
+                            else if (CurrentBlocks.TryPeek(out BuildingBlock? Block2) && Block2 is BuildingBeginBranches BeginBlock) {
+                                ResolveStatementsWithoutEndingBlock();
+                                if (BeginBlock.Branches[^1] is not BuildingRescue) {
+                                    throw new SyntaxErrorException($"{Token.Location}: 'Else' in begin block must follow 'rescue', not '{BeginBlock.Branches[^1].GetType().Name}'");
+                                }
+                                BeginBlock.Branches.Add(new BuildingRescueElse(Token.Location));
+                            }
                             else {
-                                throw new SyntaxErrorException($"{Token.Location}: Else must follow if");
+                                throw new SyntaxErrorException($"{Token.Location}: 'Else' must follow 'if' or 'begin'");
                             }
                             break;
                         }
@@ -1579,10 +1638,27 @@ namespace Embers
                         case Phase2TokenType.Rescue: {
                             if (CurrentBlocks.TryPeek(out BuildingBlock? Block) && Block is BuildingBeginBranches BeginBlock) {
                                 ResolveStatementsWithoutEndingBlock();
+                                if (BeginBlock.Branches[^1] is not (BuildingBegin or BuildingRescue)) {
+                                    throw new SyntaxErrorException($"{Token.Location}: 'Rescue' must follow 'begin' or 'rescue', not '{BeginBlock.Branches[^1].GetType().Name}'");
+                                }
                                 BeginBlock.Branches.Add(ParseRescue(Token.Location, ParsedObjects, ref i));
                             }
                             else {
                                 throw new SyntaxErrorException($"{Token.Location}: Rescue must follow begin");
+                            }
+                            break;
+                        }
+                        // Ensure
+                        case Phase2TokenType.Ensure: {
+                            if (CurrentBlocks.TryPeek(out BuildingBlock? Block) && Block is BuildingBeginBranches BeginBlock) {
+                                ResolveStatementsWithoutEndingBlock();
+                                if (BeginBlock.Branches[^1] is not (BuildingBegin or BuildingRescue or BuildingRescueElse)) {
+                                    throw new SyntaxErrorException($"{Token.Location}: 'Ensure' must follow 'begin', 'rescue' or 'else', not '{BeginBlock.Branches[^1].GetType().Name}'");
+                                }
+                                BeginBlock.Branches.Add(new BuildingEnsure(Token.Location));
+                            }
+                            else {
+                                throw new SyntaxErrorException($"{Token.Location}: Ensure must follow begin");
                             }
                             break;
                         }
@@ -2380,7 +2456,18 @@ namespace Embers
             public BuildingBegin(DebugLocation location) : base(location) { }
         }
         class BuildingRescue : BuildingBeginComponent {
-            public BuildingRescue(DebugLocation location) : base(location) { }
+            public readonly ObjectTokenExpression? Exception;
+            public readonly Phase2Token? ExceptionVariable;
+            public BuildingRescue(DebugLocation location, ObjectTokenExpression? exception, Phase2Token? exceptionVariable) : base(location) {
+                Exception = exception;
+                ExceptionVariable = exceptionVariable;
+            }
+        }
+        class BuildingRescueElse : BuildingBeginComponent {
+            public BuildingRescueElse(DebugLocation location) : base(location) { }
+        }
+        class BuildingEnsure : BuildingBeginComponent {
+            public BuildingEnsure(DebugLocation location) : base(location) { }
         }
         class BuildingBeginBranches : BuildingBlock {
             public readonly List<BuildingBeginComponent> Branches;

@@ -1345,12 +1345,13 @@ namespace Embers
                 return new RangeInstance(Interpreter.Range, MinOnly, null, RangeExpression.IncludesMax);
             }
             else {
-                throw new RuntimeException($"{RangeExpression.Location}: Range bounds must be integers (got {RawMin.LightInspect()} and {RawMax.LightInspect()})");
+                throw new RuntimeException($"{RangeExpression.Location}: Range bounds must be integers (got '{RawMin?.LightInspect()}' and '{RawMax?.LightInspect()}')");
             }
         }
         async Task<Instances> InterpretIfBranchesStatement(IfBranchesStatement IfStatement) {
             for (int i = 0; i < IfStatement.Branches.Count; i++) {
                 IfExpression Branch = IfStatement.Branches[i];
+                // If / elsif
                 if (Branch.Condition != null) {
                     Instance ConditionResult = await InterpretExpressionAsync(Branch.Condition);
                     if (ConditionResult.IsTruthy != Branch.Inverse) {
@@ -1368,6 +1369,7 @@ namespace Embers
                         return LastInstance;
                     }
                 }
+                // Else
                 else {
                     Instance LastInstance;
                     try {
@@ -1386,17 +1388,6 @@ namespace Embers
             return Interpreter.Nil;
         }
         async Task<Instances> InterpretBeginBranchesStatement(BeginBranchesStatement BeginBranchesStatement) {
-            /*for (int i = 0; i < BeginBranchesStatement.Branches.Count; i++) {
-                BeginComponentStatement Branch = BeginBranchesStatement.Branches[i];
-                // Create scope
-                CurrentObject.Push(new Scope(CurrentObject));
-                // Run statements
-                await InternalInterpretAsync(Branch.Statements);
-                // Step back a scope
-                CurrentObject.Pop();
-            }
-            return Interpreter.Nil;*/
-
             // Begin
             BeginStatement BeginBranch = (BeginStatement)BeginBranchesStatement.Branches[0];
             Exception? ExceptionToRescue = null;
@@ -1415,6 +1406,7 @@ namespace Embers
             }
 
             // Rescue
+            bool Rescued = false;
             if (ExceptionToRescue != null) {
                 // Find a rescue statement that can rescue the given error
                 for (int i = 1; i < BeginBranchesStatement.Branches.Count; i++) {
@@ -1429,13 +1421,14 @@ namespace Embers
                             CanRescue = true;
                         }
                         else {
-                            Instance RescuingException = await InterpretExpressionAsync(RescueStatement.Exception, ReturnType.FoundVariable);
-                            if (RescuingException.Module == ExceptionInstance.Module) {
+                            Instance RescuingException = await InterpretExpressionAsync(RescueStatement.Exception);
+                            if (ExceptionInstance.Module!.InheritsFrom(RescuingException.Module!)) {
                                 CanRescue = true;
                             }
                         }
                         // Run the statements in the rescue block
                         if (CanRescue) {
+                            Rescued = true;
                             try {
                                 // Create scope
                                 CurrentObject.Push(new Scope(CurrentObject));
@@ -1452,6 +1445,25 @@ namespace Embers
                             }
                             break;
                         }
+                    }
+                }
+                // Rethrow exception if not rescued
+                if (!Rescued) throw ExceptionToRescue;
+            }
+
+            // Ensure & Else
+            for (int i = 1; i < BeginBranchesStatement.Branches.Count; i++) {
+                BeginComponentStatement Branch = BeginBranchesStatement.Branches[i];
+                if (Branch is EnsureStatement || (Branch is RescueElseStatement && !Rescued)) {
+                    try {
+                        // Create scope
+                        CurrentObject.Push(new Scope(CurrentObject));
+                        // Run statements
+                        await InternalInterpretAsync(Branch.Statements);
+                    }
+                    finally {
+                        // Step back a scope
+                        CurrentObject.Pop();
                     }
                 }
             }

@@ -12,24 +12,25 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() => 
                     Script.Evaluate(@"
-#begin
-
-#rescue
-
-#else
-
-#ensure
-
-#end
-
 begin
-    raise Exception.new('hi')
-rescue # rescue Exception => ex
-    p 'rescued' # ex.message
+    raise StandardError.new('hi')
+rescue Exception => ex
+    puts ""rescued #{ex.class}""
+else
+    puts 'Runs if not rescued'
+ensure
+    puts 'Runs regardless'
 end
 
-p 1.728e21
-p 0x234
+begin
+    
+rescue Exception => ex
+    puts ""rescued #{ex.class}""
+else
+    puts 'Runs if not rescued'
+ensure
+    puts 'Runs regardless'
+end
                     ")
                 );
                 Console.ReadLine();
