@@ -357,7 +357,7 @@
                                     return FormatDepth == 0 && C == Chara;
                                 });
                                 String = EscapeString(String);
-                                Tokens.Add(new(Location, Phase1TokenType.String, String, FollowsWhitespace, ProcessFormatting));
+                                Tokens.Add(new(Location, Phase1TokenType.String, String, FollowsWhitespace, FollowedByWhitespace, processFormatting: ProcessFormatting));
                             }
                             // String that cannot be formatted/escaped
                             else {

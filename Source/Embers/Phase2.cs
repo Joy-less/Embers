@@ -482,10 +482,12 @@ namespace Embers
             public readonly ObjectTokenExpression ClassName;
             public readonly List<Expression> BlockStatements;
             public readonly bool IsModule;
-            public DefineClassStatement(ObjectTokenExpression className, List<Expression> blockStatements, bool isModule) : base(className.Location) {
+            public readonly ObjectTokenExpression? InheritsFrom;
+            public DefineClassStatement(ObjectTokenExpression className, List<Expression> blockStatements, bool isModule, ObjectTokenExpression? inheritsFrom) : base(className.Location) {
                 ClassName = className;
                 BlockStatements = blockStatements;
                 IsModule = isModule;
+                InheritsFrom = inheritsFrom;
             }
             public override string Inspect() {
                 return "class " + ClassName.Inspect();
@@ -1032,7 +1034,7 @@ namespace Embers
                 throw new SyntaxErrorException($"{Object.Location}: Unexpected token while parsing method path: {Object.Inspect()}");
             }
 
-            // Remove method name path tokens and replace with a path expression
+            // Get path expression from tokens
             ObjectTokenExpression? MethodNamePathExpression = null;
             if (MethodNamePath.Count == 1) {
                 if (StartsWithSelf == null) {
@@ -1205,7 +1207,7 @@ namespace Embers
                 }
             }
         }
-        static ObjectTokenExpression GetClassName(List<Phase2Object> Phase2Objects, ref int Index, string ObjectType) {
+        static ObjectTokenExpression GetClassName(List<Phase2Object> Phase2Objects, ref int Index, string ObjectType, out ObjectTokenExpression? InheritsFrom) {
             SelfExpression? StartsWithSelf = null;
             bool NextTokenCanBeVariable = true;
             bool NextTokenCanBeDoubleColon = false;
@@ -1222,6 +1224,17 @@ namespace Embers
                         }
                         else {
                             throw new SyntaxErrorException($"{Token.Location}: Expected expression before and after '.'");
+                        }
+                    }
+                    else if (Token.Type == Phase2TokenType.Operator && Token.Value! == "<") {
+                        if (NextTokenCanBeDoubleColon) {
+                            ClassNamePath.Add(Token);
+                            NextTokenCanBeVariable = true;
+                            NextTokenCanBeDoubleColon = false;
+                            continue;
+                        }
+                        else {
+                            break;
                         }
                     }
                     else if (Token.Type == Phase2TokenType.EndOfStatement || Token.IsObjectToken) {
@@ -1252,37 +1265,61 @@ namespace Embers
                 throw new SyntaxErrorException($"{Object.Location}: Unexpected token while parsing class path: {Object.Inspect()}");
             }
 
-            // Remove class name path tokens and replace with a path expression
-            ObjectTokenExpression? ClassNamePathExpression = null;
-            if (ClassNamePath.Count == 1) {
-                if (StartsWithSelf == null) {
-                    ClassNamePathExpression = new ObjectTokenExpression(ClassNamePath[0]);
-                }
-                else {
-                    ClassNamePathExpression = new PathExpression(StartsWithSelf, ClassNamePath[0]);
-                }
-            }
-            else if (ClassNamePath.Count == 0) {
-                throw new SyntaxErrorException($"{Phase2Objects[Index].Location}: Class keyword must be followed by an identifier (got {Phase2Objects[Index].Inspect()})");
-            }
-            else {
-                int StartLoopIndex = 0;
-                if (StartsWithSelf != null) {
-                    StartLoopIndex++;
-                    ClassNamePathExpression = new PathExpression(StartsWithSelf, ClassNamePath[0]);
-                }
-                for (int i = StartLoopIndex; i < ClassNamePath.Count - 1; i++) {
-                    if (ClassNamePathExpression == null) {
-                        ClassNamePathExpression = new ObjectTokenExpression(ClassNamePath[i]);
-                    }
-                    else {
-                        ClassNamePathExpression = new PathExpression(ClassNamePathExpression, ClassNamePath[i]);
+            // Find inheritance operator
+            List<Phase2Token>? InheritsFromNamePath = null;
+            for (int i = 0; i < ClassNamePath.Count; i++) {
+                Phase2Token Object = ClassNamePath[i];
+
+                if (Object is Phase2Token Token) {
+                    if (Token.Type == Phase2TokenType.Operator && Token.Value! == "<") {
+                        if (i + 1 >= ClassNamePath.Count) {
+                            throw new SyntaxErrorException($"{Object.Location}: Expected identifier after '<'");
+                        }
+                        InheritsFromNamePath = ClassNamePath.GetIndexRange(i + 1);
+                        ClassNamePath.RemoveIndexRange(i);
+                        break;
                     }
                 }
             }
 
+            // Get path expression from tokens
+            ObjectTokenExpression GetPathExpressionFromTokens(List<Phase2Token> Tokens, int Index) {
+                ObjectTokenExpression? PathExpression = null;
+                if (Tokens.Count == 1) {
+                    if (StartsWithSelf == null) {
+                        PathExpression = new ObjectTokenExpression(Tokens[0]);
+                    }
+                    else {
+                        PathExpression = new PathExpression(StartsWithSelf, Tokens[0]);
+                    }
+                }
+                else if (Tokens.Count == 0) {
+                    throw new SyntaxErrorException($"{Phase2Objects[Index].Location}: Class keyword must be followed by an identifier (got {Phase2Objects[Index].Inspect()})");
+                }
+                else {
+                    int StartLoopIndex = 0;
+                    if (StartsWithSelf != null) {
+                        StartLoopIndex++;
+                        PathExpression = new PathExpression(StartsWithSelf, Tokens[0]);
+                    }
+                    for (int i = StartLoopIndex; i < Tokens.Count - 1; i++) {
+                        if (PathExpression == null) {
+                            PathExpression = new ObjectTokenExpression(Tokens[i]);
+                        }
+                        else {
+                            PathExpression = new PathExpression(PathExpression, Tokens[i]);
+                        }
+                    }
+                }
+                return PathExpression!;
+            }
+            ObjectTokenExpression? ClassNamePathExpression = GetPathExpressionFromTokens(ClassNamePath, Index);
+            if (InheritsFromNamePath != null) {
+                InheritsFrom = GetPathExpressionFromTokens(InheritsFromNamePath, Index);
+            }
+
             // Verify class name is constant
-            if (ClassNamePathExpression!.Token.Type != Phase2TokenType.ConstantOrMethod) {
+            if (ClassNamePathExpression.Token.Type != Phase2TokenType.ConstantOrMethod) {
                 throw new SyntaxErrorException($"{ClassNamePathExpression.Location}: {ObjectType} name must be Constant");
             }
 
@@ -1299,7 +1336,7 @@ namespace Embers
             }
             // End Class/Module Block
             else if (Block is BuildingClass ClassBlock) {
-                return new DefineClassStatement(ClassBlock.ClassName, ClassBlock.Statements, ClassBlock.IsModule);
+                return new DefineClassStatement(ClassBlock.ClassName, ClassBlock.Statements, ClassBlock.IsModule, ClassBlock.InheritsFrom);
             }
             // End Do Block
             else if (Block is BuildingDo DoBlock) {
@@ -1528,10 +1565,10 @@ namespace Embers
                             string ObjectType = IsModule ? "Module" : "Class";
             
                             // Get class name
-                            ObjectTokenExpression ClassName = GetClassName(ParsedObjects, ref i, ObjectType);
+                            ObjectTokenExpression ClassName = GetClassName(ParsedObjects, ref i, ObjectType, out ObjectTokenExpression? InheritsFrom);
 
                             // Open define class block
-                            PushBlock(new BuildingClass(Location, ClassName, IsModule));
+                            PushBlock(new BuildingClass(Location, ClassName, IsModule, InheritsFrom));
                             break;
                         }
                         // Do
@@ -2408,9 +2445,11 @@ namespace Embers
         class BuildingClass : BuildingBlock {
             public readonly ObjectTokenExpression ClassName;
             public bool IsModule;
-            public BuildingClass(DebugLocation location, ObjectTokenExpression className, bool isModule) : base(location) {
+            public ObjectTokenExpression? InheritsFrom;
+            public BuildingClass(DebugLocation location, ObjectTokenExpression className, bool isModule, ObjectTokenExpression? inheritsFrom) : base(location) {
                 ClassName = className;
                 IsModule = isModule;
+                InheritsFrom = inheritsFrom;
             }
         }
         class BuildingDo : BuildingBlock {

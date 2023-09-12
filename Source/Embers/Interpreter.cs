@@ -55,7 +55,7 @@ namespace Embers
             TrueClass = MainScript.CreateClass("TrueClass"); True = new TrueInstance(TrueClass); TrueClass.InstanceMethods.Remove("initialize"); TrueClass.Methods.Remove("new");
             FalseClass = MainScript.CreateClass("FalseClass"); False = new FalseInstance(FalseClass); FalseClass.InstanceMethods.Remove("initialize"); FalseClass.Methods.Remove("new");
             String = MainScript.CreateClass("String");
-            Symbol = MainScript.CreateClass("Symbol");
+            Symbol = MainScript.CreateClass("Symbol"); Symbol.InstanceMethods.Remove("initialize"); Symbol.Methods.Remove("new");
             Integer = MainScript.CreateClass("Integer");
             Float = MainScript.CreateClass("Float");
             Proc = MainScript.CreateClass("Proc");

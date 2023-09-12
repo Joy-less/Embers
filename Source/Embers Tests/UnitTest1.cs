@@ -276,6 +276,18 @@ namespace Embers_Tests
                 arr.sort!
                 arr == [1, 2, 3, 4]
             ", true);
+
+            // Inheritance
+            AssertEqual(@"
+                class SuperString < String
+                    def use_powers s
+                        ""#{s} is dead.""
+                    end
+                end
+                s = SuperString.new 'Someone'
+                puts s.rstrip
+                s.use_powers s
+            ", "Someone is dead.");
         }
 
 

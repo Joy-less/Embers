@@ -224,6 +224,9 @@ namespace Embers
             {"object_id", new Method(ClassInstance.object_id, 0)},
             {"methods", new Method(ClassInstance.methods, 0)},
         };
+        public static readonly IReadOnlyDictionary<string, Method> DefaultClassMethods = new Dictionary<string, Method>() {
+            
+        };
         public static readonly IReadOnlyDictionary<string, Method> DefaultInstanceMethods = new Dictionary<string, Method>() {
             {"attr_reader", new Method(ClassInstance.attr_reader, 1)},
             {"attr_writer", new Method(ClassInstance.attr_writer, 1)},

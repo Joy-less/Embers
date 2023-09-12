@@ -17,7 +17,7 @@ p(arr << 3)
 p arr
 
 begin
-    raise StandardError.new'Error'
+    raise StandardError.new'Ouch'
 rescue => e
     puts e.class
 end
@@ -26,6 +26,15 @@ def a!
     puts 'aaa'
 end
 a!
+
+class SuperString < String
+    def use_powers
+        puts 'Dead.'
+    end
+end
+p String.new('hi ').rstrip
+p SuperString.new('hi ').rstrip
+p SuperString.new('hi ').use_powers
                     ")
                 );
                 Console.ReadLine();

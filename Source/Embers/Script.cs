@@ -78,13 +78,9 @@ namespace Embers
                 Setup();
             }
             protected virtual void Setup() {
-                // Default class and instance methods
-                Api.DefaultClassAndInstanceMethods.CopyTo(Methods);
-                Api.DefaultClassAndInstanceMethods.CopyTo(InstanceMethods);
-                Api.DefaultInstanceMethods.CopyTo(InstanceMethods);
-                // Superclass class and instance methods
+                // Copy superclass class and instance methods
                 if (SuperModule != null) {
-                    SuperModule.Methods.CopyTo(InstanceMethods);
+                    SuperModule.Methods.CopyTo(Methods);
                     SuperModule.InstanceMethods.CopyTo(InstanceMethods);
                     // Inherit changes later
                     SuperModule.Methods.Set += (string Key, Method NewValue) => {
@@ -99,6 +95,13 @@ namespace Embers
                     SuperModule.InstanceMethods.Removed += (string Key) => {
                         InstanceMethods.Remove(Key);
                     };
+                }
+                // Copy default class and instance methods
+                else {
+                    Api.DefaultClassAndInstanceMethods.CopyTo(Methods);
+                    Api.DefaultClassAndInstanceMethods.CopyTo(InstanceMethods);
+                    Api.DefaultClassMethods.CopyTo(Methods);
+                    Api.DefaultInstanceMethods.CopyTo(InstanceMethods);
                 }
             }
             public bool InheritsFrom(Module Ancestor) {
@@ -115,17 +118,12 @@ namespace Embers
             }
         }
         public class Class : Module {
-            public Class(string name, Module parent, Module? superClass = null) : base(name, parent, superClass) {
-                Setup();
-            }
-            public Class(string name, Interpreter interpreter) : base(name, interpreter) {
-                Setup();
-            }
+            public Class(string name, Module parent, Module? superClass = null) : base(name, parent, superClass) { }
+            public Class(string name, Interpreter interpreter) : base(name, interpreter) { }
             protected override void Setup() {
-                base.Setup();
                 // Default method: new
                 Methods["new"] = new Method(async Input => {
-                    Instance NewInstance = Input.Script.CreateInstanceWithNew(this);
+                    Instance NewInstance = Input.Script.CreateInstanceWithNew((Class)Input.Instance.Module!);
                     if (NewInstance.InstanceMethods.TryGetValue("initialize", out Method? Initialize)) {
                         // Call initialize & ignore result
                         await Input.Script.CreateTemporaryInstanceScope(NewInstance, async () => {
@@ -142,6 +140,8 @@ namespace Embers
                 InstanceMethods["initialize"] = new Method(async Input => {
                     return Input.Instance;
                 }, 0);
+                // Base setup
+                base.Setup();
             }
         }
         public class Instance {
@@ -211,14 +211,25 @@ namespace Embers
             public Instance(Module fromModule) {
                 Module = fromModule;
                 ObjectId = fromModule.Interpreter.GenerateObjectId;
-                // Copy instance methods
-                if (this is not PseudoInstance) {
-                    fromModule.InstanceMethods.CopyTo(InstanceMethods);
-                }
+                Setup();
             }
             public Instance(Interpreter interpreter) {
                 Module = null;
                 ObjectId = interpreter.GenerateObjectId;
+                Setup();
+            }
+            void Setup() {
+                if (this is not PseudoInstance && Module != null) {
+                    // Copy instance methods
+                    Module.InstanceMethods.CopyTo(InstanceMethods);
+                    // Inherit changes later
+                    Module.InstanceMethods.Set += (string Key, Method NewValue) => {
+                        InstanceMethods[Key] = NewValue;
+                    };
+                    Module.InstanceMethods.Removed += (string Key) => {
+                        InstanceMethods.Remove(Key);
+                    };
+                }
             }
             public void AddOrUpdateInstanceMethod(string Name, Method Method) {
                 lock (InstanceMethods) lock (Module!.InstanceMethods)
@@ -1310,29 +1321,33 @@ namespace Embers
             Instance ClassNameObject = await InterpretExpressionAsync(DefineClassStatement.ClassName, ReturnType.HypotheticalVariable);
             if (ClassNameObject is VariableReference ClassNameRef) {
                 string ClassName = ClassNameRef.Token.Value!;
+                Module? InheritsFrom = DefineClassStatement.InheritsFrom != null ? (await InterpretExpressionAsync(DefineClassStatement.InheritsFrom)).Module : null;
 
                 // Create or patch class
                 Module NewModule;
                 // Patch class
                 if (CurrentModule.Constants.TryGetValue(ClassName, out Instance? ConstantValue) && ConstantValue is ModuleReference ModuleReference) {
+                    if (InheritsFrom != null) {
+                        throw new SyntaxErrorException($"{DefineClassStatement.Location}: Patch for already defined class/module cannot inherit");
+                    }
                     NewModule = ModuleReference.Module!;
                 }
                 // Create class
                 else {
                     if (DefineClassStatement.IsModule) {
                         if (ClassNameRef.Module != null) {
-                            NewModule = CreateModule(ClassName, ClassNameRef.Module);
+                            NewModule = CreateModule(ClassName, ClassNameRef.Module, InheritsFrom);
                         }
                         else {
-                            NewModule = CreateModule(ClassName);
+                            NewModule = CreateModule(ClassName, null, InheritsFrom);
                         }
                     }
                     else {
                         if (ClassNameRef.Module != null) {
-                            NewModule = CreateClass(ClassName, ClassNameRef.Module);
+                            NewModule = CreateClass(ClassName, ClassNameRef.Module, InheritsFrom);
                         }
                         else {
-                            NewModule = CreateClass(ClassName);
+                            NewModule = CreateClass(ClassName, null, InheritsFrom);
                         }
                     }
                 }
