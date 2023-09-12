@@ -10,6 +10,7 @@ namespace Embers
         public readonly Interpreter Interpreter;
         public readonly bool AllowUnsafeApi;
         public bool Running { get; private set; }
+        public bool Stopping { get; private set; }
         public DebugLocation ApproximateLocation { get; private set; } = DebugLocation.Unknown;
 
         readonly Stack<object> CurrentObject = new();
@@ -19,6 +20,7 @@ namespace Embers
         Instance CurrentInstance => (Instance)CurrentObject.First(obj => obj is Instance);
 
         internal readonly ConditionalWeakTable<Exception, ExceptionInstance> ExceptionsTable = new();
+        public int ThreadCount { get; private set; }
 
         public Instance CreateInstanceWithNew(Class Class) {
             if (Class.InheritsFrom(Interpreter.NilClass))
@@ -36,13 +38,15 @@ namespace Embers
             else if (Class.InheritsFrom(Interpreter.Float))
                 return new FloatInstance(Class, 0);
             else if (Class.InheritsFrom(Interpreter.Proc))
-                throw new RuntimeException($"{ApproximateLocation}: Tried to create Proc object without a block");
+                throw new RuntimeException($"{ApproximateLocation}: Tried to create Proc instance without a block");
             else if (Class.InheritsFrom(Interpreter.Array))
                 return new ArrayInstance(Class, new List<Instance>());
             else if (Class.InheritsFrom(Interpreter.Hash))
                 return new HashInstance(Class, new Dictionary<Instance, Instance>(), Interpreter.Nil);
             else if (Class.InheritsFrom(Interpreter.Exception))
                 return new ExceptionInstance(Class, "");
+            else if (Class.InheritsFrom(Interpreter.Thread))
+                return new ThreadInstance(Class, this);
             else
                 return new Instance(Class);
         }
@@ -127,7 +131,7 @@ namespace Embers
                     if (NewInstance.InstanceMethods.TryGetValue("initialize", out Method? Initialize)) {
                         // Call initialize & ignore result
                         await Input.Script.CreateTemporaryInstanceScope(NewInstance, async () => {
-                            await Initialize.Call(Input.Script, NewInstance, Input.Arguments);
+                            await Initialize.Call(Input.Script, NewInstance, Input.Arguments, Input.OnYield);
                         });
                         // Return instance
                         return NewInstance;
@@ -159,6 +163,7 @@ namespace Embers
             public virtual long Integer { get { throw new RuntimeException("Instance is not an integer"); } }
             public virtual double Float { get { throw new RuntimeException("Instance is not a float"); } }
             public virtual Method Proc { get { throw new RuntimeException("Instance is not a proc"); } }
+            public virtual ScriptThread? Thread { get { throw new RuntimeException("Instance is not a thread"); } }
             public virtual LongRange Range { get { throw new RuntimeException("Instance is not a range"); } }
             public virtual List<Instance> Array { get { throw new RuntimeException("Instance is not an array"); } }
             public virtual Dictionary<Instance, Instance> Hash { get { throw new RuntimeException("Instance is not a hash"); } }
@@ -365,6 +370,70 @@ namespace Embers
                 Value = value;
             }
         }
+        public class ThreadInstance : Instance {
+            public readonly ScriptThread ScriptThread;
+            public override object? Object { get { return ScriptThread; } }
+            public override ScriptThread Thread { get { return ScriptThread; } }
+            public override string Inspect() {
+                return $"ThreadInstance";
+            }
+            public ThreadInstance(Class fromClass, Script fromScript) : base(fromClass) {
+                ScriptThread = new(fromScript);
+            }
+            public void SetMethod(Method method) {
+                Thread.Method = method;
+            }
+        }
+        public class ScriptThread {
+            public ThreadPhase Phase { get; private set; }
+            public readonly Script FromScript;
+            public Method? Method;
+            public bool Stopping { get; private set; }
+            public ScriptThread(Script fromScript) {
+                FromScript = fromScript;
+                Phase = ThreadPhase.Idle;
+            }
+            public async Task Run() {
+                // If already running, wait until it's finished
+                if (Phase != ThreadPhase.Idle) {
+                    while (Phase != ThreadPhase.Completed)
+                        await Task.Delay(10);
+                    return;
+                }
+                // Increase thread counter
+                FromScript.ThreadCount++;
+                try {
+                    // Create a new script
+                    Script ThreadScript = new(FromScript.Interpreter, FromScript.AllowUnsafeApi);
+                    FromScript.CurrentObject.CopyTo(ThreadScript.CurrentObject);
+                    Phase = ThreadPhase.Running;
+                    // Run the method in the script
+                    bool ThreadCompleted = false;
+                    _ = Task.Run(async () => {
+                        await Method!.Call(ThreadScript, null);
+                        ThreadCompleted = true;
+                    });
+                    // Wait for the script to finish
+                    while (!FromScript.Stopping && !ThreadCompleted && !Stopping)
+                        await Task.Delay(10);
+                    // Stop the script
+                    ThreadScript.Stop();
+                    Phase = ThreadPhase.Completed;
+                }
+                finally {
+                    // Decrease thread counter
+                    FromScript.ThreadCount--;
+                }
+            }
+            public void Stop() {
+                Stopping = true;
+            }
+            public enum ThreadPhase {
+                Idle,
+                Running,
+                Completed
+            }
+        }
         public class RangeInstance : Instance {
             public IntegerInstance? Min;
             public IntegerInstance? Max;
@@ -452,7 +521,7 @@ namespace Embers
             public override object? Object { get { return Value; } }
             public override Exception Exception { get { return Value; } }
             public override string Inspect() {
-                return $"Exception('{Value.Message}')";
+                return $"ExceptionInstance('{Value.Message}')";
             }
             public ExceptionInstance(Class fromClass, string message) : base(fromClass) {
                 Value = new Exception(message);
@@ -736,27 +805,63 @@ namespace Embers
                 return $"new {typeof(LongRange).PathTo()}({(Min != null ? Min : "null")}, {(Max != null ? Max : "null")})";
             }
         }
+        public class WeakEvent<TDelegate> where TDelegate : class {
+            readonly List<WeakReference> Subscribers = new();
+
+            public void Add(TDelegate handler) {
+                // Remove any dead references
+                Subscribers.RemoveAll(WeakRef => !WeakRef.IsAlive);
+                // Add the new handler as a weak reference
+                Subscribers.Add(new WeakReference(handler));
+            }
+
+            public void Remove(TDelegate Handler) {
+                // Remove the handler from the list
+                Subscribers.RemoveAll(WeakRef => WeakRef.Target == Handler);
+            }
+
+            public void Raise(Action<TDelegate> Action) {
+                // Invoke the action for each subscriber that is still alive
+                foreach (WeakReference WeakRef in Subscribers) {
+                    if (WeakRef.Target is TDelegate Target) {
+                        Action(Target);
+                    }
+                }
+            }
+        }
         public class ReactiveDictionary<TKey, TValue> : Dictionary<TKey, TValue> where TKey : notnull {
-            // public delegate void DictionaryChanged(TKey Key, TValue? OldValue, TValue NewValue);
+            private readonly WeakEvent<DictionarySet> SetEvent = new();
+            private readonly WeakEvent<DictionaryRemoved> RemovedEvent = new();
+
             public delegate void DictionarySet(TKey Key, TValue NewValue);
-            public event DictionarySet? Set;
+            public event DictionarySet Set {
+                add => SetEvent.Add(value);
+                remove => SetEvent.Remove(value);
+            }
+
             public delegate void DictionaryRemoved(TKey Key);
-            public event DictionaryRemoved? Removed;
+            public event DictionaryRemoved Removed {
+                add => RemovedEvent.Add(value);
+                remove => RemovedEvent.Remove(value);
+            }
+
             public new TValue this[TKey Key] {
                 get => base[Key];
                 set {
                     base[Key] = value;
-                    Set?.Invoke(Key, value);
+                    SetEvent.Raise(handler => handler(Key, value));
                 }
             }
             public new void Add(TKey Key, TValue Value) {
                 base.Add(Key, Value);
-                Set?.Invoke(Key, Value);
+                SetEvent.Raise(handler => handler(Key, Value));
             }
             public new bool Remove(TKey Key) {
-                bool Success = base.Remove(Key);
-                Removed?.Invoke(Key);
-                return Success;
+                if (base.Remove(Key)) {
+                    RemovedEvent.Raise(handler => handler(Key));
+                    return true;
+                }
+                return false;
             }
         }
         public class Instances {
@@ -813,8 +918,8 @@ namespace Embers
                 if (InstanceList != null) {
                     return InstanceList;
                 }
-                else if (Instance != null) { 
-                    return new List<Instance>() {Instance};
+                else if (Instance != null) {
+                    return new List<Instance>() { Instance };
                 }
                 else {
                     return new List<Instance>();
@@ -1170,7 +1275,7 @@ namespace Embers
                                 else {
                                     throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Uninitialized class variable '{ObjectTokenExpression.Token.Value!}' for {CurrentModule}");
                                 }
-                            }
+                                }
                             // Symbol
                             case Phase2TokenType.Symbol: {
                                 return GetSymbol(ObjectTokenExpression.Token.Value!);
@@ -1681,6 +1786,10 @@ namespace Embers
             // Set approximate location
             ApproximateLocation = Expression.Location;
 
+            // Stop script
+            if (Stopping)
+                throw new StopException();
+
             // Interpret expression
             return Expression switch {
                 MethodCallExpression MethodCallExpression => await InterpretMethodCallExpression(MethodCallExpression),
@@ -1701,11 +1810,11 @@ namespace Embers
                                                         ? await InterpretExpressionAsync(ReturnStatement.ReturnValue)
                                                         : Interpreter.Nil),
                 LoopControlStatement LoopControlStatement => LoopControlStatement.Type switch {
-                                                        LoopControlType.Break => throw new BreakException(),
-                                                        LoopControlType.Retry => throw new RetryException(),
-                                                        LoopControlType.Redo => throw new RedoException(),
-                                                        LoopControlType.Next => throw new NextException(),
-                                                        _ => throw new InternalErrorException($"{Expression.Location}: Loop control type not handled: '{LoopControlStatement.Type}'")},
+                    LoopControlType.Break => throw new BreakException(),
+                    LoopControlType.Retry => throw new RetryException(),
+                    LoopControlType.Redo => throw new RedoException(),
+                    LoopControlType.Next => throw new NextException(),
+                    _ => throw new InternalErrorException($"{Expression.Location}: Loop control type not handled: '{LoopControlStatement.Type}'") },
                 YieldStatement YieldStatement => await InterpretYieldStatement(YieldStatement, OnYield),
                 RangeExpression RangeExpression => await InterpretRangeExpression(RangeExpression),
                 IfBranchesStatement IfBranchesStatement => await InterpretIfBranchesStatement(IfBranchesStatement),
@@ -1744,7 +1853,7 @@ namespace Embers
             // Interpret statements
             return await InternalInterpretAsync(Statements);
         }
-        
+
         public async Task<Instance> InterpretAsync(List<Expression> Statements, Method? OnYield = null) {
             // Debounce
             if (Running) throw new ApiException("The script is already running.");
@@ -1785,6 +1894,17 @@ namespace Embers
         }
         public Instance Evaluate(string Code) {
             return EvaluateAsync(Code).Result;
+        }
+        public async Task WaitForThreadsAsync() {
+            while (ThreadCount > 0)
+                await Task.Delay(10);
+        }
+        public void WaitForThreads() {
+            WaitForThreadsAsync().Wait();
+        }
+        /// <summary>Stops the script, including all running threads.</summary>
+        public void Stop() {
+            Stopping = true;
         }
 
         public Script(Interpreter interpreter, bool AllowUnsafeApi = true) {

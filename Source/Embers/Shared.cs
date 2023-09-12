@@ -51,6 +51,9 @@ namespace Embers
     public class ExitException : EmbersException {
         public ExitException() : base() { }
     }
+    public class StopException : EmbersException {
+        public StopException() : base() { }
+    }
 
     public readonly struct DebugLocation {
         public readonly int Line;

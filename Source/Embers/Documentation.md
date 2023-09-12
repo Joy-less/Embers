@@ -33,10 +33,10 @@ throw(exception_name)
 catch(exception_name)
 	Catches an exception thrown by throw with the given name.
 
-lambda
+lambda {}
 	Returns a proc from the given block that can be called with call(*args).
 
-loop
+loop {}
 	Repeats the given block until a break or return statement is reached.
 
 rand([max = 1.0])
@@ -139,7 +139,7 @@ integer.to_i
 integer.to_f
 	Returns the integer as a float.
 
-integer.times |n|
+integer.times |n| {}
 	Repeats the given block the integer number of times.
 ```
 ```
@@ -160,10 +160,10 @@ range.min
 range.max
 	Gets the maximum value of the range after inclusive/exclusive is applied.
 
-range.each |i|
+range.each |i| {}
 	Repeats the given block for each index in the range.
 
-range.reverse_each |i|
+range.reverse_each |i| {}
 	Repeats the given block for each index in the range backwards.
 
 range.length
@@ -194,16 +194,16 @@ array.sample
 array.insert(index, item) | array.insert(item)
 	Inserts the item into the given index in the array, or adds it to the end of the array.
 
-array.each |item, index|
+array.each |item, index| {}
 	Repeats the given block for each item in the array.
 
-array.reverse_each |item, index|
+array.reverse_each |item, index| {}
 	Repeats the given block for each item in the array backwards.
 
-array.map |item| | array.map! |item|
+array.map |item| {} | array.map! |item| {}
 	Returns a new array containing the values returned by the given block.
 
-array.sort |a, b| | array.sort! |item|
+array.sort |a, b| {} | array.sort! |item| {}
 	If a block is given, returns a new array sorted by the block's return value. It should return -1 if a -> b, 0 if a and b are the same, and 1 if b -> a.
 	If a block is not given, returns a new array sorted in ascending order by the "<=>" operator.
 
@@ -267,6 +267,22 @@ Exception.new([message = ""])
 
 exception.message
 	Returns the exception's message.
+```
+```
+Thread.new {}
+	Returns a thread created from the given block. It can only be run once.
+
+thread.join
+	Runs the thread in the current thread if it's not already started, and waits for it to finish.
+
+thread.start
+	Runs the thread in the background if it's not already started.
+
+thread.start_parallel
+	Runs the thread in the background using parallelisation if it's not already started.
+
+thread.stop
+	Stops the thread.
 ```
 ```
 __LINE__

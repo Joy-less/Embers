@@ -1590,7 +1590,14 @@ namespace Embers
                             i++;
 
                             // Get do |arguments|
-                            List<MethodArgumentExpression> DoArguments = GetMethodArguments(ParsedObjects, ref i, true, Token.Location);
+                            List<MethodArgumentExpression> DoArguments;
+                            if (ParsedObjects[i] is Phase2Token Tok && Tok.Type == Phase2TokenType.Pipe) {
+                                DoArguments = GetMethodArguments(ParsedObjects, ref i, true, Token.Location);
+                            }
+                            else {
+                                i--;
+                                DoArguments = new();
+                            }
 
                             // Open do block
                             PushBlock(new BuildingDo(Location, DoArguments, false));
@@ -1722,7 +1729,14 @@ namespace Embers
                             i++;
 
                             // Get do |arguments|
-                            List<MethodArgumentExpression> DoArguments = GetMethodArguments(ParsedObjects, ref i, true, Token.Location);
+                            List<MethodArgumentExpression> DoArguments;
+                            if (ParsedObjects[i] is Phase2Token Tok && Tok.Type == Phase2TokenType.Pipe) {
+                                DoArguments = GetMethodArguments(ParsedObjects, ref i, true, Token.Location);
+                            }
+                            else {
+                                i--;
+                                DoArguments = new();
+                            }
 
                             // Open do block
                             PushBlock(new BuildingDo(Location, DoArguments, true));
@@ -2656,6 +2670,11 @@ namespace Embers
         public static void CopyTo<TKey, TValue>(this IReadOnlyDictionary<TKey, TValue> Origin, Dictionary<TKey, TValue> Target) where TKey : notnull {
             foreach (KeyValuePair<TKey, TValue> Pair in Origin) {
                 Target[Pair.Key] = Pair.Value;
+            }
+        }
+        public static void CopyTo<T>(this Stack<T> Origin, Stack<T> Target) where T : notnull {
+            foreach (T Value in Origin) {
+                Target.Push(Value);
             }
         }
         public static Dictionary<T, T> ListAsHash<T>(this List<T> HashItemsList) where T : Expression {

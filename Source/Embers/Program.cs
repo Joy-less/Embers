@@ -6,27 +6,61 @@ namespace Embers
     internal class Program
     {
         static void Main() {
-            // Test
+            /*// Test
             {
                 Interpreter Interpreter = new();
                 Script Script = new(Interpreter);
-                Benchmark(() => 
+                Benchmark(() => {
+                    _ = Script.EvaluateAsync(@"
+puts 'a'
+sleep(10)
+puts 'b'
+                    ");
+                    Thread.Sleep(3000);
+                    Script.Stop();
+                });
+                Console.ReadLine();
+            }
+            // Test 2
+            {
+                Interpreter Interpreter = new();
+                Script Script = new(Interpreter);
+                Task.Run(async () => await Script.EvaluateAsync(@"
+t = Thread.new {
+    sleep(1)
+    puts 'a'
+}
+t.join
+puts 'b'
+
+t2 = Thread.new {
+    sleep(1)
+    puts 'a'
+}
+t2.start
+puts 'b'
+                "));
+                Thread.Sleep(300);
+                Script.Stop();
+                Console.WriteLine("Stopped!");
+                Console.ReadLine();
+            }*/
+            // Test 3
+            {
+                Interpreter Interpreter = new();
+                Script Script = new(Interpreter);
+                Benchmark(() => {
                     Script.Evaluate(@"
-if !true && false
-    puts 'true'
-else
-    puts 'false'
-end
-if not true && false
-    puts 'true'
-else
-    puts 'false'
-end
-if not nil
-    puts 'not nil'
-end
-                    ")
-                );
+t = Thread.new {
+    for i in 1..1_000_000
+        b = i + 1
+    end
+}
+t.start_parallel
+                    ");
+                });
+                Script.WaitForThreads();
+                Console.WriteLine("Done.");
                 Console.ReadLine();
             }
             // Benchmark
@@ -34,7 +68,7 @@ end
                 Interpreter Interpreter = new();
                 Script Script = new(Interpreter);
                 Benchmark(() => 
-                    Script.Evaluate("250000000.times do \n end")
+                    Script.Evaluate("250_000_000.times do \n end")
                 );
                 Console.ReadLine();
             }

@@ -20,6 +20,7 @@ namespace Embers
         public readonly Class Integer;
         public readonly Class Float;
         public readonly Class Proc;
+        public readonly Class Thread;
         public readonly Class Range;
         public readonly Class Array;
         public readonly Class Hash;
@@ -59,6 +60,7 @@ namespace Embers
             Integer = MainScript.CreateClass("Integer");
             Float = MainScript.CreateClass("Float");
             Proc = MainScript.CreateClass("Proc");
+            Thread = MainScript.CreateClass("Thread");
             Range = MainScript.CreateClass("Range");
             Array = MainScript.CreateClass("Array");
             Hash = MainScript.CreateClass("Hash");

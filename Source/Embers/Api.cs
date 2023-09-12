@@ -200,6 +200,13 @@ namespace Embers
             Interpreter.Exception.InstanceMethods["initialize"] = new Method(_Exception.initialize, 0..1);
             Interpreter.Exception.InstanceMethods["message"] = new Method(_Exception.message, 0);
 
+            // Thread
+            Interpreter.Thread.InstanceMethods["initialize"] = new Method(_Thread.initialize, 0);
+            Interpreter.Thread.InstanceMethods["join"] = new Method(_Thread.join, 0);
+            Interpreter.Thread.InstanceMethods["start"] = new Method(_Thread.start, 0);
+            Interpreter.Thread.InstanceMethods["start_parallel"] = new Method(_Thread.start_parallel, 0);
+            Interpreter.Thread.InstanceMethods["stop"] = new Method(_Thread.stop, 0);
+
             //
             // UNSAFE APIS
             //
@@ -1646,6 +1653,37 @@ namespace Embers
             }
             public static async Task<Instance> message(MethodInput Input) {
                 return new StringInstance(Input.Interpreter.String, Input.Instance.Exception.Message);
+            }
+        }
+        static class _Thread {
+            public static async Task<Instance> initialize(MethodInput Input) {
+                Method? OnYield = Input.OnYield ?? throw new RuntimeException($"{Input.Location}: No block given for Thread.new");
+                
+                ((ThreadInstance)Input.Instance).SetMethod(OnYield);
+
+                return Input.Interpreter.Nil;
+            }
+            public static async Task<Instance> join(MethodInput Input) {
+                ThreadInstance Thread = (ThreadInstance)Input.Instance;
+                await Thread.Thread.Run();
+                return Input.Interpreter.Nil;
+            }
+            public static async Task<Instance> start(MethodInput Input) {
+                ThreadInstance Thread = (ThreadInstance)Input.Instance;
+                _ = Thread.Thread.Run();
+                return Input.Interpreter.Nil;
+            }
+            public static async Task<Instance> start_parallel(MethodInput Input) {
+                ThreadInstance Thread = (ThreadInstance)Input.Instance;
+                Parallel.Invoke(() => {
+                    _ = Thread.Thread.Run();
+                });
+                return Input.Interpreter.Nil;
+            }
+            public static async Task<Instance> stop(MethodInput Input) {
+                ThreadInstance Thread = (ThreadInstance)Input.Instance;
+                Thread.Thread.Stop();
+                return Input.Interpreter.Nil;
             }
         }
     }
