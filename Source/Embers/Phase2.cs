@@ -90,6 +90,7 @@ namespace Embers
         };
         public readonly static string[][] OperatorPrecedence = new[] {
             new[] {"**"},
+            new[] {"!"},
             new[] {"*", "/", "%"},
             new[] {"+", "-"},
 
@@ -100,10 +101,11 @@ namespace Embers
             new[] {"<=>", "==", "===", "!=", "=~", "!~"},
             new[] {"&&"},
             new[] {"||"},
+            new[] {"not"},
             new[] {"or", "and"},
         };
         public readonly static string[] NonMethodOperators = new[] {
-            "or", "and", "&&", "||"
+            "or", "and", "&&", "||", "!", "not"
         };
 
         public class Phase2Token : Phase2Object {
@@ -322,6 +324,18 @@ namespace Embers
                 And,
                 Or,
                 Xor
+            }
+        }
+        public class NotExpression : Expression {
+            public readonly Expression Right;
+            public NotExpression(DebugLocation location, Expression right) : base(location) {
+                Right = right;
+            }
+            public override string Inspect() {
+                return $"(not {Right.Inspect()})";
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({Location.Serialise()}, {Right.Serialise()})";
             }
         }
         public abstract class ConditionalExpression : Expression {
@@ -2057,16 +2071,24 @@ namespace Embers
 
                     if (UnknownObject is Phase2Token Token) {
                         if (Token.Type == Phase2TokenType.Operator && Operators.Contains(Token.Value!)) {
-                            if (LastUnknownObject != null && NextUnknownObject != null && LastUnknownObject is Expression LastExpression && NextUnknownObject is Expression NextExpression) {
+                            if (Token.Value is "not" or "!") {
+                                if (NextUnknownObject is Expression NextExpression) {
+                                    ParsedObjects.RemoveRange(i, 2);
+                                    ParsedObjects.Insert(i, new NotExpression(Token.Location, NextExpression));
+                                }
+                                else {
+                                    throw new SyntaxErrorException($"{Token.Location}: Operator '{Token.Value!}' must be before an expression (got {NextUnknownObject?.Inspect()})");
+                                }
+                            }
+                            else if (LastUnknownObject is Expression LastExpression && NextUnknownObject is Expression NextExpression) {
                                 i--;
                                 ParsedObjects.RemoveRange(i, 3);
-
                                 if (NonMethodOperators.Contains(Token.Value!)) {
-                                    LogicalExpression.LogicalExpressionType LogicType = Token.Value switch {
+                                    LogicalExpression.LogicalExpressionType LogicType = Token.Value! switch {
                                         "and" or "&&" => LogicalExpression.LogicalExpressionType.And,
                                         "or" or "||" => LogicalExpression.LogicalExpressionType.Or,
                                         "^" => LogicalExpression.LogicalExpressionType.Xor,
-                                        _ => throw new InternalErrorException($"{Token.Location}: Unhandled logic expression type: '{Token.Value}'")
+                                        _ => throw new InternalErrorException($"{Token.Location}: Unhandled logic expression type: '{Token.Value!}'")
                                     };
                                     ParsedObjects.Insert(i, new LogicalExpression(LastExpression.Location, LogicType, LastExpression, NextExpression));
                                 }

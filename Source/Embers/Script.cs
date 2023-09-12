@@ -152,7 +152,7 @@ namespace Embers
             public readonly long ObjectId;
             public virtual ReactiveDictionary<string, Instance> InstanceVariables { get; } = new();
             public virtual ReactiveDictionary<string, Method> InstanceMethods { get; } = new();
-            public bool IsTruthy => !(Object == null || false.Equals(Object));
+            public bool IsTruthy => Object is not (null or false);
             public virtual object? Object { get { return null; } }
             public virtual bool Boolean { get { throw new RuntimeException("Instance is not a boolean"); } }
             public virtual string String { get { throw new RuntimeException("Instance is not a string"); } }
@@ -1286,6 +1286,10 @@ namespace Embers
                     throw new InternalErrorException($"{LogicalExpression.Location}: Unhandled logical expression type: '{LogicalExpression.LogicType}'");
             }
         }
+        async Task<Instance> InterpretNotExpression(NotExpression NotExpression) {
+            Instance Right = await InterpretExpressionAsync(NotExpression.Right);
+            return Right.IsTruthy ? Interpreter.False : Interpreter.True;
+        }
         async Task<Instance> InterpretDefineMethodStatement(DefineMethodStatement DefineMethodStatement) {
             Instance MethodNameObject = await InterpretExpressionAsync(DefineMethodStatement.MethodName, ReturnType.HypotheticalVariable);
             if (MethodNameObject is VariableReference MethodNameRef) {
@@ -1689,6 +1693,7 @@ namespace Embers
                 ForStatement ForStatement => await InterpretForStatement(ForStatement),
                 SelfExpression => new ModuleReference(CurrentModule),
                 LogicalExpression LogicalExpression => await InterpretLogicalExpression(LogicalExpression),
+                NotExpression NotExpression => await InterpretNotExpression(NotExpression),
                 DefineMethodStatement DefineMethodStatement => await InterpretDefineMethodStatement(DefineMethodStatement),
                 DefineClassStatement DefineClassStatement => await InterpretDefineClassStatement(DefineClassStatement),
                 ReturnStatement ReturnStatement => throw new ReturnException(

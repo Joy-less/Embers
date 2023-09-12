@@ -12,29 +12,19 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() => 
                     Script.Evaluate(@"
-arr = [1, 2]
-p(arr << 3)
-p arr
-
-begin
-    raise StandardError.new'Ouch'
-rescue => e
-    puts e.class
+if !true && false
+    puts 'true'
+else
+    puts 'false'
 end
-
-def a!
-    puts 'aaa'
+if not true && false
+    puts 'true'
+else
+    puts 'false'
 end
-a!
-
-class SuperString < String
-    def use_powers
-        puts 'Dead.'
-    end
+if not nil
+    puts 'not nil'
 end
-p String.new('hi ').rstrip
-p SuperString.new('hi ').rstrip
-p SuperString.new('hi ').use_powers
                     ")
                 );
                 Console.ReadLine();
