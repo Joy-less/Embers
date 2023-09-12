@@ -258,17 +258,24 @@ namespace Embers_Tests
 
             // Operator overloading
             AssertEqual(@"
-class Z
-    def +(value)
-        'Zzz' + value
-    end
-    def <=(value)
-        'No idea'
-    end
-end
-y = Z.new
-return y + '...', y <= 5
-", new object[] {"Zzz...", "No idea"});
+                class Z
+                    def +(value)
+                        'Zzz' + value
+                    end
+                    def <=(value)
+                        'No idea'
+                    end
+                end
+                y = Z.new
+                return y + '...', y <= 5
+            ", new object[] {"Zzz...", "No idea"});
+
+            // Exclamation methods
+            AssertEqual(@"
+                arr = [1, 2, 4, 3]
+                arr.sort!
+                arr == [1, 2, 3, 4]
+            ", true);
         }
 
 

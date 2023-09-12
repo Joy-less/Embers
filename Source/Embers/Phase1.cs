@@ -564,14 +564,6 @@
                                 i++;
                             } while (Code[i] != '\n' && Code[i] != '\r');
                             break;
-                        case '?':
-                            if (Tokens.Count != 0 && Tokens[^1].Type == Phase1TokenType.Identifier && !Tokens[^1].Value!.EndsWith('?') && !FollowsWhitespace) {
-                                Tokens[^1].Value += '?';
-                                continue;
-                            }
-                            else {
-                                throw new SyntaxErrorException($"{Location}: '?' is only valid at the end of a method name identifier");
-                            }
                         case '!':
                             if (NextChara == '=') {
                                 AddToken(Phase1TokenType.Operator, "!=");
@@ -609,6 +601,12 @@
                             }
                             // Build identifier
                             string Identifier = BuildWhile(IsValidIdentifierCharacter);
+                            // Add exclamation mark
+                            if (Code[i] is '?' or '!') {
+                                if (Identifier.Length == 0) throw new SyntaxErrorException($"{Location}: '{Code[i]}' not valid for identifier");
+                                Identifier += Code[i];
+                                i++;
+                            }
                             // Double check identifier
                             if (Identifier.Length == 0)
                                 throw new InternalErrorException($"{Location}: Character not handled correctly: '{Chara}'");

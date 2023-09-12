@@ -51,9 +51,9 @@ namespace Embers
 
             Script MainScript = new(this);
 
-            NilClass = MainScript.CreateClass("NilClass"); Nil = new NilInstance(NilClass);
-            TrueClass = MainScript.CreateClass("TrueClass"); True = new TrueInstance(TrueClass);
-            FalseClass = MainScript.CreateClass("FalseClass"); False = new FalseInstance(FalseClass);
+            NilClass = MainScript.CreateClass("NilClass"); Nil = new NilInstance(NilClass); NilClass.InstanceMethods.Remove("initialize"); NilClass.Methods.Remove("new");
+            TrueClass = MainScript.CreateClass("TrueClass"); True = new TrueInstance(TrueClass); TrueClass.InstanceMethods.Remove("initialize"); TrueClass.Methods.Remove("new");
+            FalseClass = MainScript.CreateClass("FalseClass"); False = new FalseInstance(FalseClass); FalseClass.InstanceMethods.Remove("initialize"); FalseClass.Methods.Remove("new");
             String = MainScript.CreateClass("String");
             Symbol = MainScript.CreateClass("Symbol");
             Integer = MainScript.CreateClass("Integer");

@@ -96,40 +96,40 @@ string.to_sym
 string.to_a
 	Returns an array containing each character of the string.
 
-string.chomp
+string.chomp | string.chomp!
 	Returns the string with a single newline removed from the end.
 
-string.strip
+string.strip | string.strip!
 	Returns the string with all whitespace removed from the start and end.
 
-string.lstrip
+string.lstrip | string.lstrip!
 	Returns the string with all whitespace removed from the start.
 
-string.rstrip
+string.rstrip | string.rstrip!
 	Returns the string with all whitespace removed from the end.
 
-string.squeeze
+string.squeeze | string.squeeze!
 	Returns the string with all adjacent duplicate characters removed (e.g. "lollipop" becomes "lolipop").
 
-string.chop
+string.chop | string.chop!
 	Returns the string with a single character removed from the end.
 
 string.chr
 	Returns the first character of the string.
 
-string.capitalize
+string.capitalize | string.capitalize!
 	Returns the string in which the first letter is uppercase and the rest are lowercase (supports unicode).
 
-string.upcase
+string.upcase | string.upcase!
 	Returns the string in uppercase.
 
-string.lowercase
+string.downcase | string.downcase!
 	Returns the string in lowercase.
 
-string.sub(replace, with)
+string.sub(replace, with) | string.sub!(replace, with)
 	Returns the string where the first instance of replace is replaced with with.
 
-string.gsub(replace, with)
+string.gsub(replace, with) | string.gsub!(replace, with)
 	Returns the string where all instances of replace are replaced with with.
 ```
 ```
@@ -200,10 +200,10 @@ array.each |item, index|
 array.reverse_each |item, index|
 	Repeats the given block for each item in the array backwards.
 
-array.map |item|
+array.map |item| | array.map! |item|
 	Returns a new array containing the values returned by the given block.
 
-array.sort |a, b|
+array.sort |a, b| | array.sort! |item|
 	If a block is given, returns a new array sorted by the block's return value. It should return -1 if a -> b, 0 if a and b are the same, and 1 if b -> a.
 	If a block is not given, returns a new array sorted in ascending order by the "<=>" operator.
 
@@ -212,6 +212,9 @@ array.contains?(item)
 
 array.include?(item)
 	Returns true if the array contains the item.
+
+array.empty?
+	Returns true if the array contains no items.
 ```
 ```
 Hash.new([default_value = nil])
@@ -237,6 +240,9 @@ hash.to_a
 
 hash.to_hash
 	Returns the hash.
+
+hash.empty?
+	Returns true if the hash contains no key-value pairs.
 ```
 ```
 Math::PI

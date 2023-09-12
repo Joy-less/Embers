@@ -21,6 +21,11 @@ begin
 rescue => e
     puts e.class
 end
+
+def a!
+    puts 'aaa'
+end
+a!
                     ")
                 );
                 Console.ReadLine();
