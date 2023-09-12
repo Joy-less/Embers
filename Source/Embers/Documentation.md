@@ -51,7 +51,8 @@ quit
 
 eval(code)
 	Evaluates the given code in the current context.
-
+```
+```
 object.inspect
 	Returns a string describing the object in detail.
 
@@ -74,11 +75,12 @@ instance.attr_reader(instance_variable_name)
 	Creates an instance method called "{the given name}" which returns the given instance variable.
 
 instance.attr_writer(instance_variable_name)
-	Creates an instance method called "{the given name}=" which takes a single value and sets the given instance variable to the value.
+	Creates an instance method called "{the given name}=" which sets the instance variable to the given value.
 
 instance.attr_accessor(instance_variable_name)
 	Calls attr_writer and attr_reader.
-
+```
+```
 string.to_str
 	Returns the string.
 
@@ -129,7 +131,8 @@ string.sub(replace, with)
 
 string.gsub(replace, with)
 	Returns the string where all instances of replace are replaced with with.
-
+```
+```
 integer.to_i
 	Returns the integer.
 
@@ -138,16 +141,19 @@ integer.to_f
 
 integer.times |n|
 	Repeats the given block the integer number of times.
-
+```
+```
 float.to_i
 	Returns the float as a truncated integer.
 
 float.to_f
 	Returns the float.
-
+```
+```
 proc.call(*args)
 	Calls the proc method with the given arguments.
-
+```
+```
 range.min
 	Gets the minimum value of the range.
 
@@ -165,7 +171,8 @@ range.length
 
 range.to_a
 	Returns an array containing each index in the range.
-
+```
+```
 array.length
 	Returns the number of items in the array.
 
@@ -205,7 +212,8 @@ array.contains?(item)
 
 array.include?(item)
 	Returns true if the array contains the item.
-
+```
+```
 Hash.new([default_value = nil])
 	Returns a new hash, where if you try to index the hash with a key that doesn't exist, it returns default_value.
 
@@ -229,7 +237,8 @@ hash.to_a
 
 hash.to_hash
 	Returns the hash.
-
+```
+```
 Math::PI
 	A constant containig 17 digits of pi.
 
@@ -245,24 +254,26 @@ Math.cbrt(number)
 Math.sin, Math.cos, Math.tan, Math.asin, Math.acos, Math.atan, Math.atan2, Math.sinh, Math.cosh, Math.tanh, Math.asinh, Math.acosh,
 Math.atanh, Math.exp, Math.log, Math.log10, Math.log2, Math.frexp, Math.ldexp, Math.hypot, Math.erf, Math.erfc, Math.gamma, Math.lgamma
 	Various nerdy maths methods. Math.erf, Math.erfc, Math.gamma and Math.lgamma are only approximations.
-
+```
+```
 Exception.new([message = ""])
 	Returns a new exception with the given message.
 
 exception.message
 	Returns the exception's message.
-
+```
+```
 __LINE__
 	Returns the current script line as an integer.
 
 EMBERS_VERSION
-	The current version of Embers.
+	A string containing the current version of Embers.
 
 EMBERS_RELEASE_DATE
-	The release date of the current version of Embers as a string.
+	A string containing the release date of the current version of Embers.
 
 EMBERS_PLATFORM
-	The local platform's architecture followed by the platform.
+	A string containing the local device's architecture followed by the operating system.
 
 EMBERS_COPYRIGHT
 	Me!
@@ -276,7 +287,8 @@ RUBY_COPYRIGHT
 ```
 system(code)
 	(Windows only) Runs the given code in the command line and returns the output. If the command line waits for input, it will be stopped prematurely.
-
+```
+```
 File.read(file_path)
 	Reads the given file and returns its contents as a string.
 

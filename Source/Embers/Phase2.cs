@@ -93,6 +93,7 @@ namespace Embers
             new[] {"*", "/", "%"},
             new[] {"+", "-"},
 
+            new[] {"<<", ">>"},
             new[] {"&"},
             new[] {"|", "^"},
             new[] {">", ">=", "<", "<="},
@@ -560,13 +561,14 @@ namespace Embers
                 ExceptionVariable = exceptionVariable;
             }
             public override string Inspect() {
-                if (Exception != null) {
-                    if (ExceptionVariable != null) {
-                        return $"rescue {Exception.Inspect()} => {ExceptionVariable.Inspect()}; {Statements.Inspect()}";
-                    }
-                    else {
-                        return $"rescue {Exception.Inspect()}; {Statements.Inspect()}";
-                    }
+                if (Exception != null && ExceptionVariable != null) {
+                    return $"rescue {Exception.Inspect()} => {ExceptionVariable.Inspect()}; {Statements.Inspect()}";
+                }
+                else if (Exception != null) {
+                    return $"rescue {Exception.Inspect()}; {Statements.Inspect()}";
+                }
+                else if (ExceptionVariable != null) {
+                    return $"rescue => {ExceptionVariable.Inspect()}; {Statements.Inspect()}";
                 }
                 else {
                     return $"rescue; {Statements.Inspect()}";
@@ -1416,24 +1418,23 @@ namespace Embers
                 if (ExceptionObjects.Count != 0) {
                     ExceptionExpression = ObjectsToExpression(ExceptionObjects) as ObjectTokenExpression
                         ?? throw new SyntaxErrorException($"{Location}: Expected exception or end of statement after 'rescue', got '{ExceptionObjects.Inspect()}'");
-
-                    // Get right arrow
-                    if (StatementTokens[Index] is Phase2Token Tok && Tok.Type == Phase2TokenType.RightArrow) {
-                        Index++;
-                        // Get exception variable after right arrow
-                        List<Phase2Object> ExceptionVariableObjects = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type == Phase2TokenType.EndOfStatement));
-                        if (ExceptionVariableObjects.Count != 0) {
-                            Expression ExceptionVariableObject = ObjectsToExpression(ExceptionVariableObjects);
-                            if (ExceptionVariableObject.GetType() == typeof(ObjectTokenExpression)) {
-                                ExceptionVariable = ((ObjectTokenExpression)ExceptionVariableObject).Token;
-                            }
-                            else {
-                                throw new SyntaxErrorException($"{Location}: Expected exception name after '=>' after 'rescue', got {ExceptionVariableObject.GetType().Name}");
-                            }
+                }
+                // Get right arrow
+                if (StatementTokens[Index] is Phase2Token Tok && Tok.Type == Phase2TokenType.RightArrow) {
+                    Index++;
+                    // Get exception variable after right arrow
+                    List<Phase2Object> ExceptionVariableObjects = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type == Phase2TokenType.EndOfStatement));
+                    if (ExceptionVariableObjects.Count != 0) {
+                        Expression ExceptionVariableObject = ObjectsToExpression(ExceptionVariableObjects);
+                        if (ExceptionVariableObject.GetType() == typeof(ObjectTokenExpression)) {
+                            ExceptionVariable = ((ObjectTokenExpression)ExceptionVariableObject).Token;
                         }
                         else {
-                            throw new SyntaxErrorException($"{Location}: Expected exception name after '=>' after 'rescue', got nothing");
+                            throw new SyntaxErrorException($"{Location}: Expected exception name after '=>' after 'rescue', got {ExceptionVariableObject.GetType().Name}");
                         }
+                    }
+                    else {
+                        throw new SyntaxErrorException($"{Location}: Expected exception name after '=>' after 'rescue', got nothing");
                     }
                 }
             }
@@ -2588,12 +2589,12 @@ namespace Embers
         }
         public static void CopyTo<TKey, TValue>(this Dictionary<TKey, TValue> Origin, Dictionary<TKey, TValue> Target) where TKey : notnull {
             foreach (KeyValuePair<TKey, TValue> Pair in Origin) {
-                Target.Add(Pair.Key, Pair.Value);
+                Target[Pair.Key] = Pair.Value;
             }
         }
         public static void CopyTo<TKey, TValue>(this IReadOnlyDictionary<TKey, TValue> Origin, Dictionary<TKey, TValue> Target) where TKey : notnull {
             foreach (KeyValuePair<TKey, TValue> Pair in Origin) {
-                Target.Add(Pair.Key, Pair.Value);
+                Target[Pair.Key] = Pair.Value;
             }
         }
         public static Dictionary<T, T> ListAsHash<T>(this List<T> HashItemsList) where T : Expression {

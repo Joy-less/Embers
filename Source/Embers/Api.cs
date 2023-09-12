@@ -117,6 +117,7 @@ namespace Embers
 
             // Array
             Interpreter.Array.InstanceMethods["[]"] = new Method(Array._Indexer, 1);
+            Interpreter.Array.InstanceMethods["<<"] = new Method(Array._Append, 1);
             Interpreter.Array.InstanceMethods["length"] = new Method(Array.length, 0);
             Interpreter.Array.InstanceMethods["count"] = new Method(Array.count, 0..1);
             Interpreter.Array.InstanceMethods["first"] = new Method(Array.first, 0);
@@ -273,7 +274,9 @@ namespace Embers
                     throw ExceptionToRaise;
                 }
                 else {
-                    throw new RuntimeException(Argument.String);
+                    Exception NewExceptionToRaise = new RuntimeException(Argument.String);
+                    Input.Script.ExceptionsTable.TryAdd(NewExceptionToRaise, new ExceptionInstance(Input.Interpreter.RuntimeError, Argument.String));
+                    throw NewExceptionToRaise;
                 }
             }
             else {
@@ -288,7 +291,7 @@ namespace Embers
 
             string CatchIdentifier = Input.Arguments[0].String;
             try {
-                await OnYield.Call(Input.Script, Input.Instance);
+                await OnYield.Call(Input.Script, Input.Instance, CatchReturn: false);
             }
             catch (ThrowException Ex) {
                 if (Ex.Identifier != CatchIdentifier)
@@ -300,7 +303,7 @@ namespace Embers
             Method? OnYield = Input.OnYield ?? throw new RuntimeException($"{Input.Location}: No block given for lambda");
 
             Instance NewProc = new ProcInstance(Input.Interpreter.Proc, new Method(
-                async Input => await OnYield.Call(Input.Script, Input.Instance, Input.Arguments, Input.OnYield),
+                async Input => await OnYield.Call(Input.Script, Input.Instance, Input.Arguments, Input.OnYield, CatchReturn: false),
                 null
             ));
             return NewProc;
@@ -310,7 +313,7 @@ namespace Embers
 
             while (true) {
                 try {
-                    await OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow);
+                    await OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                 }
                 catch (BreakException) {
                     break;
@@ -774,11 +777,11 @@ namespace Embers
                         try {
                             // x.times do |n|
                             if (TakesArgument) {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i), BreakHandleType: BreakHandleType.Rethrow);
+                                await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.times do
                             else {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow);
+                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                         }
                         catch (BreakException) {
@@ -948,11 +951,11 @@ namespace Embers
                         try {
                             // x.each do |n|
                             if (TakesArgument) {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i), BreakHandleType: BreakHandleType.Rethrow);
+                                await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.each do
                             else {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow);
+                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                         }
                         catch (BreakException) {
@@ -983,11 +986,11 @@ namespace Embers
                         try {
                             // x.reverse_each do |n|
                             if (TakesArgument) {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i), BreakHandleType: BreakHandleType.Rethrow);
+                                await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.reverse_each do
                             else {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow);
+                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                         }
                         catch (BreakException) {
@@ -1068,6 +1071,15 @@ namespace Embers
                     }
                 }
             }
+            public static async Task<Instance> _Append(MethodInput Input) {
+                // Get array and index
+                List<Instance> Array = Input.Instance.Array;
+                Instance ItemToAppend = Input.Arguments[0];
+                // Append item
+                Array.Add(ItemToAppend);
+                // Return array
+                return Input.Instance;
+            }
             public static async Task<Instance> length(MethodInput Input) {
                 List<Instance> Items = Input.Instance.Array;
                 return new IntegerInstance(Input.Interpreter.Integer, Items.Count);
@@ -1136,15 +1148,15 @@ namespace Embers
                         try {
                             // x.each do |n, i|
                             if (TakesArguments == 2) {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, new List<Instance>() { Array[i], new IntegerInstance(Input.Interpreter.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow);
+                                await Input.OnYield.Call(Input.Script, Input.Instance, new List<Instance>() { Array[i], new IntegerInstance(Input.Interpreter.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.each do |n|
                             else if (TakesArguments == 1) {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, Array[i], BreakHandleType: BreakHandleType.Rethrow);
+                                await Input.OnYield.Call(Input.Script, Input.Instance, Array[i], BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.each do
                             else {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow);
+                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                         }
                         catch (BreakException) {
@@ -1173,15 +1185,15 @@ namespace Embers
                         try {
                             // x.reverse_each do |n, i|
                             if (TakesArguments == 2) {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, new List<Instance>() { Array[i], new IntegerInstance(Input.Interpreter.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow);
+                                await Input.OnYield.Call(Input.Script, Input.Instance, new List<Instance>() { Array[i], new IntegerInstance(Input.Interpreter.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.reverse_each do |n|
                             else if (TakesArguments == 1) {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, Array[i], BreakHandleType: BreakHandleType.Rethrow);
+                                await Input.OnYield.Call(Input.Script, Input.Instance, Array[i], BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.reverse_each do
                             else {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow);
+                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                         }
                         catch (BreakException) {
@@ -1207,7 +1219,7 @@ namespace Embers
                     List<Instance> MappedArray = new();
                     for (int i = 0; i < Array.Count; i++) {
                         Instance Item = Array[i];
-                        Instance MappedItem = await Input.OnYield.Call(Input.Script, Input.Instance, Item);
+                        Instance MappedItem = await Input.OnYield.Call(Input.Script, Input.Instance, Item, CatchReturn: false);
                         MappedArray.Add(MappedItem);
                     }
                     return new ArrayInstance(Input.Interpreter.Array, MappedArray);
@@ -1220,7 +1232,7 @@ namespace Embers
                 Func<Instance, Instance, Task<bool>> SortFunction;
                 if (Input.OnYield != null) {
                     SortFunction = async (A, B) => {
-                        return (await Input.OnYield.Call(Input.Script, null, new Instances(A, B))).Integer < 0;
+                        return (await Input.OnYield.Call(Input.Script, null, new Instances(A, B), CatchReturn: false)).Integer < 0;
                     };
                 }
                 else {

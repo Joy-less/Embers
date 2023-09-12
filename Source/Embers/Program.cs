@@ -12,37 +12,15 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() => 
                     Script.Evaluate(@"
-class A
-    def a=(value)
-        @a = value
-    end
-    attr_accessor :a
-end
-b = A.new
-b.a = 'Some'
-b.a += 'thing'
-puts b.a
-
-class Z
-    def +(value)
-        'Zzz' + value
-    end
-    def <=(value)
-        'No idea'
-    end
-end
-y = Z.new
-puts y + '...'
-puts y <= 5
-
-puts 'Less than or equal to result: ' + (2 <= 3.15).to_s
-puts 'Spaceship result: ' + (2 <=> 3.15).to_s
-
-arr = [""a"", ""b"", ""c""]
-arr = arr.sort do |a, b|
-    if a < b; 1; else -1; end
-end
+arr = [1, 2]
+p(arr << 3)
 p arr
+
+begin
+    raise StandardError.new'Error'
+rescue => e
+    puts e.class
+end
                     ")
                 );
                 Console.ReadLine();

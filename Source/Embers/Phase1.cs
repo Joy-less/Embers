@@ -524,6 +524,10 @@
                                     i++;
                                 }
                             }
+                            else if (NextChara == '<') {
+                                AddToken(Phase1TokenType.Operator, "<<");
+                                i++;
+                            }
                             else {
                                 AddToken(Phase1TokenType.Operator, "<");
                             }

@@ -22,27 +22,27 @@ namespace Embers
 
         public Instance CreateInstanceWithNew(Class Class) {
             if (Class.InheritsFrom(Interpreter.NilClass))
-                return new NilInstance(Interpreter.NilClass);
+                return new NilInstance(Class);
             else if (Class.InheritsFrom(Interpreter.TrueClass))
-                return new TrueInstance(Interpreter.TrueClass);
+                return new TrueInstance(Class);
             else if (Class.InheritsFrom(Interpreter.FalseClass))
-                return new FalseInstance(Interpreter.FalseClass);
+                return new FalseInstance(Class);
             else if (Class.InheritsFrom(Interpreter.String))
-                return new StringInstance(Interpreter.String, "");
+                return new StringInstance(Class, "");
             else if (Class.InheritsFrom(Interpreter.Symbol))
-                return new SymbolInstance(Interpreter.Symbol, "");
+                return new SymbolInstance(Class, "");
             else if (Class.InheritsFrom(Interpreter.Integer))
-                return new IntegerInstance(Interpreter.Integer, 0);
+                return new IntegerInstance(Class, 0);
             else if (Class.InheritsFrom(Interpreter.Float))
-                return new FloatInstance(Interpreter.Float, 0);
+                return new FloatInstance(Class, 0);
             else if (Class.InheritsFrom(Interpreter.Proc))
                 throw new RuntimeException($"{ApproximateLocation}: Tried to create Proc object without a block");
             else if (Class.InheritsFrom(Interpreter.Array))
-                return new ArrayInstance(Interpreter.Array, new List<Instance>());
+                return new ArrayInstance(Class, new List<Instance>());
             else if (Class.InheritsFrom(Interpreter.Hash))
-                return new HashInstance(Interpreter.Hash, new Dictionary<Instance, Instance>(), Interpreter.Nil);
+                return new HashInstance(Class, new Dictionary<Instance, Instance>(), Interpreter.Nil);
             else if (Class.InheritsFrom(Interpreter.Exception))
-                return new ExceptionInstance(Interpreter.Exception, "");
+                return new ExceptionInstance(Class, "");
             else
                 return new Instance(Class);
         }
@@ -60,25 +60,46 @@ namespace Embers
         }
         public class Module : Block {
             public readonly string Name;
-            public readonly Dictionary<string, Method> Methods = new();
-            public readonly Dictionary<string, Method> InstanceMethods = new();
+            public readonly ReactiveDictionary<string, Method> Methods = new();
+            public readonly ReactiveDictionary<string, Method> InstanceMethods = new();
             public readonly Dictionary<string, Instance> ClassVariables = new();
             public readonly Interpreter Interpreter;
-            public Module(string name, Module parent) : base(parent) {
+            public readonly Module? SuperModule;
+            public Module(string name, Module parent, Module? superModule = null) : base(parent) {
                 Name = name;
                 Interpreter = parent.Interpreter;
+                SuperModule = superModule;
                 Setup();
             }
             public Module(string name, Interpreter interpreter) : base(null) {
                 Name = name;
                 Interpreter = interpreter;
+                SuperModule = null;
                 Setup();
             }
-            void Setup() {
+            protected virtual void Setup() {
                 // Default class and instance methods
-                Api.DefaultClassAndInstanceMethods.CopyTo(InstanceMethods);
                 Api.DefaultClassAndInstanceMethods.CopyTo(Methods);
+                Api.DefaultClassAndInstanceMethods.CopyTo(InstanceMethods);
                 Api.DefaultInstanceMethods.CopyTo(InstanceMethods);
+                // Superclass class and instance methods
+                if (SuperModule != null) {
+                    SuperModule.Methods.CopyTo(InstanceMethods);
+                    SuperModule.InstanceMethods.CopyTo(InstanceMethods);
+                    // Inherit changes later
+                    SuperModule.Methods.Set += (string Key, Method NewValue) => {
+                        Methods[Key] = NewValue;
+                    };
+                    SuperModule.InstanceMethods.Set += (string Key, Method NewValue) => {
+                        InstanceMethods[Key] = NewValue;
+                    };
+                    SuperModule.Methods.Removed += (string Key) => {
+                        Methods.Remove(Key);
+                    };
+                    SuperModule.InstanceMethods.Removed += (string Key) => {
+                        InstanceMethods.Remove(Key);
+                    };
+                }
             }
             public bool InheritsFrom(Module Ancestor) {
                 Module CurrentAncestor = this;
@@ -86,7 +107,7 @@ namespace Embers
                     if (CurrentAncestor == Ancestor)
                         return true;
 
-                    if (CurrentAncestor.Parent is Module ModuleAncestor)
+                    if (CurrentAncestor.SuperModule is Module ModuleAncestor)
                         CurrentAncestor = ModuleAncestor;
                     else
                         return false;
@@ -94,34 +115,33 @@ namespace Embers
             }
         }
         public class Class : Module {
-            public Class(string name, Module parent) : base(name, parent) {
+            public Class(string name, Module parent, Module? superClass = null) : base(name, parent, superClass) {
                 Setup();
             }
             public Class(string name, Interpreter interpreter) : base(name, interpreter) {
                 Setup();
             }
-            void Setup() {
+            protected override void Setup() {
+                base.Setup();
                 // Default method: new
-                Methods.Add("new", new Method(async Input => {
+                Methods["new"] = new Method(async Input => {
                     Instance NewInstance = Input.Script.CreateInstanceWithNew(this);
                     if (NewInstance.InstanceMethods.TryGetValue("initialize", out Method? Initialize)) {
-                        // Set instance
-                        Input.Script.CurrentObject.Push(NewInstance);
                         // Call initialize & ignore result
-                        await Initialize.Call(Input.Script, NewInstance, Input.Arguments);
-                        // Step back an instance
-                        Input.Script.CurrentObject.Pop();
+                        await Input.Script.CreateTemporaryInstanceScope(NewInstance, async () => {
+                            await Initialize.Call(Input.Script, NewInstance, Input.Arguments);
+                        });
                         // Return instance
                         return NewInstance;
                     }
                     else {
                         throw new RuntimeException($"Undefined method 'initialize' for {Name}");
                     }
-                }, null));
+                }, null);
                 // Default method: initialize
-                InstanceMethods.Add("initialize", new Method(async Input => {
+                InstanceMethods["initialize"] = new Method(async Input => {
                     return Input.Instance;
-                }, 0));
+                }, 0);
             }
         }
         public class Instance {
@@ -130,8 +150,8 @@ namespace Embers
             }*/
             public readonly Module? Module; // Will be null if instance is a pseudoinstance
             public readonly long ObjectId;
-            public virtual Dictionary<string, Instance> InstanceVariables { get; } = new();
-            public virtual Dictionary<string, Method> InstanceMethods { get; } = new();
+            public virtual ReactiveDictionary<string, Instance> InstanceVariables { get; } = new();
+            public virtual ReactiveDictionary<string, Method> InstanceMethods { get; } = new();
             public bool IsTruthy => !(Object == null || false.Equals(Object));
             public virtual object? Object { get { return null; } }
             public virtual bool Boolean { get { throw new RuntimeException("Instance is not a boolean"); } }
@@ -431,8 +451,8 @@ namespace Embers
             }
         }
         public abstract class PseudoInstance : Instance {
-            public override Dictionary<string, Instance> InstanceVariables { get { throw new ApiException($"{GetType().Name} instance does not have instance variables"); } }
-            public override Dictionary<string, Method> InstanceMethods { get { throw new ApiException($"{GetType().Name} instance does not have instance methods"); } }
+            public override ReactiveDictionary<string, Instance> InstanceVariables { get { throw new ApiException($"{GetType().Name} instance does not have instance variables"); } }
+            public override ReactiveDictionary<string, Method> InstanceMethods { get { throw new ApiException($"{GetType().Name} instance does not have instance methods"); } }
             public PseudoInstance(Module module) : base(module) { }
             public PseudoInstance(Interpreter interpreter) : base(interpreter) { }
         }
@@ -510,7 +530,7 @@ namespace Embers
                 ArgumentNames = argumentNames ?? new();
                 Unsafe = IsUnsafe;
             }
-            public async Task<Instance> Call(Script Script, Instance? OnInstance, Instances? Arguments = null, Method? OnYield = null, BreakHandleType BreakHandleType = BreakHandleType.Invalid) {
+            public async Task<Instance> Call(Script Script, Instance? OnInstance, Instances? Arguments = null, Method? OnYield = null, BreakHandleType BreakHandleType = BreakHandleType.Invalid, bool CatchReturn = true) {
                 if (Unsafe && !Script.AllowUnsafeApi)
                     throw new RuntimeException($"{Script.ApproximateLocation}: This method is unavailable since 'AllowUnsafeApi' is disabled for this script.");
 
@@ -584,7 +604,7 @@ namespace Embers
                             throw new SyntaxErrorException($"{Script.ApproximateLocation}: Invalid break (break must be in a loop)");
                         }
                     }
-                    catch (ReturnException Ex) {
+                    catch (ReturnException Ex) when (CatchReturn) {
                         ReturnValue = Ex.Instance;
                     }
                     finally {
@@ -705,6 +725,29 @@ namespace Embers
                 return $"new {typeof(LongRange).PathTo()}({(Min != null ? Min : "null")}, {(Max != null ? Max : "null")})";
             }
         }
+        public class ReactiveDictionary<TKey, TValue> : Dictionary<TKey, TValue> where TKey : notnull {
+            // public delegate void DictionaryChanged(TKey Key, TValue? OldValue, TValue NewValue);
+            public delegate void DictionarySet(TKey Key, TValue NewValue);
+            public event DictionarySet? Set;
+            public delegate void DictionaryRemoved(TKey Key);
+            public event DictionaryRemoved? Removed;
+            public new TValue this[TKey Key] {
+                get => base[Key];
+                set {
+                    base[Key] = value;
+                    Set?.Invoke(Key, value);
+                }
+            }
+            public new void Add(TKey Key, TValue Value) {
+                base.Add(Key, Value);
+                Set?.Invoke(Key, Value);
+            }
+            public new bool Remove(TKey Key) {
+                bool Success = base.Remove(Key);
+                Removed?.Invoke(Key);
+                return Success;
+            }
+        }
         public class Instances {
             // At least one of Instance or InstanceList will be null
             readonly Instance? Instance;
@@ -771,21 +814,17 @@ namespace Embers
         public async Task Warn(string Message) {
             await Interpreter.RootInstance.InstanceMethods["warn"].Call(this, new ModuleReference(Interpreter.RootModule), new StringInstance(Interpreter.String, Message));
         }
-        public static Module CreateModule(Module Parent, string Name) {
-            Module NewClass = new(Name, Parent);
+        public Module CreateModule(string Name, Module? Parent = null, Module? InheritsFrom = null) {
+            Parent ??= Interpreter.RootModule;
+            Module NewModule = new(Name, Parent, InheritsFrom);
+            Parent.Constants[Name] = new ModuleReference(NewModule);
+            return NewModule;
+        }
+        public Class CreateClass(string Name, Module? Parent = null, Module? InheritsFrom = null) {
+            Parent ??= Interpreter.RootModule;
+            Class NewClass = new(Name, Parent, InheritsFrom);
             Parent.Constants[Name] = new ModuleReference(NewClass);
             return NewClass;
-        }
-        public Module CreateModule(string Name) {
-            return CreateModule(Interpreter.RootModule, Name);
-        }
-        public static Class CreateClass(Module Parent, string Name) {
-            Class NewClass = new(Name, Parent);
-            Parent.Constants[Name] = new ModuleReference(NewClass);
-            return NewClass;
-        }
-        public Class CreateClass(string Name) {
-            return CreateClass(Interpreter.RootModule, Name);
         }
         T CreateTemporaryClassScope<T>(Module Module, Func<T> Do) {
             // Create temporary class/module scope
@@ -1282,18 +1321,18 @@ namespace Embers
                 else {
                     if (DefineClassStatement.IsModule) {
                         if (ClassNameRef.Module != null) {
-                            NewModule = new Module(ClassName, ClassNameRef.Module);
+                            NewModule = CreateModule(ClassName, ClassNameRef.Module);
                         }
                         else {
-                            NewModule = new Module(ClassName, Interpreter);
+                            NewModule = CreateModule(ClassName);
                         }
                     }
                     else {
                         if (ClassNameRef.Module != null) {
-                            NewModule = new Class(ClassName, ClassNameRef.Module);
+                            NewModule = CreateClass(ClassName, ClassNameRef.Module);
                         }
                         else {
-                            NewModule = new Class(ClassName, Interpreter);
+                            NewModule = CreateClass(ClassName);
                         }
                     }
                 }
@@ -1329,7 +1368,7 @@ namespace Embers
                 List<Instance> YieldArgs = YieldStatement.YieldValues != null
                     ? await InterpretExpressionsAsync(YieldStatement.YieldValues)
                     : new();
-                await OnYield.Call(this, null, YieldArgs, BreakHandleType: BreakHandleType.Destroy);
+                await OnYield.Call(this, null, YieldArgs, BreakHandleType: BreakHandleType.Destroy, CatchReturn: false);
             }
             else {
                 throw new RuntimeException($"{YieldStatement.Location}: No block given to yield to");
@@ -1421,18 +1460,18 @@ namespace Embers
                     if (Branch is RescueStatement RescueStatement) {
                         // Get or create the exception to rescue
                         ExceptionsTable.TryGetValue(ExceptionToRescue, out ExceptionInstance? ExceptionInstance);
-                        ExceptionInstance ??= new(Interpreter.StandardError, ExceptionToRescue.Message);
+                        ExceptionInstance ??= new(Interpreter.RuntimeError, ExceptionToRescue.Message);
+                        // Get the rescuing exception type
+                        Module RescuingExceptionModule = RescueStatement.Exception != null
+                            ? (await InterpretExpressionAsync(RescueStatement.Exception)).Module!
+                            : Interpreter.StandardError;
+
                         // Check whether rescue applies to this exception
                         bool CanRescue = false;
-                        if (RescueStatement.Exception == null) {
+                        if (ExceptionInstance.Module!.InheritsFrom(RescuingExceptionModule)) {
                             CanRescue = true;
                         }
-                        else {
-                            Instance RescuingException = await InterpretExpressionAsync(RescueStatement.Exception);
-                            if (ExceptionInstance.Module!.InheritsFrom(RescuingException.Module!)) {
-                                CanRescue = true;
-                            }
-                        }
+
                         // Run the statements in the rescue block
                         if (CanRescue) {
                             Rescued = true;
