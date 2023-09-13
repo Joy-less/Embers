@@ -1326,6 +1326,15 @@ namespace Embers
             }
             return Interpreter.Nil;
         }
+        async Task<Instance> InterpretRescueExpression(RescueExpression RescueExpression) {
+            try {
+                await InterpretExpressionAsync(RescueExpression.Statement);
+            }
+            catch (Exception Ex) when (Ex is not NonErrorException) {
+                await InterpretExpressionAsync(RescueExpression.RescueStatement);
+            }
+            return Interpreter.Nil;
+        }
         async Task<Instance> InterpretTernaryExpression(TernaryExpression TernaryExpression) {
             bool ConditionIsTruthy = (await InterpretExpressionAsync(TernaryExpression.Condition)).IsTruthy;
             if (ConditionIsTruthy) {
@@ -1759,7 +1768,22 @@ namespace Embers
             return Interpreter.Nil;
         }
         async Task<Instance> InterpretDefinedExpression(DefinedExpression DefinedExpression) {
-            if (DefinedExpression.Expression is MethodCallExpression || DefinedExpression.Expression is PathExpression) {
+            if (DefinedExpression.Expression is MethodCallExpression DefinedMethod) {
+                try {
+                    await InterpretExpressionAsync(DefinedMethod.MethodPath, ReturnType.FoundVariable);
+                }
+                catch (RuntimeException) {
+                    return Interpreter.Nil;
+                }
+                return new StringInstance(Interpreter.String, "method");
+            }
+            if (DefinedExpression.Expression is PathExpression DefinedPath) {
+                try {
+                    await InterpretExpressionAsync(DefinedPath, ReturnType.FoundVariable);
+                }
+                catch (RuntimeException) {
+                    return Interpreter.Nil;
+                }
                 return new StringInstance(Interpreter.String, "method");
             }
             else if (DefinedExpression.Expression is ObjectTokenExpression ObjectToken) {
@@ -1799,6 +1823,12 @@ namespace Embers
                 else {
                     return new StringInstance(Interpreter.String, "expression");
                 }
+            }
+            else if (DefinedExpression.Expression is SelfExpression) {
+                return new StringInstance(Interpreter.String, "self");
+            }
+            else if (DefinedExpression.Expression is SuperStatement) {
+                return new StringInstance(Interpreter.String, "super");
             }
             else {
                 throw new InternalErrorException($"{DefinedExpression.Location}: Unknown expression type for defined?: {DefinedExpression.Expression.GetType().Name}");
@@ -1843,6 +1873,7 @@ namespace Embers
                 ObjectTokenExpression ObjectTokenExpression => await InterpretObjectTokenExpression(ObjectTokenExpression, ReturnType),
                 IfExpression IfExpression => await InterpretIfExpression(IfExpression),
                 WhileExpression WhileExpression => await InterpretWhileExpression(WhileExpression),
+                RescueExpression RescueExpression => await InterpretRescueExpression(RescueExpression),
                 TernaryExpression TernaryExpression => await InterpretTernaryExpression(TernaryExpression),
                 ArrayExpression ArrayExpression => await InterpretArrayExpression(ArrayExpression),
                 HashExpression HashExpression => await InterpretHashExpression(HashExpression),
@@ -1920,6 +1951,9 @@ namespace Embers
                 return Ex.Instance;
             }
             catch (ExitException) {
+                return Interpreter.Nil;
+            }
+            catch (StopException) {
                 return Interpreter.Nil;
             }
             finally {

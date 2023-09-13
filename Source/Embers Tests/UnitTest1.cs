@@ -288,11 +288,17 @@ namespace Embers_Tests
                 puts s.rstrip
                 s.use_powers s
             ", "Someone is dead.");
+
+            // Defined?
+            AssertEqual(@"
+                a = 5
+                return defined? a, defined? b
+            ", new object?[] {"local-variable", null});
         }
 
 
         // Helper methods
-        public static void AssertEqual(string Code, object[] ExpectedResults, bool AllowUnsafeApi = true) {
+        public static void AssertEqual(string Code, object?[] ExpectedResults, bool AllowUnsafeApi = true) {
             Instance Result = new Script(new Interpreter(), AllowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
 
             Assert.IsTrue(Result is ArrayInstance);
@@ -303,7 +309,7 @@ namespace Embers_Tests
                 Assert.AreEqual(ExpectedResults[i], Results[i].Object);
             }
         }
-        public static void AssertEqual(string Code, object ExpectedResult, bool AllowUnsafeApi = true) {
+        public static void AssertEqual(string Code, object? ExpectedResult, bool AllowUnsafeApi = true) {
             Instance Result = new Script(new Interpreter(), AllowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
 
             Assert.AreEqual(ExpectedResult, Result.Object);

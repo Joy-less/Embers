@@ -47,6 +47,14 @@ A.new.a
 puts Integer.is_a? Integer
 puts 5.is_a? Integer
 puts 5.instance_of? Integer
+
+puts 5 + ""Hello World"" rescue puts ""You can't add numbers and strings""
+
+a = 'Hi'
+p defined? a
+p defined? b
+p defined? A.new.a
+p defined? A.new.b
                     ");
                 });
                 Script.WaitForThreads();

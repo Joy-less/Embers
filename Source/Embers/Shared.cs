@@ -35,25 +35,20 @@ namespace Embers
             Identifier = identifier;
         }
     }
-    public abstract class LoopControlException : EmbersException {
-        public LoopControlException() { }
-    }
+    public abstract class NonErrorException : EmbersException { }
+    public abstract class LoopControlException : NonErrorException { }
     public class BreakException : LoopControlException { }
     public class RetryException : LoopControlException { }
     public class RedoException : LoopControlException { }
     public class NextException : LoopControlException { }
-    public class ReturnException : EmbersException {
+    public class ReturnException : NonErrorException {
         public readonly Instance Instance;
         public ReturnException(Instance instance) {
             Instance = instance;
         }
     }
-    public class ExitException : EmbersException {
-        public ExitException() : base() { }
-    }
-    public class StopException : EmbersException {
-        public StopException() : base() { }
-    }
+    public class ExitException : NonErrorException { }
+    public class StopException : NonErrorException { }
 
     public readonly struct DebugLocation {
         public readonly int Line;

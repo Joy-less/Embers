@@ -376,6 +376,20 @@ namespace Embers
                 return $"new {PathToSelf}({Location.Serialise()}, {Condition!.Serialise()}, {Statements.Serialise()})";
             }
         }
+        public class RescueExpression : Expression {
+            public readonly Expression Statement;
+            public readonly Expression RescueStatement;
+            public RescueExpression(Expression statement, Expression rescueStatement) : base(statement.Location) {
+                Statement = statement;
+                RescueStatement = rescueStatement;
+            }
+            public override string Inspect() {
+                return $"{Statement.Inspect()} rescue {RescueStatement.Inspect()}";
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({Location.Serialise()}, {Statement.Serialise()}, {RescueStatement.Serialise()})";
+            }
+        }
         public class TernaryExpression : Expression {
             public readonly Expression Condition;
             public readonly Expression ExpressionIfTrue;
@@ -880,7 +894,7 @@ namespace Embers
             }
             return NewTokens;
         }
-        static List<Phase2Object> GetObjectsUntil(List<Phase2Object> Objects, ref int Index, Func<Phase2Object, bool> Condition) {
+        static List<Phase2Object> GetObjectsUntil(List<Phase2Object> Objects, ref int Index, Func<Phase2Object, bool> Condition, bool OneOnly = false) {
             List<Phase2Object> Tokens = new();
             while (Index < Objects.Count) {
                 Phase2Object Token = Objects[Index];
@@ -889,10 +903,13 @@ namespace Embers
                 }
                 Tokens.Add(Token);
                 Index++;
+                if (OneOnly) {
+                    break;
+                }
             }
             return Tokens;
         }
-        static List<Expression> BuildArguments(List<Phase2Object> Objects, ref int Index, ArgumentParentheses Parentheses) {
+        static List<Expression> BuildArguments(List<Phase2Object> Objects, ref int Index, ArgumentParentheses Parentheses, bool OneOnly) {
             List<Phase2Object> ArgumentObjects;
 
             // Brackets e.g. puts("hi")
@@ -926,7 +943,7 @@ namespace Embers
             else {
                 ArgumentObjects = GetObjectsUntil(Objects, ref Index, Object => (Object is Phase2Token Token
                     && (Token.Type is Phase2TokenType.EndOfStatement or Phase2TokenType.If or Phase2TokenType.Unless
-                    or Phase2TokenType.While or Phase2TokenType.Until)) || Object is Statement || (Object is DoExpression Do && !Do.HighPriority)
+                    or Phase2TokenType.While or Phase2TokenType.Until)) || Object is Statement || (Object is DoExpression Do && !Do.HighPriority), OneOnly
                 );
                 Index--;
             }
@@ -956,19 +973,19 @@ namespace Embers
 
             return Arguments;
         }
-        static List<Expression> ParseArgumentsWithBrackets(List<Phase2Object> Objects, ref int Index) {
+        static List<Expression> ParseArgumentsWithBrackets(List<Phase2Object> Objects, ref int Index, bool OneOnly) {
             Index += 2;
-            List<Expression> Arguments = BuildArguments(Objects, ref Index, ArgumentParentheses.Brackets);
+            List<Expression> Arguments = BuildArguments(Objects, ref Index, ArgumentParentheses.Brackets, OneOnly);
             return Arguments;
         }
-        static List<Expression>? ParseArgumentsWithoutBrackets(List<Phase2Object> Objects, ref int Index) {
+        static List<Expression>? ParseArgumentsWithoutBrackets(List<Phase2Object> Objects, ref int Index, bool OneOnly) {
             Index++;
-            List<Expression> Arguments = BuildArguments(Objects, ref Index, ArgumentParentheses.NoBrackets);
+            List<Expression> Arguments = BuildArguments(Objects, ref Index, ArgumentParentheses.NoBrackets, OneOnly);
             return Arguments;
         }
-        static List<Expression> ParseArgumentsWithPipes(List<Phase2Object> Objects, ref int Index) {
+        static List<Expression> ParseArgumentsWithPipes(List<Phase2Object> Objects, ref int Index, bool OneOnly) {
             Index += 2;
-            List<Expression> Arguments = BuildArguments(Objects, ref Index, ArgumentParentheses.Pipes);
+            List<Expression> Arguments = BuildArguments(Objects, ref Index, ArgumentParentheses.Pipes, OneOnly);
             return Arguments;
         }
         enum ArgumentParentheses {
@@ -977,35 +994,36 @@ namespace Embers
             NoBrackets,
             Pipes
         }
-        static List<Expression>? ParseArguments(List<Phase2Object> Objects, ref int Index, ArgumentParentheses Parentheses = ArgumentParentheses.Unknown) {
+        /// <summary><paramref name="OneOnly"/> only applies if the arguments have no parentheses.</summary>
+        static List<Expression>? ParseArguments(List<Phase2Object> Objects, ref int Index, ArgumentParentheses Parentheses = ArgumentParentheses.Unknown, bool OneOnly = false) {
             if (Index + 1 < Objects.Count) {
                 Phase2Object NextObject = Objects[Index + 1];
                 switch (Parentheses) {
                     // Brackets / No Brackets
                     case ArgumentParentheses.Unknown: {
                         List<Expression>? Arguments = ParseArguments(Objects, ref Index, ArgumentParentheses.Brackets)
-                            ?? ParseArguments(Objects, ref Index, ArgumentParentheses.NoBrackets);
+                            ?? ParseArguments(Objects, ref Index, ArgumentParentheses.NoBrackets, OneOnly);
                         return Arguments;
                     }
                     // Brackets
                     case ArgumentParentheses.Brackets: {
                         if (NextObject is Phase2Token NextToken && NextToken.Type == Phase2TokenType.OpenBracket && !NextToken.FollowsWhitespace)
-                            return ParseArgumentsWithBrackets(Objects, ref Index);
+                            return ParseArgumentsWithBrackets(Objects, ref Index, OneOnly);
                         else
                             return null;
                     }
                     // No brackets
                     case ArgumentParentheses.NoBrackets: {
                         if (NextObject is Expression && NextObject is not Statement && NextObject is not DoExpression)
-                            return ParseArgumentsWithoutBrackets(Objects, ref Index);
+                            return ParseArgumentsWithoutBrackets(Objects, ref Index, OneOnly);
                         else if (NextObject is Phase2Token NextToken && NextToken.Type == Phase2TokenType.OpenBracket && NextToken.FollowsWhitespace)
-                            return ParseArgumentsWithoutBrackets(Objects, ref Index);
+                            return ParseArgumentsWithoutBrackets(Objects, ref Index, OneOnly);
                         else
                             return null;
                     }
                     // Pipes
                     case ArgumentParentheses.Pipes: {
-                        return ParseArgumentsWithPipes(Objects, ref Index);
+                        return ParseArgumentsWithPipes(Objects, ref Index, OneOnly);
                     }
                 }
             }
@@ -1717,6 +1735,12 @@ namespace Embers
                         }
                         // Rescue
                         case Phase2TokenType.Rescue: {
+                            if (LastUnknownObject != null && !(LastUnknownObject is Phase2Token Tok && Tok.Type == Phase2TokenType.EndOfStatement)) {
+                                // Format is statement rescue statement; handle later
+                                AddPendingObjectAt(i);
+                                break;
+                            }
+
                             if (CurrentBlocks.TryPeek(out BuildingBlock? Block) && Block is BuildingBeginBranches BeginBlock) {
                                 ResolveStatementsWithoutEndingBlock();
                                 if (BeginBlock.Branches[^1] is not (BuildingBegin or BuildingRescue)) {
@@ -2195,12 +2219,12 @@ namespace Embers
                     // defined?
                     if (Token.Type == Phase2TokenType.Defined) {
                         int EndOfArgumentsIndex = i;
-                        List<Expression>? Arguments = ParseArguments(ParsedObjects, ref EndOfArgumentsIndex);
+                        List<Expression>? Arguments = ParseArguments(ParsedObjects, ref EndOfArgumentsIndex, OneOnly: true);
                         if (Arguments != null) {
                             if (Arguments.Count != 1) {
                                 throw new SyntaxErrorException($"{Token.Location}: Expected a single argument after defined?");
                             }
-                            ParsedObjects.RemoveRange(i, EndOfArgumentsIndex - i);
+                            ParsedObjects.RemoveIndexRange(i, EndOfArgumentsIndex);
                             ParsedObjects.Insert(i, new DefinedExpression(Arguments[0]));
                         }
                         else {
@@ -2348,41 +2372,50 @@ namespace Embers
                 }
             }
 
-            // Statement if/while condition
+            // Statement if/unless/while/until condition or statement rescue statement
             for (int i = 0; i < ParsedObjects.Count; i++) {
                 Phase2Object UnknownObject = ParsedObjects[i];
 
                 if (UnknownObject is Phase2Token Token) {
-                    if (Token.Type is Phase2TokenType.If or Phase2TokenType.Unless or Phase2TokenType.While or Phase2TokenType.Until) {
+                    if (Token.Type is Phase2TokenType.If or Phase2TokenType.Unless or Phase2TokenType.While or Phase2TokenType.Until or Phase2TokenType.Rescue) {
                         if (i - 1 >= 0 && ParsedObjects[i - 1] is Expression Statement) {
                             if (i + 1 < ParsedObjects.Count && ParsedObjects[i + 1] is Expression Condition) {
                                 // Remove three expressions
                                 i--;
                                 ParsedObjects.RemoveRange(i, 3);
                                 // Get statement & conditional expression
-                                List<Expression> ConditionalStatement = new() { Statement };
-                                ConditionalExpression ConditionalExpression;
-                                if (Token.Type == Phase2TokenType.If) {
-                                    ConditionalExpression = new IfExpression(Statement.Location, Condition, ConditionalStatement);
-                                }
-                                else if (Token.Type == Phase2TokenType.Unless) {
-                                    ConditionalExpression = new IfExpression(Statement.Location, Condition, ConditionalStatement, true);
-                                }
-                                else if (Token.Type == Phase2TokenType.While) {
-                                    ConditionalExpression = new WhileExpression(Statement.Location, Condition, ConditionalStatement);
+                                if (Token.Type == Phase2TokenType.Rescue) {
+                                    // Insert rescue expression
+                                    ParsedObjects.Insert(i, new RescueExpression(Condition, Statement));
                                 }
                                 else {
-                                    ConditionalExpression = new WhileExpression(Statement.Location, Condition, ConditionalStatement, true);
+                                    List<Expression> ConditionalStatement = new() { Statement };
+                                    ConditionalExpression ConditionalExpression;
+                                    if (Token.Type == Phase2TokenType.If) {
+                                        ConditionalExpression = new IfExpression(Statement.Location, Condition, ConditionalStatement);
+                                    }
+                                    else if (Token.Type == Phase2TokenType.Unless) {
+                                        ConditionalExpression = new IfExpression(Statement.Location, Condition, ConditionalStatement, true);
+                                    }
+                                    else if (Token.Type == Phase2TokenType.While) {
+                                        ConditionalExpression = new WhileExpression(Statement.Location, Condition, ConditionalStatement);
+                                    }
+                                    else if (Token.Type == Phase2TokenType.Until) {
+                                        ConditionalExpression = new WhileExpression(Statement.Location, Condition, ConditionalStatement, true);
+                                    }
+                                    else {
+                                        throw new SyntaxErrorException($"{Statement.Location}: Unrecognised token for one-line statement: '{Token.Type}'");
+                                    }
+                                    // Insert conditional expression
+                                    ParsedObjects.Insert(i, ConditionalExpression);
                                 }
-                                // Insert conditional expression
-                                ParsedObjects.Insert(i, ConditionalExpression);
                             }
                             else {
-                                throw new SyntaxErrorException($"{Statement.Location}: Expected condition after 'if'");
+                                throw new SyntaxErrorException($"{Statement.Location}: Expected condition after '{Token.Type}'");
                             }
                         }
                         else {
-                            throw new InternalErrorException($"{Token.Location}: Unhandled 'if' statement");
+                            throw new InternalErrorException($"{Token.Location}: Unhandled {Token.Type} statement");
                         }
                     }
                 }
