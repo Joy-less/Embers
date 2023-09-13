@@ -1,7 +1,14 @@
-﻿using System.Text;
+﻿using System;
+using System.IO;
+using System.Text;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Collections.Generic;
+using System.Linq;
 using static Embers.Script;
 
+#nullable enable
 #pragma warning disable CS1998
 #pragma warning disable IDE1006
 
@@ -645,7 +652,7 @@ namespace Embers
                 for (int i = 0; i < IntegerAsString.Length; i++) {
                     char Chara = IntegerAsString[i];
 
-                    if (char.IsAsciiDigit(Chara)) {
+                    if (Chara.IsAsciiDigit()) {
                         IntegerString.Append(Chara);
                     }
                     else {
@@ -662,7 +669,7 @@ namespace Embers
                 for (int i = 0; i < FloatAsString.Length; i++) {
                     char Chara = FloatAsString[i];
 
-                    if (char.IsAsciiDigit(Chara)) {
+                    if (Chara.IsAsciiDigit()) {
                         FloatString.Append(Chara);
                     }
                     else if (Chara == '.') {
@@ -1556,7 +1563,7 @@ namespace Embers
                 return new FloatInstance(Input.Interpreter.Float, Math.Log10(Input.Arguments[0].Float));
             }
             public static async Task<Instance> log2(MethodInput Input) {
-                return new FloatInstance(Input.Interpreter.Float, Math.Log2(Input.Arguments[0].Float));
+                return new FloatInstance(Input.Interpreter.Float, Math.Log(Input.Arguments[0].Float, 2));
             }
             public static async Task<Instance> frexp(MethodInput Input) {
                 double Value = Input.Arguments[0].Float;

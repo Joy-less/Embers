@@ -1,6 +1,11 @@
-﻿using static Embers.Phase1;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using static Embers.Phase1;
 using static Embers.Phase2;
 using static Embers.Script;
+
+#nullable enable
 
 namespace Embers
 {
@@ -722,16 +727,6 @@ namespace Embers
             }
         }
         
-        /*public class ListAddress<T> {
-            public List<T> List;
-            public int Index;
-            public ListAddress(List<T> list, int index) {
-                List = list;
-                Index = index;
-            }
-            public T Get => List[Index];
-            public T Set(T Value) => List[Index] = Value;
-        }*/
         public enum SplatType {
             Single,
             Double
@@ -782,7 +777,7 @@ namespace Embers
                 if (Token.NonNullValue.Length == 0) throw new SyntaxErrorException($"{Token.Location}: Identifier '@' not valid for instance variable");
                 Identifier = Token.NonNullValue[1..];
             }
-            else if (char.IsAsciiLetterUpper(Token.NonNullValue[0])) {
+            else if (Token.NonNullValue[0].IsAsciiLetterUpper()) {
                 IdentifierType = Phase2TokenType.ConstantOrMethod;
                 Identifier = Token.NonNullValue;
             }
@@ -797,32 +792,6 @@ namespace Embers
 
             return new Phase2Token(Token.Location, IdentifierType, Identifier, Token);
         }
-        /*static List<List<Phase2Object>> SplitObjects(List<Phase2Object> Objects, Phase2TokenType SplitToken, out List<string?> SplitCharas, bool CanStartWithHaveMultipleInARow) {
-            List<List<Phase2Object>> SplitObjects = new();
-            List<Phase2Object> CurrentObjects = new();
-
-            SplitCharas = new List<string?>();
-
-            foreach (Phase2Object Object in Objects) {
-                if (Object is Phase2Token Token && Token.Type == SplitToken) {
-                    if (CurrentObjects.Count != 0) {
-                        SplitObjects.Add(CurrentObjects);
-                        CurrentObjects = new List<Phase2Object>();
-                        SplitCharas.Add(Token.Value);
-                    }
-                    else if (!CanStartWithHaveMultipleInARow) {
-                        throw new SyntaxErrorException($"{Token.Location}: Cannot start with {SplitToken} or have multiple of them next to each other");
-                    }
-                }
-                else {
-                    CurrentObjects.Add(Object);
-                }
-            }
-            if (CurrentObjects.Count != 0) {
-                SplitObjects.Add(CurrentObjects);
-            }
-            return SplitObjects;
-        }*/
         public static bool IsObjectToken(Phase2TokenType? Type) {
             return Type is Phase2TokenType.Nil
                 or Phase2TokenType.True
@@ -1375,6 +1344,9 @@ namespace Embers
             if (InheritsFromNamePath != null) {
                 InheritsFrom = GetPathExpressionFromTokens(InheritsFromNamePath, Index);
             }
+            else {
+                InheritsFrom = null;
+            }
 
             // Verify class name is constant
             if (ClassNamePathExpression.Token.Type != Phase2TokenType.ConstantOrMethod) {
@@ -1835,8 +1807,7 @@ namespace Embers
             }
 
             if (CurrentBlocks.Count != 1) {
-                throw new SyntaxErrorException($"{CurrentBlocks.Peek().Location}: {(CurrentBlocks.Count == 2 ? "" : CurrentBlocks.Count - 1 + " ")
-                    }block{(CurrentBlocks.Count == 2 ? " was" : "s were")} never closed with an end statement");
+                throw new SyntaxErrorException($"{CurrentBlocks.Peek().Location}: {(CurrentBlocks.Count == 2 ? "" : CurrentBlocks.Count - 1 + " ")}block{(CurrentBlocks.Count == 2 ? " was" : "s were")} never closed with an end statement");
             }
 
             BuildingBlock TopBlock = CurrentBlocks.Pop();
@@ -2541,11 +2512,6 @@ namespace Embers
             List<Phase2Object> Phase2Objects = new(Phase2Tokens);
             return ObjectsToExpressions(Phase2Objects, ExpressionsType);
         }
-        /*static Expression TokenListToExpression(List<Phase1Token> Tokens) {
-            List<Phase2Object> Phase2Objects = TokensToPhase2(Tokens);
-            Expression Expression = ObjectsToExpression(Phase2Objects);
-            return Expression;
-        }*/
 
         class BuildingBlock {
             public readonly DebugLocation Location;
@@ -2669,140 +2635,6 @@ namespace Embers
                 VariableName = variableName;
                 InExpression = inExpression;
             }
-        }
-    }
-    public static class Extensions {
-        public static List<T> GetIndexRange<T>(this List<T> List, int StartIndex, int EndIndex) {
-            if (StartIndex > EndIndex)
-                return new List<T>();
-            return List.GetRange(StartIndex, EndIndex - StartIndex + 1);
-        }
-        public static List<T> GetIndexRange<T>(this List<T> List, int StartIndex) {
-            int EndIndex = List.Count - 1;
-            if (StartIndex > EndIndex)
-                return new List<T>();
-            return List.GetRange(StartIndex, EndIndex - StartIndex + 1);
-        }
-        public static void RemoveIndexRange<T>(this List<T> List, int StartIndex, int EndIndex) {
-            if (StartIndex <= EndIndex)
-                List.RemoveRange(StartIndex, EndIndex - StartIndex + 1);
-        }
-        public static void RemoveIndexRange<T>(this List<T> List, int StartIndex) {
-            int EndIndex = List.Count - 1;
-            if (StartIndex <= EndIndex)
-                List.RemoveRange(StartIndex, EndIndex - StartIndex + 1);
-        }
-        public static void RemoveFromEnd<T>(this List<T> List, Func<T, bool> While, bool RemoveOneOnly = false) {
-            for (int i = List.Count - 1; i >= 0; i--) {
-                if (While(List[i])) {
-                    List.RemoveAt(i);
-                    if (RemoveOneOnly) break;
-                }
-                else {
-                    break;
-                }
-            }
-        }
-        public static string Serialise<T>(this List<T> List) where T : Phase2Object {
-            string Serialised = $"new List<{typeof(T).PathTo()}>() {{";
-            bool IsFirst = true;
-            foreach (T Item in List) {
-                if (IsFirst) IsFirst = false;
-                else Serialised += ", ";
-                Serialised += Item.Serialise();
-            }
-            return Serialised + "}";
-        }
-        public static string Inspect<T>(this List<T>? List, string Separator = ", ") where T : Phase2Object {
-            string ListInspection = "";
-            if (List != null) {
-                foreach (Phase2Object Object in List) {
-                    if (ListInspection.Length != 0)
-                        ListInspection += Separator;
-                    ListInspection += Object.Inspect();
-                }
-            }
-            return ListInspection;
-        }
-        public static string InspectInstances<T>(this List<T>? List, string Separator = ", ") where T : Instance {
-            string ListInspection = "";
-            if (List != null) {
-                foreach (Instance Object in List) {
-                    if (ListInspection.Length != 0)
-                        ListInspection += Separator;
-                    ListInspection += Object.Inspect();
-                }
-            }
-            return ListInspection;
-        }
-        public static string Serialise<T>(this Dictionary<T, T> Dictionary) where T : Phase2Object {
-            string Serialised = $"new Dictionary<{typeof(T).PathTo()}, {typeof(T).PathTo()}>() {{";
-            bool IsFirst = true;
-            foreach (KeyValuePair<T, T> Item in Dictionary) {
-                if (IsFirst) IsFirst = false;
-                else Serialised += ", ";
-                Serialised += "{" + Item.Key.Serialise() + ", " + Item.Value.Serialise() + "}, ";
-            }
-            return Serialised + "}";
-        }
-        public static string Inspect<T>(this Dictionary<T, T>? Dictionary, string Separator = ", ") where T : Phase2Object {
-            string DictionaryInspection = "";
-            if (Dictionary != null) {
-                foreach (KeyValuePair<T, T> Object in Dictionary) {
-                    if (DictionaryInspection.Length != 0)
-                        DictionaryInspection += Separator;
-                    DictionaryInspection += $"{Object.Key.Inspect()} => {Object.Value.Inspect()}";
-                }
-            }
-            return DictionaryInspection;
-        }
-        public static string InspectInstances<T>(this Dictionary<T, T>? Dictionary, string Separator = ", ") where T : Instance {
-            string DictionaryInspection = "";
-            if (Dictionary != null) {
-                foreach (KeyValuePair<T, T> Object in Dictionary) {
-                    if (DictionaryInspection.Length != 0)
-                        DictionaryInspection += Separator;
-                    DictionaryInspection += $"{Object.Key.Inspect()} => {Object.Value.Inspect()}";
-                }
-            }
-            return DictionaryInspection;
-        }
-        public static DebugLocation Location<T>(this List<T> List) where T : Phase2Object {
-            if (List.Count != 0)
-                return List[0].Location;
-            else
-                return new DebugLocation();
-        }
-        public static void CopyTo<TKey, TValue>(this Dictionary<TKey, TValue> Origin, Dictionary<TKey, TValue> Target) where TKey : notnull {
-            foreach (KeyValuePair<TKey, TValue> Pair in Origin) {
-                Target[Pair.Key] = Pair.Value;
-            }
-        }
-        public static void CopyTo<TKey, TValue>(this IReadOnlyDictionary<TKey, TValue> Origin, Dictionary<TKey, TValue> Target) where TKey : notnull {
-            foreach (KeyValuePair<TKey, TValue> Pair in Origin) {
-                Target[Pair.Key] = Pair.Value;
-            }
-        }
-        public static void CopyTo<T>(this Stack<T> Origin, Stack<T> Target) where T : notnull {
-            foreach (T Value in Origin) {
-                Target.Push(Value);
-            }
-        }
-        public static Dictionary<T, T> ListAsHash<T>(this List<T> HashItemsList) where T : Expression {
-            Dictionary<T, T> HashItems = new();
-            for (int i2 = 0; i2 < HashItemsList.Count; i2 += 2) {
-                HashItems[HashItemsList[i2]] = HashItemsList[i2 + 1];
-            }
-            return HashItems;
-        }
-        public static string PathTo(this object Self) => PathTo(Self.GetType());
-        public static string PathTo(this Type Self) => (Self.FullName ?? "").Replace('+', '.');
-        public static string ReplaceFirst(this string Original, string Replace, string With) {
-            int FoundIndex = Original.IndexOf(Replace);
-            if (FoundIndex != -1) {
-                return Original.Remove(FoundIndex, Replace.Length).Insert(FoundIndex, With);
-            }
-            return Original;
         }
     }
 }

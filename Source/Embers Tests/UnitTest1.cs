@@ -14,13 +14,13 @@ namespace Embers_Tests
             AssertEqual("4", 4L);
             AssertEqual("4.0", 4.0d);
 
-            // Global variables test
+            // Global variables
             AssertEqual(@"
                 $a = true
                 return $a
             ", true);
 
-            // Def test
+            // Def
             AssertEqual(@"
                 def a
                     return 'hiya'
@@ -28,7 +28,7 @@ namespace Embers_Tests
                 a
             ", "hiya");
 
-            // Do...end and {...} tests
+            // Do...end and {...}
             AssertEqual(@"
                 $result = 0
 

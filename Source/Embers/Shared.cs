@@ -1,4 +1,5 @@
-﻿using static Embers.Script;
+﻿using System;
+using static Embers.Script;
 
 namespace Embers
 {
@@ -54,15 +55,10 @@ namespace Embers
         public readonly int Line;
         public readonly int Column;
         public readonly bool IsUnknown;
-        public DebugLocation(int line, int column) {
+        public DebugLocation(int line, int column, bool isUnknown = false) {
             Line = line;
             Column = column;
-            IsUnknown = false;
-        }
-        public DebugLocation() {
-            Line = -1;
-            Column = 0;
-            IsUnknown = true;
+            IsUnknown = isUnknown;
         }
         public override string ToString() {
             if (!IsUnknown) {
@@ -78,6 +74,6 @@ namespace Embers
             else
                 return "new DebugLocation()";
         }
-        public static readonly DebugLocation Unknown = new();
+        public static readonly DebugLocation Unknown = new(-1, 0);
     }
 }

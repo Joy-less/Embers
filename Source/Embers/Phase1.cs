@@ -1,12 +1,13 @@
-﻿namespace Embers
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+
+#nullable enable
+
+namespace Embers
 {
     public static class Phase1
     {
-        static readonly string EndKeyword = nameof(Phase2.Phase2TokenType.End).ToLower();
-        static readonly string DefKeyword = nameof(Phase2.Phase2TokenType.Def).ToLower();
-        static readonly string ClassKeyword = nameof(Phase2.Phase2TokenType.Class).ToLower();
-        static readonly string ElseKeyword = nameof(Phase2.Phase2TokenType.Else).ToLower();
-
         public enum Phase1TokenType {
             Identifier,
             Integer,
@@ -197,7 +198,7 @@
                 }
                 bool IsDefMethodName() {
                     for (int i2 = Tokens.Count - 1; i2 >= 0; i2--) {
-                        if (Tokens[i2].Type == Phase1TokenType.Identifier && Tokens[i2].Value == DefKeyword) {
+                        if (Tokens[i2].Type == Phase1TokenType.Identifier && Tokens[i2].Value == "def") {
                             return true;
                         }
                         else if (Tokens[i2].Type != Phase1TokenType.Identifier && Tokens[i2].Type != Phase1TokenType.Dot) {
@@ -211,7 +212,7 @@
                         if (Tokens[i2].Type != Phase1TokenType.Identifier && Tokens[i2].Type != Phase1TokenType.DoubleColon) {
                             break;
                         }
-                        else if (Tokens[i2].Type == Phase1TokenType.Identifier && Tokens[i2].Value == ClassKeyword) {
+                        else if (Tokens[i2].Type == Phase1TokenType.Identifier && Tokens[i2].Value == "class") {
                             return true;
                         }
                     }
@@ -222,7 +223,7 @@
                         if (Tokens[i2].Type == Phase1TokenType.EndOfStatement) {
                             break;
                         }
-                        else if (Tokens[i2].Type == Phase1TokenType.Identifier && Tokens[i2].Value == DefKeyword) {
+                        else if (Tokens[i2].Type == Phase1TokenType.Identifier && Tokens[i2].Value == "def") {
                             return true;
                         }
                     }
@@ -278,9 +279,9 @@
                 }
 
                 // Integer
-                if (char.IsAsciiDigit(Chara)) {
+                if (Chara.IsAsciiDigit()) {
                     // Build integer
-                    string Number = BuildWhile(c => char.IsAsciiDigit(c) || c == '_' || c == 'e' || c == 'x');
+                    string Number = BuildWhile(c => c.IsAsciiDigit() || c == '_' || c == 'e' || c == 'x');
                     // Remove '_'
                     if (Number.EndsWith('_')) throw new SyntaxErrorException($"{Location}: Trailing '_' in number");
                     Number = Number.Replace("_", "");
@@ -612,7 +613,7 @@
                             // Skip whitespace
                             if (char.IsWhiteSpace(Chara)) {
                                 // Add EndOfStatement after class statement
-                                if (!(LastTokenWas(Phase1TokenType.Identifier) && Tokens[^1].Value == ClassKeyword) && IsClassName())
+                                if (!(LastTokenWas(Phase1TokenType.Identifier) && Tokens[^1].Value == "class") && IsClassName())
                                     AddToken(Phase1TokenType.EndOfStatement, null);
                                 break;
                             }
@@ -632,12 +633,12 @@
                                 Identifier = ":" + Identifier;
                             }
                             // Add EndOfStatement before end keyword
-                            if (Identifier == EndKeyword && !LastTokenWas(Phase1TokenType.EndOfStatement))
+                            if (Identifier == "end" && !LastTokenWas(Phase1TokenType.EndOfStatement))
                                 AddToken(Phase1TokenType.EndOfStatement, null);
                             // Add identifier
                             AddToken(Phase1TokenType.Identifier, Identifier);
                             // Add EndOfStatement after else keyword
-                            if (Identifier == ElseKeyword)
+                            if (Identifier == "else")
                                 AddToken(Phase1TokenType.EndOfStatement, null);
                             //
                             i--;

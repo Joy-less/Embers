@@ -2,15 +2,15 @@
 
 # Embers (Embeddable Ruby Scripts)
 
-An embeddable Ruby interpreter written entirely in C#. The aim is to make Ruby usable in the Unity game engine or other C# applications.
+An embeddable Ruby interpreter written entirely in C#.
 
-Its minimalistic design should be suitable for use in game engines or modding scenarios.
+Its minimalistic design should make Ruby suitable for use in game engines, modding scenarios, or other C# applications.
 
 ## Advantages
 - Easy to embed, sandbox, and control in your C# application or game.
 - Source code is easy to understand, with everything in one place.
 - Each interpreter can have multiple scripts which can each run on their own thread and communicate.
-- Full compatibility with Unity.
+- Full compatibility with Unity and Godot.
 - Obsolete functionality, such as numbers starting with 0 being octal integers, is not included.
 - A great mascot.
 
@@ -24,6 +24,10 @@ Ruby is a very flexible language that is sometimes likened to a set of sharp kni
 ## Usage
 ### Basic example
 ```csharp
+using Embers;
+
+// ...
+
 Interpreter MyInterpreter = new();
 Script MyScript = new(MyInterpreter);
 MyScript.Evaluate("puts 'hi!'");
@@ -167,6 +171,25 @@ This will output some C# code, which you can then run directly by wrapping it in
 MyScript.Interpret(new List<Embers.Phase2.Expression>() {new Embers.Phase2.MethodCallExpression(new Embers.Phase2.ObjectTokenExpression(new Embers.Phase2.Phase2Token(new DebugLocation(1, 0), Embers.Phase2.Phase2TokenType.LocalVariableOrMethod, "puts", new Embers.Phase1.Phase1Token(new DebugLocation(1, 0), Embers.Phase1.Phase1TokenType.Identifier, "puts", false, false))), new List<Embers.Phase2.Expression>() {new Embers.Phase2.ObjectTokenExpression(new Embers.Phase2.Phase2Token(new DebugLocation(1, 5), Embers.Phase2.Phase2TokenType.String, "Hello there!", new Embers.Phase1.Phase1Token(new DebugLocation(1, 5), Embers.Phase1.Phase1TokenType.String, "Hello there!", true, false)))}, null)});
 ```
 Please note that pre-parsed code will not be compatible between different versions of Embers. It should be done just before building your project.
+
+## Game engine support
+Embers is fully compatible with Unity, Godot, and other C# game engines. However, certain methods such as `puts` reference `Console`, which is not shown in Unity or Godot, so you will need to make some changes.
+
+For example:
+
+Unity
+```csharp
+// In Api.cs
+Console.WriteLine(Message.LightInspect()); // -> Debug.Log(Message.LightInspect());
+Console.WriteLine(); // -> Debug.Log.Print("");
+```
+
+Godot
+```csharp
+// In Api.cs
+Console.WriteLine(Message.LightInspect()); // -> Godot.GD.Print(Message.LightInspect());
+Console.WriteLine(); // -> Godot.GD.Print("");
+```
 
 ## About Noko
 Noko is Embers' mascot who you can see at the top.

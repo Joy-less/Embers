@@ -1,6 +1,11 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System;
+using System.Runtime.CompilerServices;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using System.Linq;
 using static Embers.Phase2;
 
+#nullable enable
 #pragma warning disable CS1998
 
 namespace Embers
@@ -151,9 +156,6 @@ namespace Embers
             }
         }
         public class Instance {
-            /*public bool IsA<T>() {
-                return GetType() == typeof(T);
-            }*/
             public readonly Module? Module; // Will be null if instance is a pseudoinstance
             public readonly long ObjectId;
             public virtual ReactiveDictionary<string, Instance> InstanceVariables { get; } = new();
@@ -321,7 +323,7 @@ namespace Embers
             }
             public void SetValue(string value) {
                 Value = value;
-                IsStringSymbol = Value.Any("(){}[]<>=+-*/%!?.,;@#&|~^$_".Contains) || Value.Any(char.IsWhiteSpace) || (Value.Length != 0 && char.IsAsciiDigit(Value[0]));
+                IsStringSymbol = Value.Any("(){}[]<>=+-*/%!?.,;@#&|~^$_".Contains) || Value.Any(char.IsWhiteSpace) || (Value.Length != 0 && Value[0].IsAsciiDigit());
             }
         }
         public class IntegerInstance : Instance {
@@ -451,6 +453,7 @@ namespace Embers
                 Min = min;
                 Max = max;
                 IncludesMax = includesMax;
+                (AppliedMin, AppliedMax) = Setup();
                 Setup();
             }
             public void SetValue(IntegerInstance min, IntegerInstance max, bool includesMax) {
@@ -459,7 +462,7 @@ namespace Embers
                 IncludesMax = includesMax;
                 Setup();
             }
-            void Setup() {
+            (Instance, Instance) Setup() {
                 if (Min == null) {
                     AppliedMin = Max!.Module!.Interpreter.Nil;
                     AppliedMax = IncludesMax ? Max : new IntegerInstance((Class)Max.Module!, Max.Integer - 1);
@@ -472,6 +475,7 @@ namespace Embers
                     AppliedMin = Min;
                     AppliedMax = IncludesMax ? Max : new IntegerInstance((Class)Max.Module!, Max.Integer - 1);
                 }
+                return (AppliedMin, AppliedMax);
             }
             LongRange ToLongRange => new(AppliedMin is IntegerInstance ? AppliedMin.Integer : null, AppliedMax is IntegerInstance ? AppliedMax.Integer : null);
         }
@@ -723,15 +727,16 @@ namespace Embers
             }
         }
         public class MethodInput {
-            public Script Script;
-            public Interpreter Interpreter;
-            public Instance Instance;
-            public Instances Arguments;
-            public Method? OnYield;
-            public MethodInput(Script script, Instance instance, Instances arguments, Method? onYield = null) {
+            public readonly Script Script;
+            public readonly Interpreter Interpreter;
+            public readonly Instances Arguments;
+            public readonly Method? OnYield;
+            public Instance Instance => InputInstance!;
+            readonly Instance? InputInstance;
+            public MethodInput(Script script, Instance? instance, Instances arguments, Method? onYield = null) {
                 Script = script;
                 Interpreter = script.Interpreter;
-                Instance = instance;
+                InputInstance = instance;
                 Arguments = arguments;
                 OnYield = onYield;
             }
