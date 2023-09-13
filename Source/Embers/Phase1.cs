@@ -29,6 +29,8 @@
             RightArrow,
             InclusiveRange,
             ExclusiveRange,
+            TernaryQuestion,
+            TernaryElse,
         }
         public class Phase1Token {
             public readonly DebugLocation Location;
@@ -102,17 +104,6 @@
                 }
                 string EscapeString(string String) {
                     for (int i = 0; i < String.Length; i++) {
-                        /*bool NextCharactersAre(string Characters) {
-                            int Offset = 0;
-                            for (int i2 = i + 1; i2 < String.Length; i2++) {
-                                if (Offset == Characters.Length)
-                                    return true;
-                                if (String[i2] != Characters[Offset])
-                                    return false;
-                                Offset++;
-                            }
-                            return Offset == Characters.Length;
-                        }*/
                         bool NextCharacterIs(char Character) {
                             return i + 1 < String.Length && String[i + 1] == Character;
                         }
@@ -255,7 +246,14 @@
                     }
                     return false;
                 }
-                
+                bool NextCharactersAre(string Characters) {
+                    for (int i2 = 0; i2 < Characters.Length; i2++) {
+                        if (i2 + i + 1 >= Code.Length || Code[i2 + i + 1] != Characters[i2]) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
                 static bool IsValidIdentifierCharacter(char Chara) {
                     if (InvalidIdentifierCharacters.Contains(Chara))
                         return false;
@@ -267,6 +265,7 @@
                 char Chara = Code[i];
                 char? NextChara = i + 1 < Code.Length ? Code[i + 1] : null;
                 char? NextNextChara = i + 2 < Code.Length ? Code[i + 2] : null;
+                char? LastChara = i - 1 >= 0 ? Code[i - 1] : null;
                 bool FollowsWhitespace = i - 1 >= 0 && IsWhitespace(Code[i - 1]);
                 bool FollowedByWhitespace = i + 1 < Code.Length && IsWhitespace(Code[i + 1]);
 
@@ -408,6 +407,10 @@
                                 AddToken(Phase1TokenType.DoubleColon, "::");
                                 i++;
                             }
+                            else if (Tokens.Count >= 2 && Tokens[^2].Type == Phase1TokenType.TernaryQuestion) {
+                                RemoveEndOfStatement();
+                                AddToken(Phase1TokenType.TernaryElse, ":");
+                            }
                             else {
                                 AddToken(Phase1TokenType.Colon, ":");
                             }
@@ -427,6 +430,16 @@
                             else if (NextChara == '>') {
                                 AddToken(Phase1TokenType.RightArrow, "=>");
                                 i++;
+                            }
+                            else if (NextCharactersAre("begin") && LastChara is null or '\n' or '\r') {
+                                i += 5;
+                                while (i < Code.Length) {
+                                    i++;
+                                    if (NextCharactersAre("\n=end") || NextCharactersAre("\r=end")) {
+                                        i += 4 + 1;
+                                        break;
+                                    }
+                                }
                             }
                             else {
                                 AddToken(Phase1TokenType.AssignmentOperator, "=");
@@ -591,6 +604,10 @@
                             break;
                         case '\\':
                             throw new SyntaxErrorException($"{Location}: Unexpected '\\'");
+                        case '?':
+                            RemoveEndOfStatement();
+                            AddToken(Phase1TokenType.TernaryQuestion, "?");
+                            break;
                         default:
                             // Skip whitespace
                             if (char.IsWhiteSpace(Chara)) {
@@ -603,7 +620,6 @@
                             string Identifier = BuildWhile(IsValidIdentifierCharacter);
                             // Add exclamation mark
                             if (Code[i] is '?' or '!') {
-                                if (Identifier.Length == 0) throw new SyntaxErrorException($"{Location}: '{Code[i]}' not valid for identifier");
                                 Identifier += Code[i];
                                 i++;
                             }

@@ -6,51 +6,13 @@ namespace Embers
     internal class Program
     {
         static void Main() {
-            /*// Test
-            {
-                Interpreter Interpreter = new();
-                Script Script = new(Interpreter);
-                Benchmark(() => {
-                    _ = Script.EvaluateAsync(@"
-puts 'a'
-sleep(10)
-puts 'b'
-                    ");
-                    Thread.Sleep(3000);
-                    Script.Stop();
-                });
-                Console.ReadLine();
-            }
-            // Test 2
-            {
-                Interpreter Interpreter = new();
-                Script Script = new(Interpreter);
-                Task.Run(async () => await Script.EvaluateAsync(@"
-t = Thread.new {
-    sleep(1)
-    puts 'a'
-}
-t.join
-puts 'b'
-
-t2 = Thread.new {
-    sleep(1)
-    puts 'a'
-}
-t2.start
-puts 'b'
-                "));
-                Thread.Sleep(300);
-                Script.Stop();
-                Console.WriteLine("Stopped!");
-                Console.ReadLine();
-            }*/
-            // Test 3
+            // Test
             {
                 Interpreter Interpreter = new();
                 Script Script = new(Interpreter);
                 Benchmark(() => {
                     Script.Evaluate(@"
+=begin
 Parallel.each [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] do |n|
     print n.to_s + ' '
 end
@@ -63,6 +25,28 @@ puts ""\n---""
 end
 getc
 puts ""\n---""
+=end
+
+a = false ? 1 : -1
+puts a
+
+puts '---'
+
+class B
+    def a
+        puts 'original'
+    end
+end
+class A < B
+    def a
+        super
+    end
+end
+A.new.a
+
+puts Integer.is_a? Integer
+puts 5.is_a? Integer
+puts 5.instance_of? Integer
                     ");
                 });
                 Script.WaitForThreads();

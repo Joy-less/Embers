@@ -71,6 +71,12 @@ object.object_id
 object.methods
 	Returns an array containing a symbol for the name of each method in a given object.
 
+object.is_a?(module)
+	Returns true if the object is an instance of the module.
+
+object.instance_of?(module)
+	Returns true if the object is an instance of the module or a module that inherits from it.
+
 instance.attr_reader(instance_variable_name)
 	Creates an instance method called "{the given name}" which returns the given instance variable.
 

@@ -50,6 +50,8 @@ namespace Embers
             RightArrow,
             InclusiveRange,
             ExclusiveRange,
+            TernaryQuestion,
+            TernaryElse,
             EndOfStatement,
         }
         public readonly static Dictionary<string, Phase2TokenType> Keywords = new() {
@@ -270,19 +272,12 @@ namespace Embers
 
             public readonly Method Method;
 
-            public MethodExpression(DebugLocation location, List<Expression> statements, IntRange? argumentCount, List<MethodArgumentExpression> arguments) : base(location) {
+            public MethodExpression(DebugLocation location, List<Expression> statements, IntRange? argumentCount, List<MethodArgumentExpression> arguments, string? nameForSuper) : base(location) {
                 Statements = statements;
                 ArgumentCount = argumentCount ?? new IntRange();
                 Arguments = arguments;
 
-                Method = ToMethod();
-            }
-            public MethodExpression(DebugLocation location, List<Expression> statements, Range argumentCount, List<MethodArgumentExpression> arguments) : base(location) {
-                Statements = statements;
-                ArgumentCount = new IntRange(argumentCount);
-                Arguments = arguments;
-
-                Method = ToMethod();
+                Method = ToMethod(nameForSuper);
             }
             public override string Inspect() {
                 return $"|{Arguments.Inspect()}| {Statements.Inspect()} end";
@@ -290,10 +285,10 @@ namespace Embers
             public override string Serialise() {
                 return $"new {PathToSelf}({Location.Serialise()}, {Statements.Serialise()}, {ArgumentCount.Serialise()}, {Arguments.Serialise()})";
             }
-            Method ToMethod() {
+            Method ToMethod(string? NameForSuper) {
                 return new Method(async Input => {
                     return await Input.Script.InternalInterpretAsync(Statements, Input.OnYield);
-                }, ArgumentCount, Arguments);
+                }, ArgumentCount, Arguments, nameForSuper: NameForSuper);
             }
         }
         public class SelfExpression : Expression {
@@ -379,6 +374,22 @@ namespace Embers
             }
             public override string Serialise() {
                 return $"new {PathToSelf}({Location.Serialise()}, {Condition!.Serialise()}, {Statements.Serialise()})";
+            }
+        }
+        public class TernaryExpression : Expression {
+            public readonly Expression Condition;
+            public readonly Expression ExpressionIfTrue;
+            public readonly Expression ExpressionIfFalse;
+            public TernaryExpression(DebugLocation location, Expression condition, Expression expressionIfTrue, Expression expressionIfFalse) : base(location) {
+                Condition = condition;
+                ExpressionIfTrue = expressionIfTrue;
+                ExpressionIfFalse = expressionIfFalse;
+            }
+            public override string Inspect() {
+                return $"{Condition.Inspect()} ? {ExpressionIfTrue.Inspect()} : {ExpressionIfFalse.Inspect()}";
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({Location.Serialise()}, {Condition.Serialise()}, {ExpressionIfTrue.Serialise()}, {ExpressionIfFalse.Serialise()})";
             }
         }
         public class AssignmentExpression : Expression {
@@ -534,6 +545,19 @@ namespace Embers
             }
             public override string Serialise() {
                 return $"new {PathToSelf}({Location.Serialise()}, {(ReturnValue != null ? ReturnValue.Serialise() : "null")})";
+            }
+        }
+        public class SuperStatement : Statement {
+            public readonly List<Expression>? Arguments;
+            public SuperStatement(DebugLocation location, List<Expression>? arguments = null) : base(location) {
+                Arguments = arguments;
+            }
+            public override string Inspect() {
+                if (Arguments != null) return "super " + Arguments.Inspect();
+                else return "super";
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({Location.Serialise()}, {(Arguments != null ? Arguments.Serialise() : "null")})";
             }
         }
         public enum LoopControlType {
@@ -829,27 +853,29 @@ namespace Embers
                     }
                 }
                 else {
-                    NewTokens.Add(Token.Type switch {
-                        Phase1TokenType.String => new Phase2Token(Token.Location, Phase2TokenType.String, Token.Value, Token),
-                        Phase1TokenType.AssignmentOperator => new Phase2Token(Token.Location, Phase2TokenType.AssignmentOperator, Token.Value, Token),
-                        Phase1TokenType.Operator => new Phase2Token(Token.Location, Phase2TokenType.Operator, Token.Value, Token),
-                        Phase1TokenType.Dot => new Phase2Token(Token.Location, Phase2TokenType.Dot, Token.Value, Token),
-                        Phase1TokenType.DoubleColon => new Phase2Token(Token.Location, Phase2TokenType.DoubleColon, Token.Value, Token),
-                        Phase1TokenType.Comma => new Phase2Token(Token.Location, Phase2TokenType.Comma, Token.Value, Token),
-                        Phase1TokenType.SplatOperator => new Phase2Token(Token.Location, Phase2TokenType.SplatOperator, Token.Value, Token),
-                        Phase1TokenType.OpenBracket => new Phase2Token(Token.Location, Phase2TokenType.OpenBracket, Token.Value, Token),
-                        Phase1TokenType.CloseBracket => new Phase2Token(Token.Location, Phase2TokenType.CloseBracket, Token.Value, Token),
-                        Phase1TokenType.StartCurly => new Phase2Token(Token.Location, Phase2TokenType.StartCurly, Token.Value, Token),
-                        Phase1TokenType.EndCurly => new Phase2Token(Token.Location, Phase2TokenType.EndCurly, Token.Value, Token),
-                        Phase1TokenType.StartSquare => new Phase2Token(Token.Location, Phase2TokenType.StartSquare, Token.Value, Token),
-                        Phase1TokenType.EndSquare => new Phase2Token(Token.Location, Phase2TokenType.EndSquare, Token.Value, Token),
-                        Phase1TokenType.Pipe => new Phase2Token(Token.Location, Phase2TokenType.Pipe, Token.Value, Token),
-                        Phase1TokenType.RightArrow => new Phase2Token(Token.Location, Phase2TokenType.RightArrow, Token.Value, Token),
-                        Phase1TokenType.InclusiveRange => new Phase2Token(Token.Location, Phase2TokenType.InclusiveRange, Token.Value, Token),
-                        Phase1TokenType.ExclusiveRange => new Phase2Token(Token.Location, Phase2TokenType.ExclusiveRange, Token.Value, Token),
-                        Phase1TokenType.EndOfStatement => new Phase2Token(Token.Location, Phase2TokenType.EndOfStatement, Token.Value, Token),
+                    NewTokens.Add(new Phase2Token(Token.Location, Token.Type switch {
+                        Phase1TokenType.String => Phase2TokenType.String,
+                        Phase1TokenType.AssignmentOperator => Phase2TokenType.AssignmentOperator,
+                        Phase1TokenType.Operator => Phase2TokenType.Operator,
+                        Phase1TokenType.Dot => Phase2TokenType.Dot,
+                        Phase1TokenType.DoubleColon => Phase2TokenType.DoubleColon,
+                        Phase1TokenType.Comma => Phase2TokenType.Comma,
+                        Phase1TokenType.SplatOperator => Phase2TokenType.SplatOperator,
+                        Phase1TokenType.OpenBracket => Phase2TokenType.OpenBracket,
+                        Phase1TokenType.CloseBracket => Phase2TokenType.CloseBracket,
+                        Phase1TokenType.StartCurly => Phase2TokenType.StartCurly,
+                        Phase1TokenType.EndCurly => Phase2TokenType.EndCurly,
+                        Phase1TokenType.StartSquare => Phase2TokenType.StartSquare,
+                        Phase1TokenType.EndSquare => Phase2TokenType.EndSquare,
+                        Phase1TokenType.Pipe => Phase2TokenType.Pipe,
+                        Phase1TokenType.RightArrow => Phase2TokenType.RightArrow,
+                        Phase1TokenType.InclusiveRange => Phase2TokenType.InclusiveRange,
+                        Phase1TokenType.ExclusiveRange => Phase2TokenType.ExclusiveRange,
+                        Phase1TokenType.TernaryQuestion => Phase2TokenType.TernaryQuestion,
+                        Phase1TokenType.TernaryElse => Phase2TokenType.TernaryElse,
+                        Phase1TokenType.EndOfStatement => Phase2TokenType.EndOfStatement,
                         _ => throw new InternalErrorException($"{Token.Location}: Conversion of {Token.Type} from phase 1 to phase 2 not supported")
-                    });
+                    }, Token.Value, Token));
                 }
             }
             return NewTokens;
@@ -1345,7 +1371,7 @@ namespace Embers
             // End Method Block
             if (Block is BuildingMethod MethodBlock) {
                 return new DefineMethodStatement(MethodBlock.MethodName,
-                    new MethodExpression(MethodBlock.Location, MethodBlock.Statements, new IntRange(MethodBlock.MinArgumentsCount, MethodBlock.MaxArgumentsCount), MethodBlock.Arguments)
+                    new MethodExpression(MethodBlock.Location, MethodBlock.Statements, new IntRange(MethodBlock.MinArgumentsCount, MethodBlock.MaxArgumentsCount), MethodBlock.Arguments, MethodBlock.MethodName.GetType() == typeof(ObjectTokenExpression) ? MethodBlock.MethodName.Token.Value : null)
                 );
             }
             // End Class/Module Block
@@ -1362,7 +1388,7 @@ namespace Embers
                     throw new SyntaxErrorException($"{DoBlock.Location}: Unexpected 'do'; did you mean '}}'?");
                 }
 
-                MethodExpression OnYield = new(DoBlock.Location, DoBlock.Statements, null, DoBlock.Arguments);
+                MethodExpression OnYield = new(DoBlock.Location, DoBlock.Statements, null, DoBlock.Arguments, null);
                 return new DoExpression(OnYield, DoBlock.DoIsCurly);
             }
             // End If Block
@@ -1413,11 +1439,16 @@ namespace Embers
                 throw new InternalErrorException($"{Block.Location}: End block not handled for type: {Block.GetType().Name}");
             }
         }
-        static Expression ParseReturnOrYield(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index, bool IsReturn) {
+        enum ReturnOrYieldOrSuper {
+            Return,
+            Yield,
+            Super,
+        }
+        static Expression ParseReturnOrYieldOrSuper(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index, ReturnOrYieldOrSuper ReturnOrYieldOrSuper) {
             // Get return/yield values
             List<Expression>? ReturnOrYieldValues = ParseArguments(StatementTokens, ref Index);
             // Create yield/return statement
-            if (IsReturn) {
+            if (ReturnOrYieldOrSuper == ReturnOrYieldOrSuper.Return) {
                 if (ReturnOrYieldValues == null || ReturnOrYieldValues.Count == 0) {
                     return new ReturnStatement(Location);
                 }
@@ -1427,6 +1458,9 @@ namespace Embers
                 else {
                     return new ReturnStatement(Location, new ArrayExpression(ReturnOrYieldValues.Location(), ReturnOrYieldValues));
                 }
+            }
+            else if (ReturnOrYieldOrSuper == ReturnOrYieldOrSuper.Super) {
+                return new SuperStatement(Location, ReturnOrYieldValues);
             }
             else {
                 return new YieldStatement(Location, ReturnOrYieldValues);
@@ -2194,6 +2228,43 @@ namespace Embers
                 }
             }
 
+            // Ternary
+            for (int i = 0; i < ParsedObjects.Count; i++) {
+                Phase2Object? LastUnknownObject = i - 1 >= 0 ? ParsedObjects[i - 1] : null;
+                Phase2Object UnknownObject = ParsedObjects[i];
+                Phase2Object? NextUnknownObject = i + 1 < ParsedObjects.Count ? ParsedObjects[i + 1] : null;
+                Phase2Object? NextNextUnknownObject = i + 2 < ParsedObjects.Count ? ParsedObjects[i + 2] : null;
+                Phase2Object? NextNextNextUnknownObject = i + 3 < ParsedObjects.Count ? ParsedObjects[i + 3] : null;
+
+                if (UnknownObject is Phase2Token Token && Token.Type is Phase2TokenType.TernaryQuestion) {
+                    if (LastUnknownObject is Expression Condition) {
+                        if (NextUnknownObject is Expression ExpressionIfTrue) {
+                            if (NextNextUnknownObject is Phase2Token Tok && Tok.Type == Phase2TokenType.TernaryElse) {
+                                if (NextNextNextUnknownObject is Expression ExpressionIfFalse) {
+                                    // Remove five objects
+                                    i--;
+                                    ParsedObjects.RemoveRange(i, 5);
+                                    // Insert ternary expression
+                                    ParsedObjects.Insert(i, new TernaryExpression(Token.Location, Condition, ExpressionIfTrue, ExpressionIfFalse));
+                                }
+                                else {
+                                    throw new SyntaxErrorException($"{Token.Location}: Expected expression after ':', got '{NextNextNextUnknownObject?.Inspect()}'");
+                                }
+                            }
+                            else {
+                                throw new SyntaxErrorException($"{Token.Location}: Expected ':', got '{NextUnknownObject?.Inspect()}'");
+                            }
+                        }
+                        else {
+                            throw new SyntaxErrorException($"{Token.Location}: Expected expression after '?', got '{NextUnknownObject?.Inspect()}'");
+                        }
+                    }
+                    else {
+                        throw new SyntaxErrorException($"{Token.Location}: Invalid ternary condition");
+                    }
+                }
+            }
+
             // Assignment
             for (int i = ParsedObjects.Count - 1; i >= 0; i--) {
                 Phase2Object UnknownObject = ParsedObjects[i];
@@ -2219,7 +2290,7 @@ namespace Embers
                 }
             }
             
-            // Return / Yield / Break / Undef
+            // Return / Yield / Super / Break / Undef
             for (int i = 0; i < ParsedObjects.Count; i++) {
                 Phase2Object UnknownObject = ParsedObjects[i];
                 
@@ -2228,14 +2299,21 @@ namespace Embers
                         // Return
                         case Phase2TokenType.Return: {
                             int StartIndex = i;
-                            ParsedObjects[StartIndex] = ParseReturnOrYield(Token.Location, ParsedObjects, ref i, true);
+                            ParsedObjects[StartIndex] = ParseReturnOrYieldOrSuper(Token.Location, ParsedObjects, ref i, ReturnOrYieldOrSuper.Return);
                             ParsedObjects.RemoveIndexRange(StartIndex + 1, i);
                             break;
                         }
                         // Yield
                         case Phase2TokenType.Yield: {
                             int StartIndex = i;
-                            ParsedObjects[StartIndex] = ParseReturnOrYield(Token.Location, ParsedObjects, ref i, false);
+                            ParsedObjects[StartIndex] = ParseReturnOrYieldOrSuper(Token.Location, ParsedObjects, ref i, ReturnOrYieldOrSuper.Yield);
+                            ParsedObjects.RemoveIndexRange(StartIndex + 1, i);
+                            break;
+                        }
+                        // Super
+                        case Phase2TokenType.Super: {
+                            int StartIndex = i;
+                            ParsedObjects[StartIndex] = ParseReturnOrYieldOrSuper(Token.Location, ParsedObjects, ref i, ReturnOrYieldOrSuper.Super);
                             ParsedObjects.RemoveIndexRange(StartIndex + 1, i);
                             break;
                         }

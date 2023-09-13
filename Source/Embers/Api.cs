@@ -233,6 +233,8 @@ namespace Embers
             {"method", new Method(ClassInstance.method, 1)},
             {"object_id", new Method(ClassInstance.object_id, 0)},
             {"methods", new Method(ClassInstance.methods, 0)},
+            {"is_a?", new Method(ClassInstance.is_a7, 1)},
+            {"instance_of?", new Method(ClassInstance.instance_of7, 1)},
         };
         public static readonly IReadOnlyDictionary<string, Method> DefaultClassMethods = new Dictionary<string, Method>() {
             
@@ -459,6 +461,24 @@ namespace Embers
                 // Get instance methods
                 else {
                     return new ArrayInstance(Input.Interpreter.Array, MethodsDictToSymbolsArray(Input.Instance.InstanceMethods));
+                }
+            }
+            public static async Task<Instance> is_a7(MethodInput Input) {
+                Instance Argument = Input.Arguments[0];
+                if (Argument is ModuleReference ModuleRef && Input.Instance is not PseudoInstance) {
+                    return Input.Instance.Module!.InheritsFrom(ModuleRef.Module!) ? Input.Interpreter.True : Input.Interpreter.False;
+                }
+                else {
+                    return Input.Interpreter.False;
+                }
+            }
+            public static async Task<Instance> instance_of7(MethodInput Input) {
+                Instance Argument = Input.Arguments[0];
+                if (Argument is ModuleReference ModuleRef && Input.Instance is not PseudoInstance) {
+                    return Input.Instance.Module! == ModuleRef.Module! ? Input.Interpreter.True : Input.Interpreter.False;
+                }
+                else {
+                    return Input.Interpreter.False;
                 }
             }
             public static async Task<Instance> attr_reader(MethodInput Input) {

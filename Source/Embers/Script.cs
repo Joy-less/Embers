@@ -19,6 +19,8 @@ namespace Embers
         Module CurrentModule => (Module)CurrentObject.First(obj => obj is Module);
         Instance CurrentInstance => (Instance)CurrentObject.First(obj => obj is Instance);
 
+        readonly Stack<string?> MethodNameForSuper = new();
+
         internal readonly ConditionalWeakTable<Exception, ExceptionInstance> ExceptionsTable = new();
         public int ThreadCount { get; private set; }
 
@@ -592,23 +594,27 @@ namespace Embers
             public readonly IntRange ArgumentCountRange;
             public readonly List<MethodArgumentExpression> ArgumentNames;
             public readonly bool Unsafe;
-            public Method(Func<MethodInput, Task<Instance>> function, IntRange? argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false) {
+            public readonly string? NameForSuper;
+            public Method(Func<MethodInput, Task<Instance>> function, IntRange? argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false, string? nameForSuper = null) {
                 Function = function;
                 ArgumentCountRange = argumentCountRange ?? new IntRange();
                 ArgumentNames = argumentNames ?? new();
                 Unsafe = IsUnsafe;
+                NameForSuper = nameForSuper;
             }
-            public Method(Func<MethodInput, Task<Instance>> function, Range argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false) {
+            public Method(Func<MethodInput, Task<Instance>> function, Range argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false, string? nameForSuper = null) {
                 Function = function;
                 ArgumentCountRange = new IntRange(argumentCountRange);
                 ArgumentNames = argumentNames ?? new();
                 Unsafe = IsUnsafe;
+                NameForSuper = nameForSuper;
             }
-            public Method(Func<MethodInput, Task<Instance>> function, int argumentCount, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false) {
+            public Method(Func<MethodInput, Task<Instance>> function, int argumentCount, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false, string? nameForSuper = null) {
                 Function = function;
                 ArgumentCountRange = new IntRange(argumentCount, argumentCount);
                 ArgumentNames = argumentNames ?? new();
                 Unsafe = IsUnsafe;
+                NameForSuper = nameForSuper;
             }
             public async Task<Instance> Call(Script Script, Instance? OnInstance, Instances? Arguments = null, Method? OnYield = null, BreakHandleType BreakHandleType = BreakHandleType.Invalid, bool CatchReturn = true) {
                 if (Unsafe && !Script.AllowUnsafeApi)
@@ -617,9 +623,15 @@ namespace Embers
                 Arguments ??= new Instances();
                 if (ArgumentCountRange.IsInRange(Arguments.Count)) {
                     // Create temporary scope
+                    if (OnInstance != null) {
+                        Script.CurrentObject.Push(OnInstance.Module!);
+                        Script.CurrentObject.Push(OnInstance);
+                    }
                     Script.CurrentObject.Push(new Scope(Script.CurrentBlock));
-                    // Set argument variables
-                    {
+                    Script.MethodNameForSuper.Push(NameForSuper);
+                    Instance ReturnValue;
+                    try {
+                        // Set argument variables
                         int ArgumentNameIndex = 0;
                         int ArgumentIndex = 0;
                         while (ArgumentNameIndex < ArgumentNames.Count) {
@@ -667,10 +679,7 @@ namespace Embers
                             ArgumentNameIndex++;
                             ArgumentIndex++;
                         }
-                    }
-                    // Call method
-                    Instance ReturnValue;
-                    try {
+                        // Call method
                         ReturnValue = await Function(new MethodInput(Script, OnInstance, Arguments, OnYield));
                     }
                     catch (BreakException) {
@@ -689,7 +698,12 @@ namespace Embers
                     }
                     finally {
                         // Step back a scope
+                        Script.MethodNameForSuper.Pop();
                         Script.CurrentObject.Pop();
+                        if (OnInstance != null) {
+                            Script.CurrentObject.Pop();
+                            Script.CurrentObject.Pop();
+                        }
                     }
                     // Return method return value
                     return ReturnValue;
@@ -945,20 +959,30 @@ namespace Embers
         T CreateTemporaryClassScope<T>(Module Module, Func<T> Do) {
             // Create temporary class/module scope
             CurrentObject.Push(Module);
-            // Do action
-            T Result = Do();
-            // Step back a class/module
-            CurrentObject.Pop();
+            T Result;
+            try {
+                // Do action
+                Result = Do();
+            }
+            finally {
+                // Step back a class/module
+                CurrentObject.Pop();
+            }
             // Return result
             return Result;
         }
         T CreateTemporaryInstanceScope<T>(Instance Instance, Func<T> Do) {
             // Create temporary instance scope
             CurrentObject.Push(Instance);
-            // Do action
-            T Result = Do();
-            // Step back an instance
-            CurrentObject.Pop();
+            T Result;
+            try {
+                // Do action
+                Result = Do();
+            }
+            finally {
+                // Step back an instance
+                CurrentObject.Pop();
+            }
             // Return result
             return Result;
         }
@@ -1302,6 +1326,15 @@ namespace Embers
             }
             return Interpreter.Nil;
         }
+        async Task<Instance> InterpretTernaryExpression(TernaryExpression TernaryExpression) {
+            bool ConditionIsTruthy = (await InterpretExpressionAsync(TernaryExpression.Condition)).IsTruthy;
+            if (ConditionIsTruthy) {
+                return await InterpretExpressionAsync(TernaryExpression.ExpressionIfTrue);
+            }
+            else {
+                return await InterpretExpressionAsync(TernaryExpression.ExpressionIfFalse);
+            }
+        }
         async Task<ArrayInstance> InterpretArrayExpression(ArrayExpression ArrayExpression) {
             List<Instance> Items = new();
             foreach (Expression Item in ArrayExpression.Expressions) {
@@ -1498,6 +1531,20 @@ namespace Embers
                 throw new RuntimeException($"{YieldStatement.Location}: No block given to yield to");
             }
             return Interpreter.Nil;
+        }
+        async Task<Instance> InterpretSuperStatement(SuperStatement SuperStatement) {
+            Module CurrentModule = this.CurrentModule;
+            if (CurrentModule != Interpreter.RootModule && CurrentModule.SuperModule is Module SuperModule) {
+                string? SuperMethodName = MethodNameForSuper.Count != 0 ? MethodNameForSuper.Peek() : null;
+                if (SuperMethodName != null) {
+                    Instances? Arguments = null;
+                    if (SuperStatement.Arguments != null) {
+                        Arguments = await InterpretExpressionsAsync(SuperStatement.Arguments);
+                    }
+                    return await SuperModule.InstanceMethods[SuperMethodName].Call(this, null, Arguments);
+                }
+            }
+            throw new RuntimeException($"{SuperStatement.Location}: No super method to call");
         }
         async Task<Instance> InterpretRangeExpression(RangeExpression RangeExpression) {
             Instance? RawMin = null;
@@ -1796,6 +1843,7 @@ namespace Embers
                 ObjectTokenExpression ObjectTokenExpression => await InterpretObjectTokenExpression(ObjectTokenExpression, ReturnType),
                 IfExpression IfExpression => await InterpretIfExpression(IfExpression),
                 WhileExpression WhileExpression => await InterpretWhileExpression(WhileExpression),
+                TernaryExpression TernaryExpression => await InterpretTernaryExpression(TernaryExpression),
                 ArrayExpression ArrayExpression => await InterpretArrayExpression(ArrayExpression),
                 HashExpression HashExpression => await InterpretHashExpression(HashExpression),
                 WhileStatement WhileStatement => await InterpretWhileStatement(WhileStatement),
@@ -1816,6 +1864,7 @@ namespace Embers
                     LoopControlType.Next => throw new NextException(),
                     _ => throw new InternalErrorException($"{Expression.Location}: Loop control type not handled: '{LoopControlStatement.Type}'") },
                 YieldStatement YieldStatement => await InterpretYieldStatement(YieldStatement, OnYield),
+                SuperStatement SuperStatement => await InterpretSuperStatement(SuperStatement),
                 RangeExpression RangeExpression => await InterpretRangeExpression(RangeExpression),
                 IfBranchesStatement IfBranchesStatement => await InterpretIfBranchesStatement(IfBranchesStatement),
                 BeginBranchesStatement BeginBranchesStatement => await InterpretBeginBranchesStatement(BeginBranchesStatement),
