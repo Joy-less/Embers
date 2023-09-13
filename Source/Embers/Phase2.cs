@@ -224,7 +224,7 @@ namespace Embers
         }
         public class DefinedExpression : Expression {
             public readonly Expression Expression;
-            public DefinedExpression(Expression expression) : base(expression.Location) {
+            public DefinedExpression(DebugLocation location, Expression expression) : base(location) {
                 Expression = expression;
             }
             public override string Inspect() {
@@ -577,6 +577,20 @@ namespace Embers
             }
             public override string Serialise() {
                 return $"new {PathToSelf}({Location.Serialise()}, {(Arguments != null ? Arguments.Serialise() : "null")})";
+            }
+        }
+        public class AliasStatement : Statement {
+            public readonly ObjectTokenExpression AliasAs;
+            public readonly ObjectTokenExpression MethodToAlias;
+            public AliasStatement(DebugLocation location, ObjectTokenExpression aliasAs, ObjectTokenExpression methodToAlias) : base(location) {
+                AliasAs = aliasAs;
+                MethodToAlias = methodToAlias;
+            }
+            public override string Inspect() {
+                return $"alias {AliasAs.Inspect()} {MethodToAlias.Inspect()}";
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({AliasAs.Serialise()}, {MethodToAlias.Serialise()})";
             }
         }
         public enum LoopControlType {
@@ -2196,10 +2210,35 @@ namespace Embers
                                 throw new SyntaxErrorException($"{Token.Location}: Expected a single argument after defined?");
                             }
                             ParsedObjects.RemoveIndexRange(i, EndOfArgumentsIndex);
-                            ParsedObjects.Insert(i, new DefinedExpression(Arguments[0]));
+                            ParsedObjects.Insert(i, new DefinedExpression(Token.Location, Arguments[0]));
                         }
                         else {
                             throw new SyntaxErrorException($"{Token.Location}: Expected expression after defined?");
+                        }
+                    }
+                }
+            }
+
+            // Alias
+            for (int i = 0; i < ParsedObjects.Count; i++) {
+                Phase2Object UnknownObject = ParsedObjects[i];
+                Phase2Object? NextUnknownObject = i + 1 < ParsedObjects.Count ? ParsedObjects[i + 1] : null;
+                Phase2Object? NextNextUnknownObject = i + 2 < ParsedObjects.Count ? ParsedObjects[i + 2] : null;
+
+                if (UnknownObject is Phase2Token Token) {
+                    // alias
+                    if (Token.Type == Phase2TokenType.Alias) {
+                        if (NextUnknownObject is ObjectTokenExpression NextObjectToken) {
+                            if (NextNextUnknownObject is ObjectTokenExpression NextNextObjectToken) {
+                                ParsedObjects.RemoveRange(i, 3);
+                                ParsedObjects.Insert(i, new AliasStatement(Token.Location, NextObjectToken, NextNextObjectToken));
+                            }
+                            else {
+                                throw new SyntaxErrorException($"{NextUnknownObject.Location}: Expected method to alias after method alias, got '{NextNextUnknownObject?.Inspect()}'");
+                            }
+                        }
+                        else {
+                            throw new SyntaxErrorException($"{UnknownObject.Location}: Expected method alias after 'alias', got '{NextUnknownObject?.Inspect()}'");
                         }
                     }
                 }

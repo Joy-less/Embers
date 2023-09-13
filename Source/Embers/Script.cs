@@ -1560,6 +1560,28 @@ namespace Embers
             }
             throw new RuntimeException($"{SuperStatement.Location}: No super method to call");
         }
+        async Task<Instance> InterpretAliasStatement(AliasStatement AliasStatement) {
+            Instance MethodToAlias = await InterpretExpressionAsync(AliasStatement.MethodToAlias, ReturnType.FoundVariable);
+            if (MethodToAlias is VariableReference MethodToAliasRef) {
+                // Get methods dictionary
+                ReactiveDictionary<string, Method> Methods;
+                if (MethodToAliasRef.Instance != null) {
+                    Methods = MethodToAliasRef.Instance!.InstanceMethods;
+                }
+                else if (MethodToAliasRef.Block != null) {
+                    Methods = ((Module)MethodToAliasRef.Block!).Methods;
+                }
+                else {
+                    Methods = CurrentInstance.InstanceMethods;
+                }
+                // Add alias for method
+                Methods[AliasStatement.AliasAs.Token.Value!] = Methods[MethodToAliasRef.Token.Value!];
+            }
+            else {
+                throw new SyntaxErrorException($"{AliasStatement.Location}: Expected method to alias, got '{MethodToAlias.Inspect()}'");
+            }
+            return Interpreter.Nil;
+        }
         async Task<Instance> InterpretRangeExpression(RangeExpression RangeExpression) {
             Instance? RawMin = null;
             if (RangeExpression.Min != null) RawMin = await InterpretExpressionAsync(RangeExpression.Min);
@@ -1901,6 +1923,7 @@ namespace Embers
                     _ => throw new InternalErrorException($"{Expression.Location}: Loop control type not handled: '{LoopControlStatement.Type}'") },
                 YieldStatement YieldStatement => await InterpretYieldStatement(YieldStatement, OnYield),
                 SuperStatement SuperStatement => await InterpretSuperStatement(SuperStatement),
+                AliasStatement AliasStatement => await InterpretAliasStatement(AliasStatement),
                 RangeExpression RangeExpression => await InterpretRangeExpression(RangeExpression),
                 IfBranchesStatement IfBranchesStatement => await InterpretIfBranchesStatement(IfBranchesStatement),
                 BeginBranchesStatement BeginBranchesStatement => await InterpretBeginBranchesStatement(BeginBranchesStatement),

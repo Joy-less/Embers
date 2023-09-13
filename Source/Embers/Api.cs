@@ -20,23 +20,23 @@ namespace Embers
             Interpreter Interpreter = Script.Interpreter;
 
             // Global methods
-            Interpreter.RootInstance.InstanceMethods["puts"] = new Method(puts, null);
-            Interpreter.RootInstance.InstanceMethods["print"] = new Method(print, null);
-            Interpreter.RootInstance.InstanceMethods["p"] = new Method(p, null);
-            Interpreter.RootInstance.InstanceMethods["gets"] = new Method(gets, 0);
-            Interpreter.RootInstance.InstanceMethods["getc"] = new Method(getc, 0);
-            Interpreter.RootInstance.InstanceMethods["warn"] = new Method(warn, null);
-            Interpreter.RootInstance.InstanceMethods["sleep"] = new Method(sleep, 0..1);
-            Interpreter.RootInstance.InstanceMethods["raise"] = new Method(@raise, 0..1);
-            Interpreter.RootInstance.InstanceMethods["throw"] = new Method(@throw, 1);
-            Interpreter.RootInstance.InstanceMethods["catch"] = new Method(@catch, 1);
-            Interpreter.RootInstance.InstanceMethods["lambda"] = new Method(lambda, 0);
-            Interpreter.RootInstance.InstanceMethods["loop"] = new Method(loop, 0);
-            Interpreter.RootInstance.InstanceMethods["rand"] = new Method(_Random.rand, 0..1);
-            Interpreter.RootInstance.InstanceMethods["srand"] = new Method(_Random.srand, 0..1);
-            Interpreter.RootInstance.InstanceMethods["exit"] = new Method(exit, 0);
-            Interpreter.RootInstance.InstanceMethods["quit"] = new Method(exit, 0);
-            Interpreter.RootInstance.InstanceMethods["eval"] = new Method(eval, 1);
+            Interpreter.RootModule.InstanceMethods["puts"] = new Method(puts, null);
+            Interpreter.RootModule.InstanceMethods["print"] = new Method(print, null);
+            Interpreter.RootModule.InstanceMethods["p"] = new Method(p, null);
+            Interpreter.RootModule.InstanceMethods["gets"] = new Method(gets, 0);
+            Interpreter.RootModule.InstanceMethods["getc"] = new Method(getc, 0);
+            Interpreter.RootModule.InstanceMethods["warn"] = new Method(warn, null);
+            Interpreter.RootModule.InstanceMethods["sleep"] = new Method(sleep, 0..1);
+            Interpreter.RootModule.InstanceMethods["raise"] = new Method(@raise, 0..1);
+            Interpreter.RootModule.InstanceMethods["throw"] = new Method(@throw, 1);
+            Interpreter.RootModule.InstanceMethods["catch"] = new Method(@catch, 1);
+            Interpreter.RootModule.InstanceMethods["lambda"] = new Method(lambda, 0);
+            Interpreter.RootModule.InstanceMethods["loop"] = new Method(loop, 0);
+            Interpreter.RootModule.InstanceMethods["rand"] = new Method(_Random.rand, 0..1);
+            Interpreter.RootModule.InstanceMethods["srand"] = new Method(_Random.srand, 0..1);
+            Interpreter.RootModule.InstanceMethods["exit"] = new Method(exit, 0);
+            Interpreter.RootModule.InstanceMethods["quit"] = new Method(exit, 0);
+            Interpreter.RootModule.InstanceMethods["eval"] = new Method(eval, 1);
 
             // Global constants
             Interpreter.RootScope.Constants["EMBERS_VERSION"] = new StringInstance(Interpreter.String, Info.Version);

@@ -55,6 +55,11 @@ p defined? a
 p defined? b
 p defined? A.new.a
 p defined? A.new.b
+
+begin
+    alias puts_alias puts
+end
+puts_alias 'Aliased!'
                     ");
                 });
                 Script.WaitForThreads();
