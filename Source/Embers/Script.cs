@@ -393,7 +393,7 @@ namespace Embers
                 FromScript = fromScript;
                 Phase = ThreadPhase.Idle;
             }
-            public async Task Run() {
+            public async Task Run(Instances? Arguments = null) {
                 // If already running, wait until it's finished
                 if (Phase != ThreadPhase.Idle) {
                     while (Phase != ThreadPhase.Completed)
@@ -410,7 +410,7 @@ namespace Embers
                     // Run the method in the script
                     bool ThreadCompleted = false;
                     _ = Task.Run(async () => {
-                        await Method!.Call(ThreadScript, null);
+                        await Method!.Call(ThreadScript, null, Arguments);
                         ThreadCompleted = true;
                     });
                     // Wait for the script to finish

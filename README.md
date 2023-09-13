@@ -41,107 +41,56 @@ Console.WriteLine(Result.Integer); // 5
 ```csharp
 await MyScript.EvaluateAsync("sleep(2)");
 ```
+
 #### Several scripts example
 ```csharp
-string CodeA = @"
-sleep(2)
-puts $my_global
-";
-string CodeB = @"
-$my_global = 3
-";
 Interpreter Interpreter = new();
 Script ScriptA = new(Interpreter);
 Script ScriptB = new(Interpreter);
 
-Task.Run(async () => await ScriptA.EvaluateAsync(CodeA));
+Task.Run(async () => await ScriptA.EvaluateAsync("sleep(2); puts $my_global"));
 Thread.Sleep(1000);
-Task.Run(async () => await ScriptB.EvaluateAsync(CodeB));
+Task.Run(async () => await ScriptB.EvaluateAsync("$my_global = 3"));
 
 Thread.Sleep(2000);
 Console.WriteLine("Done");
 Console.ReadLine();
 ```
-### Parallelisation
-You can also run code on multiple cores.
 
-Note that code running on a single thread will be faster if they are accessing the same variables.
+### Stopping scripts
+```csharp
+MyScript.Stop(); // Stops the script just before the next expression is interpreted.
+                 // Also stops all running threads in the script.
+```
 
-<details><summary>Benchmark</summary>
+### Multithreading / Parallelisation
+You can run code on multiple threads and even cores. You can do this in C# by creating a script for each thread, or in Ruby by using built-in methods:
 
 ```csharp
-const string BenchmarkCode = @"
-$i = 0
-while $i < 550000
-    # Random equations
-    r1 = rand 20
-    r2 = rand 20
-    r1 - (r2 % r1 + r1) * r2 - (r1 ** r2)
-    r2 *= r1 - r2
-    r1 = r2 + r2 + 2 * (r1 - r2)
-    
-    # Increment counter
-    $i += 1
+Script.Evaluate(@"
+Parallel.each [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] do |n|
+    print n.to_s + ' '
 end
-";
-{
-    Console.WriteLine("Single thread benchmark:");
-
-    Interpreter SingleThreadInterpreter = new();
-    Script SingleThreadScript = new(SingleThreadInterpreter);
-
-    Benchmark(() => SingleThreadScript.Evaluate(BenchmarkCode));
-}
-
-{
-    Console.WriteLine("Multi-threading benchmark:");
-
-    Interpreter MultiThreadInterpreter = new();
-    Script MultiThreadScriptA = new(MultiThreadInterpreter);
-    Script MultiThreadScriptB = new(MultiThreadInterpreter);
-    Script MultiThreadScriptC = new(MultiThreadInterpreter);
-    Script MultiThreadScriptD = new(MultiThreadInterpreter);
-
-    Task.WaitAll(
-        Task.Run(() => Benchmark(() => MultiThreadScriptA.Evaluate(BenchmarkCode))),
-        Task.Run(() => Benchmark(() => MultiThreadScriptB.Evaluate(BenchmarkCode))),
-        Task.Run(() => Benchmark(() => MultiThreadScriptC.Evaluate(BenchmarkCode))),
-        Task.Run(() => Benchmark(() => MultiThreadScriptD.Evaluate(BenchmarkCode)))
-    );
-}
-
-{
-    Console.WriteLine("Parallel benchmark:");
-
-    Interpreter ParallelInterpreter = new();
-    Script ParallelScriptA = new(ParallelInterpreter);
-    Script ParallelScriptB = new(ParallelInterpreter);
-    Script ParallelScriptC = new(ParallelInterpreter);
-    Script ParallelScriptD = new(ParallelInterpreter);
-
-    Parallel.Invoke(
-        () => Benchmark(() => ParallelScriptA.Evaluate(BenchmarkCode)),
-        () => Benchmark(() => ParallelScriptB.Evaluate(BenchmarkCode)),
-        () => Benchmark(() => ParallelScriptC.Evaluate(BenchmarkCode)),
-        () => Benchmark(() => ParallelScriptD.Evaluate(BenchmarkCode))
-    );
-}
+getc
+puts ""\n---""
+[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].each do |n|
+    Thread.new {
+        print n.to_s + ' '
+    }.start
+end
+getc
+puts ""\n---""
+");
 ```
+Output:
 ```
-Single thread benchmark:
-Took 19.046 seconds
-Multi-threading benchmark:
-Took 13.929 seconds
-Took 13.93 seconds
-Took 13.93 seconds
-Took 13.93 seconds
-Parallel benchmark:
-Took 15.396 seconds
-Took 15.396 seconds
-Took 15.396 seconds
-Took 15.396 seconds
+2 3 4 5 6 7 8 9 1 10
+---
+1 3 4 7 2 5 6 8 9 10
+---
 ```
-</details>
+
+Note that code running on a single thread will be faster if they are regularly accessing the same variables due to locking mechanisms.
 
 ### Custom methods
 ```csharp

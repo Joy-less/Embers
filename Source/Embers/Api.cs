@@ -204,8 +204,11 @@ namespace Embers
             Interpreter.Thread.InstanceMethods["initialize"] = new Method(_Thread.initialize, 0);
             Interpreter.Thread.InstanceMethods["join"] = new Method(_Thread.join, 0);
             Interpreter.Thread.InstanceMethods["start"] = new Method(_Thread.start, 0);
-            Interpreter.Thread.InstanceMethods["start_parallel"] = new Method(_Thread.start_parallel, 0);
             Interpreter.Thread.InstanceMethods["stop"] = new Method(_Thread.stop, 0);
+
+            // Parallel
+            Module ParallelModule = Script.CreateModule("Parallel");
+            ParallelModule.Methods["each"] = new Method(_Parallel.each, 1);
 
             //
             // UNSAFE APIS
@@ -1683,6 +1686,41 @@ namespace Embers
             public static async Task<Instance> stop(MethodInput Input) {
                 ThreadInstance Thread = (ThreadInstance)Input.Instance;
                 Thread.Thread.Stop();
+                return Input.Interpreter.Nil;
+            }
+        }
+        static class _Parallel {
+            public static async Task<Instance> each(MethodInput Input) {
+                if (Input.OnYield != null) {
+                    Instance[] Array = Input.Arguments[0].Array.ToArray();
+                    Action[] Methods = new Action[Array.Length];
+                    
+                    int TakesArguments = Input.OnYield.ArgumentNames.Count;
+                    for (int i = 0; i < Array.Length; i++) {
+                        Instance Current = Array[i];
+                        int CurrentIndex = i;
+
+                        Methods[i] = async () => {
+                            ThreadInstance Thread = new(Input.Interpreter.Thread, Input.Script);
+                            Thread.Thread.Method = Input.OnYield;
+
+                            // Parallel.each do |n, i|
+                            if (TakesArguments == 2) {
+                                await Thread.Thread.Run(new List<Instance>() { Current, new IntegerInstance(Input.Interpreter.Integer, CurrentIndex) });
+                            }
+                            // Parallel.each do |n|
+                            else if (TakesArguments == 1) {
+                                await Thread.Thread.Run(Current);
+                            }
+                            // Parallel.each do
+                            else {
+                                await Thread.Thread.Run();
+                            }
+                        };
+                    }
+
+                    Parallel.Invoke(Methods);
+                }
                 return Input.Interpreter.Nil;
             }
         }

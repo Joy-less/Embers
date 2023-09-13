@@ -51,12 +51,18 @@ puts 'b'
                 Script Script = new(Interpreter);
                 Benchmark(() => {
                     Script.Evaluate(@"
-t = Thread.new {
-    for i in 1..1_000_000
-        b = i + 1
-    end
-}
-t.start_parallel
+Parallel.each [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] do |n|
+    print n.to_s + ' '
+end
+getc
+puts ""\n---""
+[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].each do |n|
+    Thread.new {
+        print n.to_s + ' '
+    }.start
+end
+getc
+puts ""\n---""
                     ");
                 });
                 Script.WaitForThreads();
