@@ -11,7 +11,7 @@ Its minimalistic design should make Ruby suitable for use in game engines, moddi
 - Source code is easy to understand, with everything in one place.
 - Each interpreter can have multiple scripts which can each run on their own thread and communicate.
 - Full compatibility with Unity and Godot.
-- Obsolete functionality, such as numbers starting with 0 being octal integers, is not included.
+- Some obsolete functionality, such as numbers starting with 0 being octal integers, is omitted.
 - A great mascot.
 
 ## Drawbacks
@@ -181,7 +181,7 @@ Unity
 ```csharp
 // In Api.cs
 Console.WriteLine(Message.LightInspect()); // -> Debug.Log(Message.LightInspect());
-Console.WriteLine(); // -> Debug.Log.Print("");
+Console.WriteLine(); // -> Debug.Log("");
 ```
 
 Godot
