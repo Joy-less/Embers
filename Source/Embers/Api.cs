@@ -50,6 +50,7 @@ namespace Embers
             Interpreter.String.InstanceMethods["+"] = new Method(String._Add, 1);
             Interpreter.String.InstanceMethods["*"] = new Method(String._Multiply, 1);
             Interpreter.String.InstanceMethods["=="] = new Method(String._Equals, 1);
+            Interpreter.String.InstanceMethods["==="] = new Method(String._Equals, 1);
             Interpreter.String.InstanceMethods["<"] = new Method(String._LessThan, 1);
             Interpreter.String.InstanceMethods[">"] = new Method(String._GreaterThan, 1);
             Interpreter.String.InstanceMethods["<="] = new Method(String._LessThanOrEqualTo, 1);
@@ -93,6 +94,7 @@ namespace Embers
             Interpreter.Integer.InstanceMethods["%"] = new Method(Integer._Modulo, 1);
             Interpreter.Integer.InstanceMethods["**"] = new Method(Integer._Exponentiate, 1);
             Interpreter.Integer.InstanceMethods["=="] = new Method(Float._Equals, 1);
+            Interpreter.Integer.InstanceMethods["==="] = new Method(Float._Equals, 1);
             Interpreter.Integer.InstanceMethods["<"] = new Method(Float._LessThan, 1);
             Interpreter.Integer.InstanceMethods[">"] = new Method(Float._GreaterThan, 1);
             Interpreter.Integer.InstanceMethods["<="] = new Method(Float._LessThanOrEqualTo, 1);
@@ -112,6 +114,7 @@ namespace Embers
             Interpreter.Float.InstanceMethods["%"] = new Method(Float._Modulo, 1);
             Interpreter.Float.InstanceMethods["**"] = new Method(Float._Exponentiate, 1);
             Interpreter.Float.InstanceMethods["=="] = new Method(Float._Equals, 1);
+            Interpreter.Float.InstanceMethods["==="] = new Method(Float._Equals, 1);
             Interpreter.Float.InstanceMethods["<"] = new Method(Float._LessThan, 1);
             Interpreter.Float.InstanceMethods[">"] = new Method(Float._GreaterThan, 1);
             Interpreter.Float.InstanceMethods["<="] = new Method(Float._LessThanOrEqualTo, 1);
@@ -126,6 +129,7 @@ namespace Embers
             Interpreter.Proc.InstanceMethods["call"] = new Method(Proc.call, null);
 
             // Range
+            Interpreter.Range.InstanceMethods["==="] = new Method(Range._TripleEquals, 1);
             Interpreter.Range.InstanceMethods["min"] = new Method(Range.min, 0);
             Interpreter.Range.InstanceMethods["max"] = new Method(Range.max, 0);
             Interpreter.Range.InstanceMethods["each"] = new Method(Range.each, 0);
@@ -136,6 +140,7 @@ namespace Embers
             // Array
             Interpreter.Array.InstanceMethods["[]"] = new Method(Array._Indexer, 1);
             Interpreter.Array.InstanceMethods["=="] = new Method(Array._Equals, 1);
+            Interpreter.Array.InstanceMethods["==="] = new Method(Array._Equals, 1);
             Interpreter.Array.InstanceMethods["<<"] = new Method(Array._Append, 1);
             Interpreter.Array.InstanceMethods["length"] = new Method(Array.length, 0);
             Interpreter.Array.InstanceMethods["count"] = new Method(Array.count, 0..1);
@@ -157,6 +162,7 @@ namespace Embers
             // Hash
             Interpreter.Hash.InstanceMethods["[]"] = new Method(Hash._Indexer, 1);
             Interpreter.Hash.InstanceMethods["=="] = new Method(Hash._Equals, 1);
+            Interpreter.Hash.InstanceMethods["==="] = new Method(Hash._Equals, 1);
             Interpreter.Hash.InstanceMethods["initialize"] = new Method(Hash.initialize, 0..1);
             Interpreter.Hash.InstanceMethods["has_key?"] = new Method(Hash.has_key7, 1);
             Interpreter.Hash.InstanceMethods["has_value?"] = new Method(Hash.has_value7, 1);
@@ -232,6 +238,7 @@ namespace Embers
 
         public static readonly IReadOnlyDictionary<string, Method> DefaultClassAndInstanceMethods = new Dictionary<string, Method>() {
             {"==", new Method(ClassInstance._Equals, 1)},
+            {"===", new Method(ClassInstance._Equals, 1)},
             {"!=", new Method(ClassInstance._NotEquals, 1)},
             {"<=>", new Method(ClassInstance._Spaceship, 1)},
             {"inspect", new Method(ClassInstance.inspect, 0)},
@@ -1023,6 +1030,17 @@ namespace Embers
             }
         }
         static class Range {
+            public static async Task<Instance> _TripleEquals(MethodInput Input) {
+                LongRange Range = Input.Instance.Range;
+                Instance Value = Input.Arguments[0];
+                if (Value is IntegerInstance or FloatInstance) {
+                    double Number = Value.Float;
+                    return Range.IsInRange(Number) ? Input.Interpreter.True : Input.Interpreter.False;
+                }
+                else {
+                    return Input.Interpreter.False;
+                }
+            }
             public static async Task<Instance> min(MethodInput Input) {
                 return ((RangeInstance)Input.Instance).AppliedMin;
             }

@@ -294,6 +294,27 @@ namespace Embers_Tests
                 a = 5
                 return defined? a, defined? b
             ", new object?[] {"local-variable", null});
+
+            // Case when
+            AssertEqual(@"
+                case 52
+                when 1..3
+                    return 'Between one and three'
+                when 52
+                    return '52!'
+                else
+                    return 'None of the above'
+                end
+            ", "52!");
+            AssertEqual(@"
+                a = case 14
+                when 146
+                    return '146!'
+                else
+                    return 'N/A'
+                end
+                a
+            ", "N/A");
         }
 
 

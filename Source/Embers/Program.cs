@@ -6,7 +6,7 @@ namespace Embers
     internal class Program
     {
         static void Main() {
-            // Test
+            /*// Test
             {
                 Interpreter Interpreter = new();
                 Script Script = new(Interpreter);
@@ -60,6 +60,31 @@ begin
     alias puts_alias puts
 end
 puts_alias 'Aliased!'
+                    ");
+                });
+                Script.WaitForThreads();
+                Console.WriteLine("Done.");
+                Console.ReadLine();
+            }*/
+            // Test 2
+            {
+                Interpreter Interpreter = new();
+                Script Script = new(Interpreter);
+                Benchmark(() => {
+                    Script.Evaluate(@"
+puts 5 === (2..7)
+puts (2..7) === 5
+puts (2..7) === (2..7)
+puts (2..7) === 5.5
+
+case 500
+when 1..8
+    puts 'Between 1 and 8'
+when 499..501
+    puts 'Between 499 and 501'
+else
+    puts 'Who knows'
+end
                     ");
                 });
                 Script.WaitForThreads();

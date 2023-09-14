@@ -802,6 +802,11 @@ namespace Embers
                 if (Max != null && Number > Max) return false;
                 return true;
             }
+            public bool IsInRange(double Number) {
+                if (Min != null && Number < Min) return false;
+                if (Max != null && Number > Max) return false;
+                return true;
+            }
             public override string ToString() {
                 if (Min == Max) {
                     if (Min == null) {
@@ -1348,6 +1353,32 @@ namespace Embers
             else {
                 return await InterpretExpressionAsync(TernaryExpression.ExpressionIfFalse);
             }
+        }
+        async Task<Instance> InterpretCaseExpression(CaseExpression CaseExpression) {
+            Instance Subject = await InterpretExpressionAsync(CaseExpression.Subject);
+            foreach (IfExpression Branch in CaseExpression.Branches) {
+                // Check if when statements apply
+                bool WhenApplies = false;
+                if (Branch.Condition != null) {
+                    Instance ConditionObject = await InterpretExpressionAsync(Branch.Condition);
+                    if (ConditionObject.InstanceMethods.TryGetValue("===", out Method? TripleEquality)) {
+                        if ((await TripleEquality.Call(this, ConditionObject, Subject)).IsTruthy) {
+                            WhenApplies = true;
+                        }
+                    }
+                    else {
+                        throw new RuntimeException($"{Branch.Location}: Case 'when' instance must have an '===' method");
+                    }
+                }
+                else {
+                    WhenApplies = true;
+                }
+                // Run when statements
+                if (WhenApplies) {
+                    return await InternalInterpretAsync(Branch.Statements);
+                }
+            }
+            return Interpreter.Nil;
         }
         async Task<ArrayInstance> InterpretArrayExpression(ArrayExpression ArrayExpression) {
             List<Instance> Items = new();
@@ -1902,6 +1933,7 @@ namespace Embers
                 WhileExpression WhileExpression => await InterpretWhileExpression(WhileExpression),
                 RescueExpression RescueExpression => await InterpretRescueExpression(RescueExpression),
                 TernaryExpression TernaryExpression => await InterpretTernaryExpression(TernaryExpression),
+                CaseExpression CaseExpression => await InterpretCaseExpression(CaseExpression),
                 ArrayExpression ArrayExpression => await InterpretArrayExpression(ArrayExpression),
                 HashExpression HashExpression => await InterpretHashExpression(HashExpression),
                 WhileStatement WhileStatement => await InterpretWhileStatement(WhileStatement),

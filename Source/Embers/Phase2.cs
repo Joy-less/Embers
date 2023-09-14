@@ -411,6 +411,20 @@ namespace Embers
                 return $"new {PathToSelf}({Location.Serialise()}, {Condition.Serialise()}, {ExpressionIfTrue.Serialise()}, {ExpressionIfFalse.Serialise()})";
             }
         }
+        public class CaseExpression : Expression {
+            public readonly Expression Subject;
+            public readonly List<IfExpression> Branches;
+            public CaseExpression(DebugLocation location, Expression subject, List<IfExpression> branches) : base(location) {
+                Subject = subject;
+                Branches = branches;
+            }
+            public override string Inspect() {
+                return $"case {Subject.Inspect()}; when {Branches.Inspect("; when ")}; end";
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({Location.Serialise()}, {Branches.Serialise()})";
+            }
+        }
         public class AssignmentExpression : Expression {
             public ObjectTokenExpression Left;
             public Expression Right;
@@ -1434,6 +1448,15 @@ namespace Embers
             else if (Block is BuildingWhile WhileBlock) {
                 return new WhileStatement(new WhileExpression(WhileBlock.Location, WhileBlock.Condition!, WhileBlock.Statements, WhileBlock.Inverse));
             }
+            // End Case Block
+            else if (Block is BuildingCase CaseBlock) {
+                List<IfExpression> IfExpressions = new();
+                for (int i = 0; i < CaseBlock.Branches.Count; i++) {
+                    BuildingWhen Branch = CaseBlock.Branches[i];
+                    IfExpressions.Add(new IfExpression(Branch.Location, Branch.Condition, Branch.Statements));
+                }
+                return new CaseExpression(CaseBlock.Location, CaseBlock.Subject, IfExpressions);
+            }
             // End For Block
             else if (Block is BuildingFor ForBlock) {
                 return new ForStatement(ForBlock.Location, ForBlock.VariableName, ForBlock.InExpression, ForBlock.Statements);
@@ -1530,6 +1553,26 @@ namespace Embers
 
             // Open rescue block
             return new BuildingRescue(Location, ExceptionExpression, ExceptionVariable);
+        }
+        static BuildingCase ParseCase(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index) {
+            // Get case subject
+            Index++;
+            List<Phase2Object> CaseExpressionObjects = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && Tok.Type is Phase2TokenType.When);
+            Index--;
+            CaseExpressionObjects.RemoveFromEnd(Obj => Obj is Phase2Token Tok && Tok.Type == Phase2TokenType.EndOfStatement);
+            Expression CaseExpression = ObjectsToExpression(CaseExpressionObjects);
+
+            // Open case block
+            return new BuildingCase(Location, CaseExpression);
+        }
+        static BuildingWhen ParseWhen(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index) {
+            // Get condition
+            Index++;
+            List<Phase2Object> ConditionObjects = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type is Phase2TokenType.Then or Phase2TokenType.EndOfStatement));
+            Expression ConditionExpression = ObjectsToExpression(ConditionObjects);
+
+            // Open when block
+            return new BuildingWhen(Location, ConditionExpression);
         }
         static BuildingFor ParseFor(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index) {
             // Get variable name
@@ -1704,12 +1747,19 @@ namespace Embers
                             else if (CurrentBlocks.TryPeek(out BuildingBlock? Block2) && Block2 is BuildingBeginBranches BeginBlock) {
                                 ResolveStatementsWithoutEndingBlock();
                                 if (BeginBlock.Branches[^1] is not BuildingRescue) {
-                                    throw new SyntaxErrorException($"{Token.Location}: 'Else' in begin block must follow 'rescue', not '{BeginBlock.Branches[^1].GetType().Name}'");
+                                    throw new SyntaxErrorException($"{Token.Location}: 'Else' in 'begin' block must follow 'rescue', not '{BeginBlock.Branches[^1].GetType().Name}'");
                                 }
                                 BeginBlock.Branches.Add(new BuildingRescueElse(Token.Location));
                             }
+                            else if (CurrentBlocks.TryPeek(out BuildingBlock? Block3) && Block3 is BuildingCase CaseBlock) {
+                                ResolveStatementsWithoutEndingBlock();
+                                if (CaseBlock.Branches.Count == 0 || CaseBlock.Branches[^1].Condition == null) {
+                                    throw new SyntaxErrorException($"{Token.Location}: 'Else' in 'case' block must follow 'when', not 'case'");
+                                }
+                                CaseBlock.Branches.Add(new BuildingWhen(Token.Location, null));
+                            }
                             else {
-                                throw new SyntaxErrorException($"{Token.Location}: 'Else' must follow 'if' or 'begin'");
+                                throw new SyntaxErrorException($"{Token.Location}: 'Else' must follow 'if', 'begin' or 'case'");
                             }
                             break;
                         }
@@ -1735,7 +1785,7 @@ namespace Embers
                                 BeginBlock.Branches.Add(ParseRescue(Token.Location, ParsedObjects, ref i));
                             }
                             else {
-                                throw new SyntaxErrorException($"{Token.Location}: Rescue must follow begin");
+                                throw new SyntaxErrorException($"{Token.Location}: 'Rescue' must follow 'begin'");
                             }
                             break;
                         }
@@ -1749,14 +1799,33 @@ namespace Embers
                                 BeginBlock.Branches.Add(new BuildingEnsure(Token.Location));
                             }
                             else {
-                                throw new SyntaxErrorException($"{Token.Location}: Ensure must follow begin");
+                                throw new SyntaxErrorException($"{Token.Location}: 'Ensure' must follow 'begin'");
+                            }
+                            break;
+                        }
+                        // Case
+                        case Phase2TokenType.Case: {
+                            PushBlock(ParseCase(Token.Location, ParsedObjects, ref i));
+                            break;
+                        }
+                        // When
+                        case Phase2TokenType.When: {
+                            if (CurrentBlocks.TryPeek(out BuildingBlock? Block) && Block is BuildingCase CaseBlock) {
+                                ResolveStatementsWithoutEndingBlock();
+                                if (CaseBlock.Branches.Count != 0 && CaseBlock.Branches[^1].Condition == null) {
+                                    throw new SyntaxErrorException($"{Token.Location}: 'When' must not follow 'else'");
+                                }
+                                CaseBlock.Branches.Add(ParseWhen(Token.Location, ParsedObjects, ref i));
+                            }
+                            else {
+                                throw new SyntaxErrorException($"{Token.Location}: 'When' must follow 'case'");
                             }
                             break;
                         }
                         // End
                         case Phase2TokenType.End: {
                             if (CurrentBlocks.Count == 1) {
-                                throw new SyntaxErrorException($"{Token.Location}: Unexpected end statement");
+                                throw new SyntaxErrorException($"{Token.Location}: Unexpected 'end' statement");
                             }
                             Expression? EndedExpression = ResolveEndBlock(false);
                             if (EndedExpression != null) AddPendingObject(EndedExpression);
@@ -2665,6 +2734,27 @@ namespace Embers
             }
             public override void AddStatement(Expression Statement) {
                 Branches[^1].Statements.Add(Statement);
+            }
+        }
+        class BuildingCase : BuildingBlock {
+            public readonly Expression Subject;
+            public readonly List<BuildingWhen> Branches = new();
+            public BuildingCase(DebugLocation location, Expression subject) : base(location) {
+                Subject = subject;
+            }
+            public override void AddStatement(Expression Statement) {
+                if (Branches.Count != 0) {
+                    Branches[^1].Statements.Add(Statement);
+                }
+                else {
+                    throw new SyntaxErrorException($"{Location}: Unexpected '{Statement.Inspect()}'");
+                }
+            }
+        }
+        class BuildingWhen : BuildingBlock {
+            public readonly Expression? Condition;
+            public BuildingWhen(DebugLocation location, Expression? condition) : base(location) {
+                Condition = condition;
             }
         }
         class BuildingFor : BuildingBlock {
