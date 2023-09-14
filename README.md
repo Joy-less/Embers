@@ -180,8 +180,8 @@ For example:
 Unity
 ```csharp
 // In Api.cs
-Console.WriteLine(Message.LightInspect()); // -> Debug.Log(Message.LightInspect());
-Console.WriteLine(); // -> Debug.Log("");
+Console.WriteLine(Message.LightInspect()); // -> UnityEngine.Debug.Log(Message.LightInspect());
+Console.WriteLine(); // -> UnityEngine.Debug.Log("");
 ```
 
 Godot
