@@ -357,6 +357,18 @@ namespace Embers_Tests
                 end
                 B.new.b
             ");
+
+            // Await test
+            AssertDoesNotError(@"
+                class A
+                    def a
+                        b = 0
+                        sleep 0.1
+                        puts b
+                    end
+                end
+                A.new.a
+            ");
         }
 
 

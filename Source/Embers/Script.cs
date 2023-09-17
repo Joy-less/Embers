@@ -67,6 +67,8 @@ namespace Embers
             public readonly Dictionary<string, Instance> Constants = new();
             public Block(object? parent) {
                 Parent = parent;
+                if (Parent is not (Block or Instance or null))
+                    throw new InternalErrorException($"Expected block, instance or null, got '{Parent?.GetType().Name}' (most likely forgot to put '.Peek()' after CurrentObject)");
             }
         }
         public class Scope : Block {
@@ -1001,13 +1003,13 @@ namespace Embers
             Method NewMethod = new(Function, ArgumentCount, IsUnsafe: IsUnsafe, accessModifier: CurrentAccessModifier, parent: CurrentModule);
             return NewMethod;
         }
-        T CreateTemporaryClassScope<T>(Module Module, Func<T> Do) {
+        async Task<T> CreateTemporaryClassScope<T>(Module Module, Func<Task<T>> Do) {
             // Create temporary class/module scope
             CurrentObject.Push(Module);
             T Result;
             try {
                 // Do action
-                Result = Do();
+                Result = await Do();
             }
             finally {
                 // Step back a class/module
@@ -1016,13 +1018,13 @@ namespace Embers
             // Return result
             return Result;
         }
-        T CreateTemporaryInstanceScope<T>(Instance Instance, Func<T> Do) {
+        async Task<T> CreateTemporaryInstanceScope<T>(Instance Instance, Func<Task<T>> Do) {
             // Create temporary instance scope
             CurrentObject.Push(Instance);
             T Result;
             try {
                 // Do action
-                Result = Do();
+                Result = await Do();
             }
             finally {
                 // Step back an instance
@@ -1030,6 +1032,30 @@ namespace Embers
             }
             // Return result
             return Result;
+        }
+        async Task CreateTemporaryClassScope(Module Module, Func<Task> Do) {
+            // Create temporary class/module scope
+            CurrentObject.Push(Module);
+            try {
+                // Do action
+                await Do();
+            }
+            finally {
+                // Step back a class/module
+                CurrentObject.Pop();
+            }
+        }
+        async Task CreateTemporaryInstanceScope(Instance Instance, Func<Task> Do) {
+            // Create temporary instance scope
+            CurrentObject.Push(Instance);
+            try {
+                // Do action
+                await Do();
+            }
+            finally {
+                // Step back an instance
+                CurrentObject.Pop();
+            }
         }
         public SymbolInstance GetSymbol(string Value) {
             if (Interpreter.Symbols.TryGetValue(Value, out SymbolInstance? FindSymbolInstance)) {
@@ -1455,7 +1481,7 @@ namespace Embers
         async Task<Instance> InterpretWhileStatement(WhileStatement WhileStatement) {
             try {
                 // Create scope
-                CurrentObject.Push(new Scope(CurrentObject));
+                CurrentObject.Push(new Scope(CurrentObject.Peek()));
                 // Run statements
                 await InterpretExpressionAsync(WhileStatement.WhileExpression);
             }
@@ -1585,18 +1611,16 @@ namespace Embers
                 CurrentAccessModifier = PreviousAccessModifier;
 
                 // Store class/module constant
-                if (ClassNameRef.Block != null) {
-                    // Path
-                    Module Module = (Module)ClassNameRef.Block;
-                    lock (Module.Constants)
-                        Module.Constants[ClassName] = new ModuleReference(NewModule);
-                }
-                else if (ClassNameRef.IsLocalReference) {
-                    // Local
-                    Module Module = (ClassNameRef.Instance ?? CurrentInstance).Module!;
-                    lock (Module)
-                        Module.Constants[ClassName] = new ModuleReference(NewModule);
-                }
+                Module Module;
+                // Path
+                if (ClassNameRef.Block != null)
+                    Module = (Module)ClassNameRef.Block;
+                // Local
+                else
+                    Module = (ClassNameRef.Instance ?? CurrentInstance).Module!;
+                // Store constant
+                lock (Module.Constants)
+                    Module.Constants[ClassName] = new ModuleReference(NewModule);
             }
             else {
                 throw new InternalErrorException($"{DefineClassStatement.Location}: Invalid class/module name: {ClassNameObject}");
@@ -1617,16 +1641,20 @@ namespace Embers
         }
         async Task<Instance> InterpretSuperStatement(SuperStatement SuperStatement) {
             Module CurrentModule = this.CurrentModule;
-            string? SuperMethodName = CurrentMethodScope.Method?.Name;
-            if (CurrentModule != Interpreter.RootModule && CurrentModule.SuperModule is Module SuperModule) {
-                if (SuperMethodName != null && SuperModule.InstanceMethods.TryGetValue(SuperMethodName, out Method? SuperMethod)) {
-                    Instances? Arguments = null;
-                    if (SuperStatement.Arguments != null) {
-                        Arguments = await InterpretExpressionsAsync(SuperStatement.Arguments);
+            string? SuperMethodName = null;
+            try {
+                SuperMethodName = CurrentMethodScope.Method?.Name;
+                if (CurrentModule != Interpreter.RootModule && CurrentModule.SuperModule is Module SuperModule) {
+                    if (SuperMethodName != null && SuperModule.InstanceMethods.TryGetValue(SuperMethodName, out Method? SuperMethod)) {
+                        Instances? Arguments = null;
+                        if (SuperStatement.Arguments != null) {
+                            Arguments = await InterpretExpressionsAsync(SuperStatement.Arguments);
+                        }
+                        return await SuperMethod.Call(this, null, Arguments);
                     }
-                    return await SuperMethod.Call(this, null, Arguments);
                 }
             }
+            catch { }
             throw new RuntimeException($"{SuperStatement.Location}: No super method '{SuperMethodName}' to call");
         }
         async Task<Instance> InterpretAliasStatement(AliasStatement AliasStatement) {
@@ -1680,7 +1708,7 @@ namespace Embers
                         Instance LastInstance;
                         try {
                             // Create scope
-                            CurrentObject.Push(new Scope(CurrentObject));
+                            CurrentObject.Push(new Scope(CurrentObject.Peek()));
                             // Run statements
                             LastInstance = await InternalInterpretAsync(Branch.Statements);
                         }
@@ -1696,7 +1724,7 @@ namespace Embers
                     Instance LastInstance;
                     try {
                         // Create scope
-                        CurrentObject.Push(new Scope(CurrentObject));
+                        CurrentObject.Push(new Scope(CurrentObject.Peek()));
                         // Run statements
                         LastInstance = await InternalInterpretAsync(Branch.Statements);
                     }
@@ -1715,7 +1743,7 @@ namespace Embers
             Exception? ExceptionToRescue = null;
             try {
                 // Create scope
-                CurrentObject.Push(new Scope(CurrentObject));
+                CurrentObject.Push(new Scope(CurrentObject.Peek()));
                 // Run statements
                 await InternalInterpretAsync(BeginBranch.Statements);
             }
@@ -1753,7 +1781,7 @@ namespace Embers
                             Rescued = true;
                             try {
                                 // Create scope
-                                CurrentObject.Push(new Scope(CurrentObject));
+                                CurrentObject.Push(new Scope(CurrentObject.Peek()));
                                 // Set exception variable to exception instance
                                 if (RescueStatement.ExceptionVariable != null) {
                                     CurrentScope.LocalVariables[RescueStatement.ExceptionVariable.Value!] = ExceptionInstance;
@@ -1779,7 +1807,7 @@ namespace Embers
                 if (Branch is EnsureStatement || (Branch is RescueElseStatement && !Rescued)) {
                     try {
                         // Create scope
-                        CurrentObject.Push(new Scope(CurrentObject));
+                        CurrentObject.Push(new Scope(CurrentObject.Peek()));
                         // Run statements
                         await InternalInterpretAsync(Branch.Statements);
                     }
@@ -1884,10 +1912,10 @@ namespace Embers
             }
             else if (DefinedExpression.Expression is ObjectTokenExpression ObjectToken) {
                 if (ObjectToken.Token.Type == Phase2TokenType.LocalVariableOrMethod) {
-                    if (CurrentScope.LocalVariables.ContainsKey(ObjectToken.Token.Value!)) {
+                    if (TryGetLocalVariable(ObjectToken.Token.Value!, out _)) {
                         return new StringInstance(Interpreter.String, "local-variable");
                     }
-                    else if (CurrentInstance.InstanceMethods.ContainsKey(ObjectToken.Token.Value!)) {
+                    else if (TryGetLocalInstanceMethod(ObjectToken.Token.Value!, out _)) {
                         return new StringInstance(Interpreter.String, "method");
                     }
                     else {
@@ -1903,10 +1931,23 @@ namespace Embers
                     }
                 }
                 else if (ObjectToken.Token.Type == Phase2TokenType.ConstantOrMethod) {
-                    throw new NotImplementedException("Defined? not yet implemented for constants");
+                    if (TryGetLocalConstant(ObjectToken.Token.Value!, out _)) {
+                        return new StringInstance(Interpreter.String, "constant");
+                    }
+                    else if (TryGetLocalInstanceMethod(ObjectToken.Token.Value!, out _)) {
+                        return new StringInstance(Interpreter.String, "method");
+                    }
+                    else {
+                        return Interpreter.Nil;
+                    }
                 }
                 else if (ObjectToken.Token.Type == Phase2TokenType.InstanceVariable) {
-                    throw new NotImplementedException("Defined? not yet implemented for instance variables");
+                    if (CurrentInstance.InstanceVariables.ContainsKey(ObjectToken.Token.Value!)) {
+                        return new StringInstance(Interpreter.String, "instance-variable");
+                    }
+                    else {
+                        return Interpreter.Nil;
+                    }
                 }
                 else if (ObjectToken.Token.Type == Phase2TokenType.ClassVariable) {
                     if (CurrentModule.ClassVariables.ContainsKey(ObjectToken.Token.Value!)) {

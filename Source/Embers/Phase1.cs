@@ -247,6 +247,17 @@ namespace Embers
                     }
                     return false;
                 }
+                bool IsTernaryStatement() {
+                    for (int i2 = Tokens.Count - 1; i2 >= 0; i2--) {
+                        if (Tokens[i2].Type == Phase1TokenType.EndOfStatement) {
+                            break;
+                        }
+                        else if (Tokens[i2].Type == Phase1TokenType.TernaryQuestion) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
                 bool NextCharactersAre(string Characters) {
                     for (int i2 = 0; i2 < Characters.Length; i2++) {
                         if (i2 + i + 1 >= Code.Length || Code[i2 + i + 1] != Characters[i2]) {
@@ -408,7 +419,7 @@ namespace Embers
                                 AddToken(Phase1TokenType.DoubleColon, "::");
                                 i++;
                             }
-                            else if (Tokens.Count >= 2 && Tokens[^2].Type == Phase1TokenType.TernaryQuestion) {
+                            else if (Tokens.Count >= 2 && IsTernaryStatement()) {
                                 RemoveEndOfStatement();
                                 AddToken(Phase1TokenType.TernaryElse, ":");
                             }
