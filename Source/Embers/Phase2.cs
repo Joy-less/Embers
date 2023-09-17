@@ -2030,6 +2030,8 @@ namespace Embers
                 Stack<int> SquareBracketsStack = new();
                 for (int i = 0; i < ParsedObjects.Count; i++) {
                     Phase2Object Object = ParsedObjects[i];
+                    Phase2Object? NextObject = i + 1 < ParsedObjects.Count ? ParsedObjects[i + 1] : null;
+                    Phase2Object? NextNextObject = i + 2 < ParsedObjects.Count ? ParsedObjects[i + 2] : null;
 
                     if (Object is Phase2Token Token) {
                         if (Token.Type == Phase2TokenType.StartSquare) {
@@ -2057,13 +2059,33 @@ namespace Embers
                                 if (IsIndexer != null) {
                                     // Get index
                                     Expression Index = ObjectsToExpression(EnclosedObjects);
-                                    // Create indexer expression
-                                    ParsedObjects.Insert(OpenBracketIndex, new MethodCallExpression(
-                                        new PathExpression(IsIndexer, new Phase2Token(ParsedObjects[OpenBracketIndex].Location, Phase2TokenType.LocalVariableOrMethod, "[]")),
-                                        new List<Expression>() {Index}
-                                    ));
-                                    // Remove indexed object
-                                    ParsedObjects.RemoveAt(OpenBracketIndex - 1);
+                                    // []=
+                                    if (NextObject is Phase2Token NextToken && NextToken.Type == Phase2TokenType.AssignmentOperator && NextToken.Value == "=") {
+                                        if (NextNextObject is Expression IndexAssignmentValue) {
+                                            // Create index equals expression
+                                            ParsedObjects.Insert(OpenBracketIndex, new MethodCallExpression(
+                                                new PathExpression(IsIndexer, new Phase2Token(ParsedObjects[OpenBracketIndex].Location, Phase2TokenType.LocalVariableOrMethod, "[]=")),
+                                                new List<Expression>() { Index, IndexAssignmentValue }
+                                            ));
+                                            // Remove equals and value
+                                            ParsedObjects.RemoveRange(OpenBracketIndex + 1, 2);
+                                            // Remove indexed object
+                                            ParsedObjects.RemoveAt(OpenBracketIndex - 1);
+                                        }
+                                        else {
+                                            throw new SyntaxErrorException($"{Token.Location}: Expected value after []=");
+                                        }
+                                    }
+                                    // []
+                                    else {
+                                        // Create indexer expression
+                                        ParsedObjects.Insert(OpenBracketIndex, new MethodCallExpression(
+                                            new PathExpression(IsIndexer, new Phase2Token(ParsedObjects[OpenBracketIndex].Location, Phase2TokenType.LocalVariableOrMethod, "[]")),
+                                            new List<Expression>() { Index }
+                                        ));
+                                        // Remove indexed object
+                                        ParsedObjects.RemoveAt(OpenBracketIndex - 1);
+                                    }
                                 }
                                 // Array
                                 else {

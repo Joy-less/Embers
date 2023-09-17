@@ -69,6 +69,7 @@ namespace Embers
 
             // String
             Interpreter.String.InstanceMethods["[]"] = Script.CreateMethod(String._Indexer, 1);
+            Interpreter.String.InstanceMethods["[]="] = Script.CreateMethod(String._IndexEquals, 2);
             Interpreter.String.InstanceMethods["+"] = Script.CreateMethod(String._Add, 1);
             Interpreter.String.InstanceMethods["*"] = Script.CreateMethod(String._Multiply, 1);
             Interpreter.String.InstanceMethods["=="] = Script.CreateMethod(String._Equals, 1);
@@ -161,6 +162,7 @@ namespace Embers
 
             // Array
             Interpreter.Array.InstanceMethods["[]"] = Script.CreateMethod(Array._Indexer, 1);
+            Interpreter.Array.InstanceMethods["[]="] = Script.CreateMethod(Array._IndexEquals, 2);
             Interpreter.Array.InstanceMethods["=="] = Script.CreateMethod(Array._Equals, 1);
             Interpreter.Array.InstanceMethods["==="] = Script.CreateMethod(Array._Equals, 1);
             Interpreter.Array.InstanceMethods["<<"] = Script.CreateMethod(Array._Append, 1);
@@ -183,6 +185,7 @@ namespace Embers
 
             // Hash
             Interpreter.Hash.InstanceMethods["[]"] = Script.CreateMethod(Hash._Indexer, 1);
+            Interpreter.Hash.InstanceMethods["[]="] = Script.CreateMethod(Hash._IndexEquals, 2);
             Interpreter.Hash.InstanceMethods["=="] = Script.CreateMethod(Hash._Equals, 1);
             Interpreter.Hash.InstanceMethods["==="] = Script.CreateMethod(Hash._Equals, 1);
             Interpreter.Hash.InstanceMethods["initialize"] = Script.CreateMethod(Hash.initialize, 0..1);
@@ -596,12 +599,35 @@ namespace Embers
                         return new StringInstance(Input.Interpreter.String, String[Index].ToString());
                     }
                     else if (Index < 0 && Index > -String.Length) {
-                        return new StringInstance(Input.Interpreter.String, String[^(-Index)].ToString());
+                        return new StringInstance(Input.Interpreter.String, String[^-Index].ToString());
                     }
                     else {
                         return Input.Interpreter.Nil;
                     }
                 }
+            }
+            public static async Task<Instance> _IndexEquals(MethodInput Input) {
+                // Get string, index and value
+                StringInstance StringInstance = ((StringInstance)Input.Instance);
+                string String = StringInstance.String;
+                int Index = _RealisticIndex(Input, Input.Arguments[0].Integer);
+                string Value = Input.Arguments[1].String;
+
+                // Set value
+                if (Index >= 0 && Index < String.Length) {
+                    List<string> Charas = String.ToList().ConvertAll(c => c.ToString());
+                    Charas[Index] = Value;
+                    StringInstance.SetValue(string.Concat(Charas));
+                }
+                else if (Index < 0 && Index > -String.Length) {
+                    List<string> Charas = String.ToList().ConvertAll(c => c.ToString());
+                    Charas[^-Index] = Value;
+                    StringInstance.SetValue(string.Concat(Charas));
+                }
+                else {
+                    throw new RuntimeException($"{Input.Location}: Index {Index} outside of string");
+                }
+                return StringInstance;
             }
             public static async Task<Instance> _LessThan(MethodInput Input) {
                 Instance Left = Input.Instance;
@@ -1175,18 +1201,32 @@ namespace Embers
                     return new ArrayInstance(Input.Interpreter.Array, Array.GetIndexRange(StartIndex, EndIndex));
                 }
                 else {
-                    int Index = _RealisticIndex(Input, Input.Arguments[0].Integer);
+                    int Index = _RealisticIndex(Input, Indexer.Integer);
 
                     // Return value at array index or nil
                     if (Index >= 0 && Index < Array.Count) {
                         return Array[Index];
                     }
                     else if (Index < 0 && Index > -Array.Count) {
-                        return Array[^(-Index)];
+                        return Array[^-Index];
                     }
                     else {
                         return Input.Interpreter.Nil;
                     }
+                }
+            }
+            public static async Task<Instance> _IndexEquals(MethodInput Input) {
+                // Get array, index and value
+                List<Instance> Array = Input.Instance.Array;
+                int Index = _RealisticIndex(Input, Input.Arguments[0].Integer);
+                Instance Value = Input.Arguments[1];
+
+                // Set value
+                if (Index >= 0) {
+                    return Array[Index] = Value;
+                }
+                else {
+                    return Array[^-Index] = Value;
                 }
             }
             public static async Task<Instance> _Equals(MethodInput Input) {
@@ -1435,6 +1475,15 @@ namespace Embers
                     }
                     return ((HashInstance)Input.Instance).DefaultValue;
                 }
+            }
+            public static async Task<Instance> _IndexEquals(MethodInput Input) {
+                // Get hash, key and value
+                Dictionary<Instance, Instance> Hash = Input.Instance.Hash;
+                Instance Key = Input.Arguments[0];
+                Instance Value = Input.Arguments[1];
+
+                // Set value
+                return Hash[Key] = Value;
             }
             public static async Task<Instance> _Equals(MethodInput Input) {
                 Instance Left = Input.Instance;

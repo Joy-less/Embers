@@ -105,6 +105,12 @@ module B
     end
 end
 B.method(:z).call
+
+str = 'Hiya'
+str[0] = 'Hey'
+puts str
+str[-1] = 'No'
+puts str
                     ");
                 });
                 Script.WaitForThreads();
