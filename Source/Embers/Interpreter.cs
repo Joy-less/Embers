@@ -7,6 +7,7 @@ namespace Embers
 {
     public class Interpreter
     {
+        public readonly Class Object; // The superclass of all classes and modules.
         public readonly Module RootModule;
         public readonly Instance RootInstance;
         public readonly Scope RootScope;
@@ -48,7 +49,8 @@ namespace Embers
         }
 
         public Interpreter() {
-            RootModule = new("main", this);
+            Object = new Class("Object", this); Object.InstanceMethods.Remove("initialize"); Object.Methods.Remove("new");
+            RootModule = new Module("main", this, Object);
             RootInstance = new Instance(RootModule);
             RootScope = new Scope(RootInstance);
 

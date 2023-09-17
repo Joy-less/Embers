@@ -19,24 +19,46 @@ namespace Embers
         public static void Setup(Script Script) {
             Interpreter Interpreter = Script.Interpreter;
 
-            // Global methods
-            Interpreter.RootModule.InstanceMethods["puts"] = new Method(puts, null);
-            Interpreter.RootModule.InstanceMethods["print"] = new Method(print, null);
-            Interpreter.RootModule.InstanceMethods["p"] = new Method(p, null);
-            Interpreter.RootModule.InstanceMethods["gets"] = new Method(gets, 0);
-            Interpreter.RootModule.InstanceMethods["getc"] = new Method(getc, 0);
-            Interpreter.RootModule.InstanceMethods["warn"] = new Method(warn, null);
-            Interpreter.RootModule.InstanceMethods["sleep"] = new Method(sleep, 0..1);
-            Interpreter.RootModule.InstanceMethods["raise"] = new Method(@raise, 0..1);
-            Interpreter.RootModule.InstanceMethods["throw"] = new Method(@throw, 1);
-            Interpreter.RootModule.InstanceMethods["catch"] = new Method(@catch, 1);
-            Interpreter.RootModule.InstanceMethods["lambda"] = new Method(lambda, 0);
-            Interpreter.RootModule.InstanceMethods["loop"] = new Method(loop, 0);
-            Interpreter.RootModule.InstanceMethods["rand"] = new Method(_Random.rand, 0..1);
-            Interpreter.RootModule.InstanceMethods["srand"] = new Method(_Random.srand, 0..1);
-            Interpreter.RootModule.InstanceMethods["exit"] = new Method(exit, 0);
-            Interpreter.RootModule.InstanceMethods["quit"] = new Method(exit, 0);
-            Interpreter.RootModule.InstanceMethods["eval"] = new Method(eval, 1);
+            // Object
+            Interpreter.Object.InstanceMethods["=="] = Interpreter.Object.Methods["=="] = Script.CreateMethod(ClassInstance._Equals, 1);
+            Interpreter.Object.InstanceMethods["==="] = Interpreter.Object.Methods["==="] = Script.CreateMethod(ClassInstance._Equals, 1);
+            Interpreter.Object.InstanceMethods["!="] = Interpreter.Object.Methods["!="] = Script.CreateMethod(ClassInstance._NotEquals, 1);
+            Interpreter.Object.InstanceMethods["<=>"] = Interpreter.Object.Methods["<=>"] = Script.CreateMethod(ClassInstance._Spaceship, 1);
+            Interpreter.Object.InstanceMethods["inspect"] = Interpreter.Object.Methods["inspect"] = Script.CreateMethod(ClassInstance.inspect, 0);
+            Interpreter.Object.InstanceMethods["class"] = Interpreter.Object.Methods["class"] = Script.CreateMethod(ClassInstance.@class, 0);
+            Interpreter.Object.InstanceMethods["to_s"] = Interpreter.Object.Methods["to_s"] = Script.CreateMethod(ClassInstance.to_s, 0);
+            Interpreter.Object.InstanceMethods["method"] = Interpreter.Object.Methods["method"] = Script.CreateMethod(ClassInstance.method, 1);
+            Interpreter.Object.InstanceMethods["object_id"] = Interpreter.Object.Methods["object_id"] = Script.CreateMethod(ClassInstance.object_id, 0);
+            Interpreter.Object.InstanceMethods["methods"] = Interpreter.Object.Methods["methods"] = Script.CreateMethod(ClassInstance.methods, 0);
+            Interpreter.Object.InstanceMethods["is_a?"] = Interpreter.Object.Methods["is_a?"] = Script.CreateMethod(ClassInstance.is_a7, 1);
+            Interpreter.Object.InstanceMethods["instance_of?"] = Interpreter.Object.Methods["instance_of?"] = Script.CreateMethod(ClassInstance.instance_of7, 1);
+
+            Script.CurrentAccessModifier = AccessModifier.Protected;
+            Interpreter.Object.InstanceMethods["puts"] = Interpreter.Object.Methods["puts"] = Script.CreateMethod(puts, null);
+            Interpreter.Object.InstanceMethods["print"] = Interpreter.Object.Methods["print"] = Script.CreateMethod(print, null);
+            Interpreter.Object.InstanceMethods["p"] = Interpreter.Object.Methods["p"] = Script.CreateMethod(p, null);
+            Interpreter.Object.InstanceMethods["gets"] = Interpreter.Object.Methods["gets"] = Script.CreateMethod(gets, 0);
+            Interpreter.Object.InstanceMethods["getc"] = Interpreter.Object.Methods["getc"] = Script.CreateMethod(getc, 0);
+            Interpreter.Object.InstanceMethods["warn"] = Interpreter.Object.Methods["warn"] = Script.CreateMethod(warn, null);
+            Interpreter.Object.InstanceMethods["sleep"] = Interpreter.Object.Methods["sleep"] = Script.CreateMethod(sleep, 0..1);
+            Interpreter.Object.InstanceMethods["raise"] = Interpreter.Object.Methods["raise"] = Script.CreateMethod(raise, 0..1);
+            Interpreter.Object.InstanceMethods["throw"] = Interpreter.Object.Methods["throw"] = Script.CreateMethod(@throw, 1);
+            Interpreter.Object.InstanceMethods["catch"] = Interpreter.Object.Methods["catch"] = Script.CreateMethod(@catch, 1);
+            Interpreter.Object.InstanceMethods["lambda"] = Interpreter.Object.Methods["lambda"] = Script.CreateMethod(lambda, 0);
+            Interpreter.Object.InstanceMethods["loop"] = Interpreter.Object.Methods["loop"] = Script.CreateMethod(loop, 0);
+            Interpreter.Object.InstanceMethods["rand"] = Interpreter.Object.Methods["rand"] = Script.CreateMethod(_Random.rand, 0..1);
+            Interpreter.Object.InstanceMethods["srand"] = Interpreter.Object.Methods["srand"] = Script.CreateMethod(_Random.srand, 0..1);
+            Interpreter.Object.InstanceMethods["exit"] = Interpreter.Object.Methods["exit"] = Script.CreateMethod(exit, 0);
+            Interpreter.Object.InstanceMethods["quit"] = Interpreter.Object.Methods["quit"] = Script.CreateMethod(exit, 0);
+            Interpreter.Object.InstanceMethods["eval"] = Interpreter.Object.Methods["eval"] = Script.CreateMethod(eval, 1);
+
+            Interpreter.Object.InstanceMethods["attr_reader"] = Script.CreateMethod(ClassInstance.attr_reader, 1);
+            Interpreter.Object.InstanceMethods["attr_writer"] = Script.CreateMethod(ClassInstance.attr_writer, 1);
+            Interpreter.Object.InstanceMethods["attr_accessor"] = Script.CreateMethod(ClassInstance.attr_accessor, 1);
+            Interpreter.Object.InstanceMethods["public"] = Script.CreateMethod(ClassInstance.@public, 0);
+            Interpreter.Object.InstanceMethods["private"] = Script.CreateMethod(ClassInstance.@private, 0);
+            Interpreter.Object.InstanceMethods["protected"] = Script.CreateMethod(ClassInstance.@protected, 0);
+            Script.CurrentAccessModifier = AccessModifier.Public;
 
             // Global constants
             Interpreter.RootScope.Constants["EMBERS_VERSION"] = new StringInstance(Interpreter.String, Info.Version);
@@ -46,218 +68,195 @@ namespace Embers
             Interpreter.RootScope.Constants["RUBY_COPYRIGHT"] = new StringInstance(Interpreter.String, Info.RubyCopyright);
 
             // String
-            Interpreter.String.InstanceMethods["[]"] = new Method(String._Indexer, 1);
-            Interpreter.String.InstanceMethods["+"] = new Method(String._Add, 1);
-            Interpreter.String.InstanceMethods["*"] = new Method(String._Multiply, 1);
-            Interpreter.String.InstanceMethods["=="] = new Method(String._Equals, 1);
-            Interpreter.String.InstanceMethods["==="] = new Method(String._Equals, 1);
-            Interpreter.String.InstanceMethods["<"] = new Method(String._LessThan, 1);
-            Interpreter.String.InstanceMethods[">"] = new Method(String._GreaterThan, 1);
-            Interpreter.String.InstanceMethods["<="] = new Method(String._LessThanOrEqualTo, 1);
-            Interpreter.String.InstanceMethods[">="] = new Method(String._GreaterThanOrEqualTo, 1);
-            Interpreter.String.InstanceMethods["<=>"] = new Method(String._Spaceship, 1);
-            Interpreter.String.InstanceMethods["initialize"] = new Method(String.initialize, 0..1);
-            Interpreter.String.InstanceMethods["to_str"] = new Method(String.to_str, 0);
-            Interpreter.String.InstanceMethods["to_i"] = new Method(String.to_i, 0);
-            Interpreter.String.InstanceMethods["to_f"] = new Method(String.to_f, 0);
-            Interpreter.String.InstanceMethods["to_sym"] = new Method(String.to_sym, 0);
-            Interpreter.String.InstanceMethods["to_a"] = new Method(String.to_a, 0);
-            Interpreter.String.InstanceMethods["chomp"] = new Method(String.chomp, 0..1);
-            Interpreter.String.InstanceMethods["chomp!"] = new Method(String.chomp1, 0..1);
-            Interpreter.String.InstanceMethods["strip"] = new Method(String.strip, 0);
-            Interpreter.String.InstanceMethods["strip!"] = new Method(String.strip1, 0);
-            Interpreter.String.InstanceMethods["lstrip"] = new Method(String.lstrip, 0);
-            Interpreter.String.InstanceMethods["lstrip!"] = new Method(String.lstrip1, 0);
-            Interpreter.String.InstanceMethods["rstrip"] = new Method(String.rstrip, 0);
-            Interpreter.String.InstanceMethods["rstrip!"] = new Method(String.rstrip1, 0);
-            Interpreter.String.InstanceMethods["squeeze"] = new Method(String.squeeze, 0);
-            Interpreter.String.InstanceMethods["squeeze!"] = new Method(String.squeeze1, 0);
-            Interpreter.String.InstanceMethods["chop"] = new Method(String.chop, 0);
-            Interpreter.String.InstanceMethods["chop!"] = new Method(String.chop1, 0);
-            Interpreter.String.InstanceMethods["chr"] = new Method(String.chr, 0);
-            Interpreter.String.InstanceMethods["capitalize"] = new Method(String.capitalize, 0);
-            Interpreter.String.InstanceMethods["capitalize!"] = new Method(String.capitalize1, 0);
-            Interpreter.String.InstanceMethods["upcase"] = new Method(String.upcase, 0);
-            Interpreter.String.InstanceMethods["upcase!"] = new Method(String.upcase1, 0);
-            Interpreter.String.InstanceMethods["downcase"] = new Method(String.downcase, 0);
-            Interpreter.String.InstanceMethods["downcase!"] = new Method(String.downcase1, 0);
-            Interpreter.String.InstanceMethods["sub"] = new Method(String.sub, 2);
-            Interpreter.String.InstanceMethods["sub!"] = new Method(String.sub1, 2);
-            Interpreter.String.InstanceMethods["gsub"] = new Method(String.gsub, 2);
-            Interpreter.String.InstanceMethods["gsub!"] = new Method(String.gsub1, 2);
+            Interpreter.String.InstanceMethods["[]"] = Script.CreateMethod(String._Indexer, 1);
+            Interpreter.String.InstanceMethods["+"] = Script.CreateMethod(String._Add, 1);
+            Interpreter.String.InstanceMethods["*"] = Script.CreateMethod(String._Multiply, 1);
+            Interpreter.String.InstanceMethods["=="] = Script.CreateMethod(String._Equals, 1);
+            Interpreter.String.InstanceMethods["==="] = Script.CreateMethod(String._Equals, 1);
+            Interpreter.String.InstanceMethods["<"] = Script.CreateMethod(String._LessThan, 1);
+            Interpreter.String.InstanceMethods[">"] = Script.CreateMethod(String._GreaterThan, 1);
+            Interpreter.String.InstanceMethods["<="] = Script.CreateMethod(String._LessThanOrEqualTo, 1);
+            Interpreter.String.InstanceMethods[">="] = Script.CreateMethod(String._GreaterThanOrEqualTo, 1);
+            Interpreter.String.InstanceMethods["<=>"] = Script.CreateMethod(String._Spaceship, 1);
+            Interpreter.String.InstanceMethods["initialize"] = Script.CreateMethod(String.initialize, 0..1);
+            Interpreter.String.InstanceMethods["to_str"] = Script.CreateMethod(String.to_str, 0);
+            Interpreter.String.InstanceMethods["to_i"] = Script.CreateMethod(String.to_i, 0);
+            Interpreter.String.InstanceMethods["to_f"] = Script.CreateMethod(String.to_f, 0);
+            Interpreter.String.InstanceMethods["to_sym"] = Script.CreateMethod(String.to_sym, 0);
+            Interpreter.String.InstanceMethods["to_a"] = Script.CreateMethod(String.to_a, 0);
+            Interpreter.String.InstanceMethods["chomp"] = Script.CreateMethod(String.chomp, 0..1);
+            Interpreter.String.InstanceMethods["chomp!"] = Script.CreateMethod(String.chomp1, 0..1);
+            Interpreter.String.InstanceMethods["strip"] = Script.CreateMethod(String.strip, 0);
+            Interpreter.String.InstanceMethods["strip!"] = Script.CreateMethod(String.strip1, 0);
+            Interpreter.String.InstanceMethods["lstrip"] = Script.CreateMethod(String.lstrip, 0);
+            Interpreter.String.InstanceMethods["lstrip!"] = Script.CreateMethod(String.lstrip1, 0);
+            Interpreter.String.InstanceMethods["rstrip"] = Script.CreateMethod(String.rstrip, 0);
+            Interpreter.String.InstanceMethods["rstrip!"] = Script.CreateMethod(String.rstrip1, 0);
+            Interpreter.String.InstanceMethods["squeeze"] = Script.CreateMethod(String.squeeze, 0);
+            Interpreter.String.InstanceMethods["squeeze!"] = Script.CreateMethod(String.squeeze1, 0);
+            Interpreter.String.InstanceMethods["chop"] = Script.CreateMethod(String.chop, 0);
+            Interpreter.String.InstanceMethods["chop!"] = Script.CreateMethod(String.chop1, 0);
+            Interpreter.String.InstanceMethods["chr"] = Script.CreateMethod(String.chr, 0);
+            Interpreter.String.InstanceMethods["capitalize"] = Script.CreateMethod(String.capitalize, 0);
+            Interpreter.String.InstanceMethods["capitalize!"] = Script.CreateMethod(String.capitalize1, 0);
+            Interpreter.String.InstanceMethods["upcase"] = Script.CreateMethod(String.upcase, 0);
+            Interpreter.String.InstanceMethods["upcase!"] = Script.CreateMethod(String.upcase1, 0);
+            Interpreter.String.InstanceMethods["downcase"] = Script.CreateMethod(String.downcase, 0);
+            Interpreter.String.InstanceMethods["downcase!"] = Script.CreateMethod(String.downcase1, 0);
+            Interpreter.String.InstanceMethods["sub"] = Script.CreateMethod(String.sub, 2);
+            Interpreter.String.InstanceMethods["sub!"] = Script.CreateMethod(String.sub1, 2);
+            Interpreter.String.InstanceMethods["gsub"] = Script.CreateMethod(String.gsub, 2);
+            Interpreter.String.InstanceMethods["gsub!"] = Script.CreateMethod(String.gsub1, 2);
 
             // Integer
-            Interpreter.Integer.InstanceMethods["+"] = new Method(Integer._Add, 1);
-            Interpreter.Integer.InstanceMethods["-"] = new Method(Integer._Subtract, 1);
-            Interpreter.Integer.InstanceMethods["*"] = new Method(Integer._Multiply, 1);
-            Interpreter.Integer.InstanceMethods["/"] = new Method(Integer._Divide, 1);
-            Interpreter.Integer.InstanceMethods["%"] = new Method(Integer._Modulo, 1);
-            Interpreter.Integer.InstanceMethods["**"] = new Method(Integer._Exponentiate, 1);
-            Interpreter.Integer.InstanceMethods["=="] = new Method(Float._Equals, 1);
-            Interpreter.Integer.InstanceMethods["==="] = new Method(Float._Equals, 1);
-            Interpreter.Integer.InstanceMethods["<"] = new Method(Float._LessThan, 1);
-            Interpreter.Integer.InstanceMethods[">"] = new Method(Float._GreaterThan, 1);
-            Interpreter.Integer.InstanceMethods["<="] = new Method(Float._LessThanOrEqualTo, 1);
-            Interpreter.Integer.InstanceMethods[">="] = new Method(Float._GreaterThanOrEqualTo, 1);
-            Interpreter.Integer.InstanceMethods["<=>"] = new Method(Float._Spaceship, 1);
-            Interpreter.Integer.InstanceMethods["+@"] = new Method(Integer._UnaryPlus, 0);
-            Interpreter.Integer.InstanceMethods["-@"] = new Method(Integer._UnaryMinus, 0);
-            Interpreter.Integer.InstanceMethods["to_i"] = new Method(Integer.to_i, 0);
-            Interpreter.Integer.InstanceMethods["to_f"] = new Method(Integer.to_f, 0);
-            Interpreter.Integer.InstanceMethods["times"] = new Method(Integer.times, 0);
+            Interpreter.Integer.InstanceMethods["+"] = Script.CreateMethod(Integer._Add, 1);
+            Interpreter.Integer.InstanceMethods["-"] = Script.CreateMethod(Integer._Subtract, 1);
+            Interpreter.Integer.InstanceMethods["*"] = Script.CreateMethod(Integer._Multiply, 1);
+            Interpreter.Integer.InstanceMethods["/"] = Script.CreateMethod(Integer._Divide, 1);
+            Interpreter.Integer.InstanceMethods["%"] = Script.CreateMethod(Integer._Modulo, 1);
+            Interpreter.Integer.InstanceMethods["**"] = Script.CreateMethod(Integer._Exponentiate, 1);
+            Interpreter.Integer.InstanceMethods["=="] = Script.CreateMethod(Float._Equals, 1);
+            Interpreter.Integer.InstanceMethods["==="] = Script.CreateMethod(Float._Equals, 1);
+            Interpreter.Integer.InstanceMethods["<"] = Script.CreateMethod(Float._LessThan, 1);
+            Interpreter.Integer.InstanceMethods[">"] = Script.CreateMethod(Float._GreaterThan, 1);
+            Interpreter.Integer.InstanceMethods["<="] = Script.CreateMethod(Float._LessThanOrEqualTo, 1);
+            Interpreter.Integer.InstanceMethods[">="] = Script.CreateMethod(Float._GreaterThanOrEqualTo, 1);
+            Interpreter.Integer.InstanceMethods["<=>"] = Script.CreateMethod(Float._Spaceship, 1);
+            Interpreter.Integer.InstanceMethods["+@"] = Script.CreateMethod(Integer._UnaryPlus, 0);
+            Interpreter.Integer.InstanceMethods["-@"] = Script.CreateMethod(Integer._UnaryMinus, 0);
+            Interpreter.Integer.InstanceMethods["to_i"] = Script.CreateMethod(Integer.to_i, 0);
+            Interpreter.Integer.InstanceMethods["to_f"] = Script.CreateMethod(Integer.to_f, 0);
+            Interpreter.Integer.InstanceMethods["times"] = Script.CreateMethod(Integer.times, 0);
 
             // Float
-            Interpreter.Float.InstanceMethods["+"] = new Method(Float._Add, 1);
-            Interpreter.Float.InstanceMethods["-"] = new Method(Float._Subtract, 1);
-            Interpreter.Float.InstanceMethods["*"] = new Method(Float._Multiply, 1);
-            Interpreter.Float.InstanceMethods["/"] = new Method(Float._Divide, 1);
-            Interpreter.Float.InstanceMethods["%"] = new Method(Float._Modulo, 1);
-            Interpreter.Float.InstanceMethods["**"] = new Method(Float._Exponentiate, 1);
-            Interpreter.Float.InstanceMethods["=="] = new Method(Float._Equals, 1);
-            Interpreter.Float.InstanceMethods["==="] = new Method(Float._Equals, 1);
-            Interpreter.Float.InstanceMethods["<"] = new Method(Float._LessThan, 1);
-            Interpreter.Float.InstanceMethods[">"] = new Method(Float._GreaterThan, 1);
-            Interpreter.Float.InstanceMethods["<="] = new Method(Float._LessThanOrEqualTo, 1);
-            Interpreter.Float.InstanceMethods[">="] = new Method(Float._GreaterThanOrEqualTo, 1);
-            Interpreter.Float.InstanceMethods["<=>"] = new Method(Float._Spaceship, 1);
-            Interpreter.Float.InstanceMethods["+@"] = new Method(Float._UnaryPlus, 0);
-            Interpreter.Float.InstanceMethods["-@"] = new Method(Float._UnaryMinus, 0);
-            Interpreter.Float.InstanceMethods["to_i"] = new Method(Float.to_i, 0);
-            Interpreter.Float.InstanceMethods["to_f"] = new Method(Float.to_f, 0);
+            Interpreter.Float.InstanceMethods["+"] = Script.CreateMethod(Float._Add, 1);
+            Interpreter.Float.InstanceMethods["-"] = Script.CreateMethod(Float._Subtract, 1);
+            Interpreter.Float.InstanceMethods["*"] = Script.CreateMethod(Float._Multiply, 1);
+            Interpreter.Float.InstanceMethods["/"] = Script.CreateMethod(Float._Divide, 1);
+            Interpreter.Float.InstanceMethods["%"] = Script.CreateMethod(Float._Modulo, 1);
+            Interpreter.Float.InstanceMethods["**"] = Script.CreateMethod(Float._Exponentiate, 1);
+            Interpreter.Float.InstanceMethods["=="] = Script.CreateMethod(Float._Equals, 1);
+            Interpreter.Float.InstanceMethods["==="] = Script.CreateMethod(Float._Equals, 1);
+            Interpreter.Float.InstanceMethods["<"] = Script.CreateMethod(Float._LessThan, 1);
+            Interpreter.Float.InstanceMethods[">"] = Script.CreateMethod(Float._GreaterThan, 1);
+            Interpreter.Float.InstanceMethods["<="] = Script.CreateMethod(Float._LessThanOrEqualTo, 1);
+            Interpreter.Float.InstanceMethods[">="] = Script.CreateMethod(Float._GreaterThanOrEqualTo, 1);
+            Interpreter.Float.InstanceMethods["<=>"] = Script.CreateMethod(Float._Spaceship, 1);
+            Interpreter.Float.InstanceMethods["+@"] = Script.CreateMethod(Float._UnaryPlus, 0);
+            Interpreter.Float.InstanceMethods["-@"] = Script.CreateMethod(Float._UnaryMinus, 0);
+            Interpreter.Float.InstanceMethods["to_i"] = Script.CreateMethod(Float.to_i, 0);
+            Interpreter.Float.InstanceMethods["to_f"] = Script.CreateMethod(Float.to_f, 0);
 
             // Proc
-            Interpreter.Proc.InstanceMethods["call"] = new Method(Proc.call, null);
+            Interpreter.Proc.InstanceMethods["call"] = Script.CreateMethod(Proc.call, null);
 
             // Range
-            Interpreter.Range.InstanceMethods["==="] = new Method(Range._TripleEquals, 1);
-            Interpreter.Range.InstanceMethods["min"] = new Method(Range.min, 0);
-            Interpreter.Range.InstanceMethods["max"] = new Method(Range.max, 0);
-            Interpreter.Range.InstanceMethods["each"] = new Method(Range.each, 0);
-            Interpreter.Range.InstanceMethods["reverse_each"] = new Method(Range.reverse_each, 0);
-            Interpreter.Range.InstanceMethods["length"] = new Method(Range.length, 0);
-            Interpreter.Range.InstanceMethods["to_a"] = new Method(Range.to_a, 0);
+            Interpreter.Range.InstanceMethods["==="] = Script.CreateMethod(Range._TripleEquals, 1);
+            Interpreter.Range.InstanceMethods["min"] = Script.CreateMethod(Range.min, 0);
+            Interpreter.Range.InstanceMethods["max"] = Script.CreateMethod(Range.max, 0);
+            Interpreter.Range.InstanceMethods["each"] = Script.CreateMethod(Range.each, 0);
+            Interpreter.Range.InstanceMethods["reverse_each"] = Script.CreateMethod(Range.reverse_each, 0);
+            Interpreter.Range.InstanceMethods["length"] = Script.CreateMethod(Range.length, 0);
+            Interpreter.Range.InstanceMethods["to_a"] = Script.CreateMethod(Range.to_a, 0);
 
             // Array
-            Interpreter.Array.InstanceMethods["[]"] = new Method(Array._Indexer, 1);
-            Interpreter.Array.InstanceMethods["=="] = new Method(Array._Equals, 1);
-            Interpreter.Array.InstanceMethods["==="] = new Method(Array._Equals, 1);
-            Interpreter.Array.InstanceMethods["<<"] = new Method(Array._Append, 1);
-            Interpreter.Array.InstanceMethods["length"] = new Method(Array.length, 0);
-            Interpreter.Array.InstanceMethods["count"] = new Method(Array.count, 0..1);
-            Interpreter.Array.InstanceMethods["first"] = new Method(Array.first, 0);
-            Interpreter.Array.InstanceMethods["last"] = new Method(Array.last, 0);
-            Interpreter.Array.InstanceMethods["forty_two"] = new Method(Array.forty_two, 0);
-            Interpreter.Array.InstanceMethods["sample"] = new Method(Array.sample, 0);
-            Interpreter.Array.InstanceMethods["insert"] = new Method(Array.insert, 1..);
-            Interpreter.Array.InstanceMethods["each"] = new Method(Array.each, 0);
-            Interpreter.Array.InstanceMethods["reverse_each"] = new Method(Array.reverse_each, 0);
-            Interpreter.Array.InstanceMethods["map"] = new Method(Array.map, 0);
-            Interpreter.Array.InstanceMethods["map!"] = new Method(Array.map1, 0);
-            Interpreter.Array.InstanceMethods["sort"] = new Method(Array.sort, 0);
-            Interpreter.Array.InstanceMethods["sort!"] = new Method(Array.sort1, 0);
-            Interpreter.Array.InstanceMethods["contains?"] = new Method(Array.contains7, 1);
-            Interpreter.Array.InstanceMethods["include?"] = new Method(Array.contains7, 1);
-            Interpreter.Array.InstanceMethods["empty?"] = new Method(Array.empty7, 0);
+            Interpreter.Array.InstanceMethods["[]"] = Script.CreateMethod(Array._Indexer, 1);
+            Interpreter.Array.InstanceMethods["=="] = Script.CreateMethod(Array._Equals, 1);
+            Interpreter.Array.InstanceMethods["==="] = Script.CreateMethod(Array._Equals, 1);
+            Interpreter.Array.InstanceMethods["<<"] = Script.CreateMethod(Array._Append, 1);
+            Interpreter.Array.InstanceMethods["length"] = Script.CreateMethod(Array.length, 0);
+            Interpreter.Array.InstanceMethods["count"] = Script.CreateMethod(Array.count, 0..1);
+            Interpreter.Array.InstanceMethods["first"] = Script.CreateMethod(Array.first, 0);
+            Interpreter.Array.InstanceMethods["last"] = Script.CreateMethod(Array.last, 0);
+            Interpreter.Array.InstanceMethods["forty_two"] = Script.CreateMethod(Array.forty_two, 0);
+            Interpreter.Array.InstanceMethods["sample"] = Script.CreateMethod(Array.sample, 0);
+            Interpreter.Array.InstanceMethods["insert"] = Script.CreateMethod(Array.insert, 1..);
+            Interpreter.Array.InstanceMethods["each"] = Script.CreateMethod(Array.each, 0);
+            Interpreter.Array.InstanceMethods["reverse_each"] = Script.CreateMethod(Array.reverse_each, 0);
+            Interpreter.Array.InstanceMethods["map"] = Script.CreateMethod(Array.map, 0);
+            Interpreter.Array.InstanceMethods["map!"] = Script.CreateMethod(Array.map1, 0);
+            Interpreter.Array.InstanceMethods["sort"] = Script.CreateMethod(Array.sort, 0);
+            Interpreter.Array.InstanceMethods["sort!"] = Script.CreateMethod(Array.sort1, 0);
+            Interpreter.Array.InstanceMethods["contains?"] = Script.CreateMethod(Array.contains7, 1);
+            Interpreter.Array.InstanceMethods["include?"] = Script.CreateMethod(Array.contains7, 1);
+            Interpreter.Array.InstanceMethods["empty?"] = Script.CreateMethod(Array.empty7, 0);
 
             // Hash
-            Interpreter.Hash.InstanceMethods["[]"] = new Method(Hash._Indexer, 1);
-            Interpreter.Hash.InstanceMethods["=="] = new Method(Hash._Equals, 1);
-            Interpreter.Hash.InstanceMethods["==="] = new Method(Hash._Equals, 1);
-            Interpreter.Hash.InstanceMethods["initialize"] = new Method(Hash.initialize, 0..1);
-            Interpreter.Hash.InstanceMethods["has_key?"] = new Method(Hash.has_key7, 1);
-            Interpreter.Hash.InstanceMethods["has_value?"] = new Method(Hash.has_value7, 1);
-            Interpreter.Hash.InstanceMethods["keys"] = new Method(Hash.keys, 0);
-            Interpreter.Hash.InstanceMethods["values"] = new Method(Hash.values, 0);
-            Interpreter.Hash.InstanceMethods["invert"] = new Method(Hash.invert, 0);
-            Interpreter.Hash.InstanceMethods["to_a"] = new Method(Hash.to_a, 0);
-            Interpreter.Hash.InstanceMethods["to_hash"] = new Method(Hash.to_hash, 0);
-            Interpreter.Hash.InstanceMethods["empty?"] = new Method(Hash.empty7, 0);
+            Interpreter.Hash.InstanceMethods["[]"] = Script.CreateMethod(Hash._Indexer, 1);
+            Interpreter.Hash.InstanceMethods["=="] = Script.CreateMethod(Hash._Equals, 1);
+            Interpreter.Hash.InstanceMethods["==="] = Script.CreateMethod(Hash._Equals, 1);
+            Interpreter.Hash.InstanceMethods["initialize"] = Script.CreateMethod(Hash.initialize, 0..1);
+            Interpreter.Hash.InstanceMethods["has_key?"] = Script.CreateMethod(Hash.has_key7, 1);
+            Interpreter.Hash.InstanceMethods["has_value?"] = Script.CreateMethod(Hash.has_value7, 1);
+            Interpreter.Hash.InstanceMethods["keys"] = Script.CreateMethod(Hash.keys, 0);
+            Interpreter.Hash.InstanceMethods["values"] = Script.CreateMethod(Hash.values, 0);
+            Interpreter.Hash.InstanceMethods["invert"] = Script.CreateMethod(Hash.invert, 0);
+            Interpreter.Hash.InstanceMethods["to_a"] = Script.CreateMethod(Hash.to_a, 0);
+            Interpreter.Hash.InstanceMethods["to_hash"] = Script.CreateMethod(Hash.to_hash, 0);
+            Interpreter.Hash.InstanceMethods["empty?"] = Script.CreateMethod(Hash.empty7, 0);
 
             // Random
             Module RandomModule = Script.CreateModule("Random");
-            RandomModule.Methods["rand"] = new Method(_Random.rand, 0..1);
-            RandomModule.Methods["srand"] = new Method(_Random.srand, 0..1);
+            RandomModule.Methods["rand"] = Script.CreateMethod(_Random.rand, 0..1);
+            RandomModule.Methods["srand"] = Script.CreateMethod(_Random.srand, 0..1);
 
             // Math
             Module MathModule = Script.CreateModule("Math");
             MathModule.Constants["PI"] = new FloatInstance(Interpreter.Float, Math.PI);
             MathModule.Constants["E"] = new FloatInstance(Interpreter.Float, Math.E);
-            MathModule.Methods["sin"] = new Method(_Math.sin, 1);
-            MathModule.Methods["cos"] = new Method(_Math.cos, 1);
-            MathModule.Methods["tan"] = new Method(_Math.tan, 1);
-            MathModule.Methods["asin"] = new Method(_Math.asin, 1);
-            MathModule.Methods["acos"] = new Method(_Math.acos, 1);
-            MathModule.Methods["atan"] = new Method(_Math.atan, 1);
-            MathModule.Methods["atan2"] = new Method(_Math.atan2, 2);
-            MathModule.Methods["sinh"] = new Method(_Math.sinh, 1);
-            MathModule.Methods["cosh"] = new Method(_Math.cosh, 1);
-            MathModule.Methods["tanh"] = new Method(_Math.tanh, 1);
-            MathModule.Methods["asinh"] = new Method(_Math.asinh, 1);
-            MathModule.Methods["acosh"] = new Method(_Math.acosh, 1);
-            MathModule.Methods["atanh"] = new Method(_Math.atanh, 1);
-            MathModule.Methods["exp"] = new Method(_Math.exp, 1);
-            MathModule.Methods["log"] = new Method(_Math.log, 2);
-            MathModule.Methods["log10"] = new Method(_Math.log10, 1);
-            MathModule.Methods["log2"] = new Method(_Math.log2, 1);
-            MathModule.Methods["frexp"] = new Method(_Math.frexp, 1);
-            MathModule.Methods["ldexp"] = new Method(_Math.ldexp, 2);
-            MathModule.Methods["sqrt"] = new Method(_Math.sqrt, 1);
-            MathModule.Methods["cbrt"] = new Method(_Math.cbrt, 1);
-            MathModule.Methods["hypot"] = new Method(_Math.hypot, 2);
-            MathModule.Methods["erf"] = new Method(_Math.erf, 1);
-            MathModule.Methods["erfc"] = new Method(_Math.erfc, 1);
-            MathModule.Methods["gamma"] = new Method(_Math.gamma, 1);
-            MathModule.Methods["lgamma"] = new Method(_Math.lgamma, 1);
+            MathModule.Methods["sin"] = Script.CreateMethod(_Math.sin, 1);
+            MathModule.Methods["cos"] = Script.CreateMethod(_Math.cos, 1);
+            MathModule.Methods["tan"] = Script.CreateMethod(_Math.tan, 1);
+            MathModule.Methods["asin"] = Script.CreateMethod(_Math.asin, 1);
+            MathModule.Methods["acos"] = Script.CreateMethod(_Math.acos, 1);
+            MathModule.Methods["atan"] = Script.CreateMethod(_Math.atan, 1);
+            MathModule.Methods["atan2"] = Script.CreateMethod(_Math.atan2, 2);
+            MathModule.Methods["sinh"] = Script.CreateMethod(_Math.sinh, 1);
+            MathModule.Methods["cosh"] = Script.CreateMethod(_Math.cosh, 1);
+            MathModule.Methods["tanh"] = Script.CreateMethod(_Math.tanh, 1);
+            MathModule.Methods["asinh"] = Script.CreateMethod(_Math.asinh, 1);
+            MathModule.Methods["acosh"] = Script.CreateMethod(_Math.acosh, 1);
+            MathModule.Methods["atanh"] = Script.CreateMethod(_Math.atanh, 1);
+            MathModule.Methods["exp"] = Script.CreateMethod(_Math.exp, 1);
+            MathModule.Methods["log"] = Script.CreateMethod(_Math.log, 2);
+            MathModule.Methods["log10"] = Script.CreateMethod(_Math.log10, 1);
+            MathModule.Methods["log2"] = Script.CreateMethod(_Math.log2, 1);
+            MathModule.Methods["frexp"] = Script.CreateMethod(_Math.frexp, 1);
+            MathModule.Methods["ldexp"] = Script.CreateMethod(_Math.ldexp, 2);
+            MathModule.Methods["sqrt"] = Script.CreateMethod(_Math.sqrt, 1);
+            MathModule.Methods["cbrt"] = Script.CreateMethod(_Math.cbrt, 1);
+            MathModule.Methods["hypot"] = Script.CreateMethod(_Math.hypot, 2);
+            MathModule.Methods["erf"] = Script.CreateMethod(_Math.erf, 1);
+            MathModule.Methods["erfc"] = Script.CreateMethod(_Math.erfc, 1);
+            MathModule.Methods["gamma"] = Script.CreateMethod(_Math.gamma, 1);
+            MathModule.Methods["lgamma"] = Script.CreateMethod(_Math.lgamma, 1);
 
             // Exception
-            Interpreter.Exception.InstanceMethods["initialize"] = new Method(_Exception.initialize, 0..1);
-            Interpreter.Exception.InstanceMethods["message"] = new Method(_Exception.message, 0);
+            Interpreter.Exception.InstanceMethods["initialize"] = Script.CreateMethod(_Exception.initialize, 0..1);
+            Interpreter.Exception.InstanceMethods["message"] = Script.CreateMethod(_Exception.message, 0);
 
             // Thread
-            Interpreter.Thread.InstanceMethods["initialize"] = new Method(_Thread.initialize, 0);
-            Interpreter.Thread.InstanceMethods["join"] = new Method(_Thread.join, 0);
-            Interpreter.Thread.InstanceMethods["start"] = new Method(_Thread.start, 0);
-            Interpreter.Thread.InstanceMethods["stop"] = new Method(_Thread.stop, 0);
+            Interpreter.Thread.InstanceMethods["initialize"] = Script.CreateMethod(_Thread.initialize, 0);
+            Interpreter.Thread.InstanceMethods["join"] = Script.CreateMethod(_Thread.join, 0);
+            Interpreter.Thread.InstanceMethods["start"] = Script.CreateMethod(_Thread.start, 0);
+            Interpreter.Thread.InstanceMethods["stop"] = Script.CreateMethod(_Thread.stop, 0);
 
             // Parallel
             Module ParallelModule = Script.CreateModule("Parallel");
-            ParallelModule.Methods["each"] = new Method(_Parallel.each, 1);
+            ParallelModule.Methods["each"] = Script.CreateMethod(_Parallel.each, 1);
 
             //
             // UNSAFE APIS
             //
 
             // Global methods
-            Interpreter.RootInstance.InstanceMethods["system"] = new Method(system, 1, IsUnsafe: true);
+            Interpreter.RootInstance.InstanceMethods["system"] = Script.CreateMethod(system, 1, IsUnsafe: true);
 
             // File
             Module FileModule = Script.CreateModule("File");
-            FileModule.Methods["read"] = new Method(File.read, 1, IsUnsafe: true);
-            FileModule.Methods["write"] = new Method(File.write, 2, IsUnsafe: true);
+            FileModule.Methods["read"] = Script.CreateMethod(File.read, 1, IsUnsafe: true);
+            FileModule.Methods["write"] = Script.CreateMethod(File.write, 2, IsUnsafe: true);
         }
-
-        public static readonly IReadOnlyDictionary<string, Method> DefaultClassAndInstanceMethods = new Dictionary<string, Method>() {
-            {"==", new Method(ClassInstance._Equals, 1)},
-            {"===", new Method(ClassInstance._Equals, 1)},
-            {"!=", new Method(ClassInstance._NotEquals, 1)},
-            {"<=>", new Method(ClassInstance._Spaceship, 1)},
-            {"inspect", new Method(ClassInstance.inspect, 0)},
-            {"class", new Method(ClassInstance.@class, 0)},
-            {"to_s", new Method(ClassInstance.to_s, 0)},
-            {"method", new Method(ClassInstance.method, 1)},
-            {"object_id", new Method(ClassInstance.object_id, 0)},
-            {"methods", new Method(ClassInstance.methods, 0)},
-            {"is_a?", new Method(ClassInstance.is_a7, 1)},
-            {"instance_of?", new Method(ClassInstance.instance_of7, 1)},
-        };
-        public static readonly IReadOnlyDictionary<string, Method> DefaultClassMethods = new Dictionary<string, Method>() {
-            
-        };
-        public static readonly IReadOnlyDictionary<string, Method> DefaultInstanceMethods = new Dictionary<string, Method>() {
-            {"attr_reader", new Method(ClassInstance.attr_reader, 1)},
-            {"attr_writer", new Method(ClassInstance.attr_writer, 1)},
-            {"attr_accessor", new Method(ClassInstance.attr_accessor, 1)},
-        };
 
         // API
         static async Task<Instance> puts(MethodInput Input) {
@@ -348,7 +347,7 @@ namespace Embers
         static async Task<Instance> lambda(MethodInput Input) {
             Method? OnYield = Input.OnYield ?? throw new RuntimeException($"{Input.Location}: No block given for lambda");
 
-            Instance NewProc = new ProcInstance(Input.Interpreter.Proc, new Method(
+            Instance NewProc = new ProcInstance(Input.Interpreter.Proc, Input.Script.CreateMethod(
                 async Input => await OnYield.Call(Input.Script, Input.Instance, Input.Arguments, Input.OnYield, CatchReturn: false),
                 null
             ));
@@ -502,7 +501,7 @@ namespace Embers
                     throw new RuntimeException($"{Input.Location}: The instance method '{VariableName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
                 }
                 // Create or overwrite instance method
-                Input.Instance.AddOrUpdateInstanceMethod(VariableName, new Method(async Input2 => {
+                Input.Instance.AddOrUpdateInstanceMethod(VariableName, Input.Script.CreateMethod(async Input2 => {
                     if (Input2.Instance.InstanceVariables.TryGetValue(VariableName, out Instance? Value)) {
                         return Value;
                     }
@@ -520,7 +519,7 @@ namespace Embers
                     throw new RuntimeException($"{Input.Location}: The instance method '{VariableName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
                 }
                 // Create or overwrite instance method
-                Input.Instance.AddOrUpdateInstanceMethod($"{VariableName}=", new Method(async Input2 => {
+                Input.Instance.AddOrUpdateInstanceMethod($"{VariableName}=", Input.Script.CreateMethod(async Input2 => {
                     return Input2.Instance.InstanceVariables[VariableName] = Input2.Arguments[0];
                 }, 1));
 
@@ -529,6 +528,18 @@ namespace Embers
             public static async Task<Instance> attr_accessor(MethodInput Input) {
                 await attr_writer(Input);
                 await attr_reader(Input);
+                return Input.Interpreter.Nil;
+            }
+            public static async Task<Instance> @public(MethodInput Input) {
+                Input.Script.CurrentAccessModifier = AccessModifier.Public;
+                return Input.Interpreter.Nil;
+            }
+            public static async Task<Instance> @private(MethodInput Input) {
+                Input.Script.CurrentAccessModifier = AccessModifier.Private;
+                return Input.Interpreter.Nil;
+            }
+            public static async Task<Instance> @protected(MethodInput Input) {
+                Input.Script.CurrentAccessModifier = AccessModifier.Protected;
                 return Input.Interpreter.Nil;
             }
         }

@@ -72,6 +72,7 @@ puts_alias 'Aliased!'
                 Script Script = new(Interpreter);
                 Benchmark(() => {
                     Script.Evaluate(@"
+=begin
 puts 5 === (2..7)
 puts (2..7) === 5
 puts (2..7) === (2..7)
@@ -85,6 +86,15 @@ when 499..501
 else
     puts 'Who knows'
 end
+=end
+
+class A
+    def puts
+        super 'Hi'
+    end
+end
+A.new.puts
+puts 'heya'
                     ");
                 });
                 Script.WaitForThreads();

@@ -274,15 +274,13 @@ namespace Embers
             public readonly List<Expression> Statements;
             public readonly IntRange ArgumentCount;
             public readonly List<MethodArgumentExpression> Arguments;
+            public readonly string? Name;
 
-            public readonly Method Method;
-
-            public MethodExpression(DebugLocation location, List<Expression> statements, IntRange? argumentCount, List<MethodArgumentExpression> arguments, string? nameForSuper) : base(location) {
+            public MethodExpression(DebugLocation location, List<Expression> statements, IntRange? argumentCount, List<MethodArgumentExpression> arguments, string? name) : base(location) {
                 Statements = statements;
                 ArgumentCount = argumentCount ?? new IntRange();
                 Arguments = arguments;
-
-                Method = ToMethod(nameForSuper);
+                Name = name;
             }
             public override string Inspect() {
                 return $"|{Arguments.Inspect()}| {Statements.Inspect()} end";
@@ -290,10 +288,11 @@ namespace Embers
             public override string Serialise() {
                 return $"new {PathToSelf}({Location.Serialise()}, {Statements.Serialise()}, {ArgumentCount.Serialise()}, {Arguments.Serialise()})";
             }
-            Method ToMethod(string? NameForSuper) {
+            public Method ToMethod(AccessModifier AccessModifier, Module Parent) {
                 return new Method(async Input => {
                     return await Input.Script.InternalInterpretAsync(Statements, Input.OnYield);
-                }, ArgumentCount, Arguments, nameForSuper: NameForSuper);
+                }, ArgumentCount, Arguments, accessModifier: AccessModifier, parent: Parent)
+                { Name = Name };
             }
         }
         public class SelfExpression : Expression {
@@ -1389,7 +1388,7 @@ namespace Embers
             // End Method Block
             if (Block is BuildingMethod MethodBlock) {
                 return new DefineMethodStatement(MethodBlock.MethodName,
-                    new MethodExpression(MethodBlock.Location, MethodBlock.Statements, new IntRange(MethodBlock.MinArgumentsCount, MethodBlock.MaxArgumentsCount), MethodBlock.Arguments, MethodBlock.MethodName.GetType() == typeof(ObjectTokenExpression) ? MethodBlock.MethodName.Token.Value : null)
+                    new MethodExpression(MethodBlock.Location, MethodBlock.Statements, new IntRange(MethodBlock.MinArgumentsCount, MethodBlock.MaxArgumentsCount), MethodBlock.Arguments, MethodBlock.MethodName.Token.Value)
                 );
             }
             // End Class/Module Block

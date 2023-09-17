@@ -315,6 +315,48 @@ namespace Embers_Tests
                 end
                 a
             ", "N/A");
+
+            // Access Modifiers
+            AssertDoesNotError(@"
+                class A
+                    def puts
+                        super 'Hi'
+                    end
+                end
+                A.new.puts
+            ");
+            AssertErrors<RuntimeException>(@"
+                class A
+                    private
+                    def puts
+                        super 'Hi'
+                    end
+                end
+                A.new.puts
+            ");
+            AssertErrors<RuntimeException>(@"
+                class A
+                    protected
+                    def puts
+                        super 'Hi'
+                    end
+                end
+                A.new.puts
+            ");
+            AssertDoesNotError(@"
+                class A
+                    protected
+                    def a
+                        puts 'Hi'
+                    end
+                end
+                class B < A
+                    def b
+                        a
+                    end
+                end
+                B.new.b
+            ");
         }
 
 

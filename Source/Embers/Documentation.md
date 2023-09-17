@@ -85,6 +85,15 @@ instance.attr_writer(instance_variable_name)
 
 instance.attr_accessor(instance_variable_name)
 	Calls attr_writer and attr_reader.
+
+instance.public
+	Sets each method defined after it to public (the method can be called from anywhere).
+
+instance.private
+	Sets each method defined after it to private (the method can only be called from the current class/module).
+
+instance.protected
+	Sets each method defined after it to protected (the method can only be called from the current class/module or any class/module that inherits from it).
 ```
 ```
 string.to_str

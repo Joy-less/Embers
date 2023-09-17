@@ -21,10 +21,11 @@ namespace Embers
         readonly Stack<object> CurrentObject = new();
         Block CurrentBlock => (Block)CurrentObject.First(obj => obj is Block);
         Scope CurrentScope => (Scope)CurrentObject.First(obj => obj is Scope);
+        MethodScope CurrentMethodScope => (MethodScope)CurrentObject.First(obj => obj is MethodScope);
         Module CurrentModule => (Module)CurrentObject.First(obj => obj is Module);
         Instance CurrentInstance => (Instance)CurrentObject.First(obj => obj is Instance);
 
-        readonly Stack<string?> MethodNameForSuper = new();
+        public AccessModifier CurrentAccessModifier = AccessModifier.Public;
 
         internal readonly ConditionalWeakTable<Exception, ExceptionInstance> ExceptionsTable = new();
         public int ThreadCount { get; private set; }
@@ -69,6 +70,12 @@ namespace Embers
         public class Scope : Block {
             public Scope(object? parent) : base(parent) { }
         }
+        public class MethodScope : Scope {
+            public readonly Method? Method;
+            public MethodScope(Block? parent, Method method) : base(parent) {
+                Method = method;
+            }
+        }
         public class Module : Block {
             public readonly string Name;
             public readonly ReactiveDictionary<string, Method> Methods = new();
@@ -79,13 +86,13 @@ namespace Embers
             public Module(string name, Module parent, Module? superModule = null) : base(parent) {
                 Name = name;
                 Interpreter = parent.Interpreter;
-                SuperModule = superModule;
+                SuperModule = superModule ?? Interpreter.Object;
                 Setup();
             }
-            public Module(string name, Interpreter interpreter) : base(null) {
+            public Module(string name, Interpreter interpreter, Module? superModule = null) : base(null) {
                 Name = name;
                 Interpreter = interpreter;
-                SuperModule = null;
+                SuperModule = superModule;
                 Setup();
             }
             protected virtual void Setup() {
@@ -107,15 +114,10 @@ namespace Embers
                         InstanceMethods.Remove(Key);
                     };
                 }
-                // Copy default class and instance methods
-                else {
-                    Api.DefaultClassAndInstanceMethods.CopyTo(Methods);
-                    Api.DefaultClassAndInstanceMethods.CopyTo(InstanceMethods);
-                    Api.DefaultClassMethods.CopyTo(Methods);
-                    Api.DefaultInstanceMethods.CopyTo(InstanceMethods);
-                }
             }
-            public bool InheritsFrom(Module Ancestor) {
+            public bool InheritsFrom(Module? Ancestor) {
+                if (Ancestor == null)
+                    return false;
                 Module CurrentAncestor = this;
                 while (true) {
                     if (CurrentAncestor == Ancestor)
@@ -594,45 +596,61 @@ namespace Embers
             }
         }
         public class Method {
+            public string? Name;
+            public readonly Module? Parent;
             Func<MethodInput, Task<Instance>> Function;
             public readonly IntRange ArgumentCountRange;
             public readonly List<MethodArgumentExpression> ArgumentNames;
             public readonly bool Unsafe;
-            public readonly string? NameForSuper;
-            public Method(Func<MethodInput, Task<Instance>> function, IntRange? argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false, string? nameForSuper = null) {
+            public readonly AccessModifier AccessModifier;
+            public Method(Func<MethodInput, Task<Instance>> function, IntRange? argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false, AccessModifier accessModifier = AccessModifier.Public, Module? parent = null) {
                 Function = function;
                 ArgumentCountRange = argumentCountRange ?? new IntRange();
                 ArgumentNames = argumentNames ?? new();
                 Unsafe = IsUnsafe;
-                NameForSuper = nameForSuper;
+                AccessModifier = accessModifier;
+                Parent = parent;
             }
-            public Method(Func<MethodInput, Task<Instance>> function, Range argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false, string? nameForSuper = null) {
+            public Method(Func<MethodInput, Task<Instance>> function, Range argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false, AccessModifier accessModifier = AccessModifier.Public, Module? parent = null) {
                 Function = function;
                 ArgumentCountRange = new IntRange(argumentCountRange);
                 ArgumentNames = argumentNames ?? new();
                 Unsafe = IsUnsafe;
-                NameForSuper = nameForSuper;
+                AccessModifier = accessModifier;
+                Parent = parent;
             }
-            public Method(Func<MethodInput, Task<Instance>> function, int argumentCount, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false, string? nameForSuper = null) {
+            public Method(Func<MethodInput, Task<Instance>> function, int argumentCount, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false, AccessModifier accessModifier = AccessModifier.Public, Module? parent = null) {
                 Function = function;
                 ArgumentCountRange = new IntRange(argumentCount, argumentCount);
                 ArgumentNames = argumentNames ?? new();
                 Unsafe = IsUnsafe;
-                NameForSuper = nameForSuper;
+                AccessModifier = accessModifier;
+                Parent = parent;
             }
             public async Task<Instance> Call(Script Script, Instance? OnInstance, Instances? Arguments = null, Method? OnYield = null, BreakHandleType BreakHandleType = BreakHandleType.Invalid, bool CatchReturn = true) {
                 if (Unsafe && !Script.AllowUnsafeApi)
-                    throw new RuntimeException($"{Script.ApproximateLocation}: This method is unavailable since 'AllowUnsafeApi' is disabled for this script.");
+                    throw new RuntimeException($"{Script.ApproximateLocation}: The method '{Name}' is unavailable since 'AllowUnsafeApi' is disabled for this script.");
+                if (AccessModifier == AccessModifier.Private) {
+                    if (Parent != null && Parent != Script.Interpreter.RootModule && Script.CurrentModule != Parent)
+                        throw new RuntimeException($"{Script.ApproximateLocation}: Private method '{Name}' called {(Parent != null ? $"for {Parent.Name}" : "")}");
+                }
+                else if (AccessModifier == AccessModifier.Protected) {
+                    if (Parent != null && Parent != Script.Interpreter.RootModule && !Script.CurrentModule.InheritsFrom(Parent))
+                        throw new RuntimeException($"{Script.ApproximateLocation}: Protected method '{Name}' called {(Parent != null ? $"for {Parent.Name}" : "")}");
+                }
 
                 Arguments ??= new Instances();
                 if (ArgumentCountRange.IsInRange(Arguments.Count)) {
                     // Create temporary scope
+                    Module? Parent = this.Parent;
                     if (OnInstance != null) {
                         Script.CurrentObject.Push(OnInstance.Module!);
                         Script.CurrentObject.Push(OnInstance);
                     }
-                    Script.CurrentObject.Push(new Scope(Script.CurrentBlock));
-                    Script.MethodNameForSuper.Push(NameForSuper);
+                    else if (Parent != null) {
+                        Script.CurrentObject.Push(Parent);
+                    }
+                    Script.CurrentObject.Push(new MethodScope(Script.CurrentBlock, this));
                     Instance ReturnValue;
                     try {
                         // Set argument variables
@@ -702,10 +720,12 @@ namespace Embers
                     }
                     finally {
                         // Step back a scope
-                        Script.MethodNameForSuper.Pop();
                         Script.CurrentObject.Pop();
                         if (OnInstance != null) {
                             Script.CurrentObject.Pop();
+                            Script.CurrentObject.Pop();
+                        }
+                        else if (Parent != null) {
                             Script.CurrentObject.Pop();
                         }
                     }
@@ -718,12 +738,6 @@ namespace Embers
             }
             public void ChangeFunction(Func<MethodInput, Task<Instance>> function) {
                 Function = function;
-            }
-        }
-        public class MethodScope : Scope {
-            public readonly Method? Method;
-            public MethodScope(Block? parent, Method method) : base(parent) {
-                Method = method;
             }
         }
         public class MethodInput {
@@ -872,11 +886,13 @@ namespace Embers
             public new TValue this[TKey Key] {
                 get => base[Key];
                 set {
+                    TrySetMethodName(Key, value);
                     base[Key] = value;
                     SetEvent.Raise(handler => handler(Key, value));
                 }
             }
             public new void Add(TKey Key, TValue Value) {
+                TrySetMethodName(Key, Value);
                 base.Add(Key, Value);
                 SetEvent.Raise(handler => handler(Key, Value));
             }
@@ -886,6 +902,12 @@ namespace Embers
                     return true;
                 }
                 return false;
+            }
+
+            static void TrySetMethodName(TKey Key, TValue Value) {
+                if (Key is string MethodName && Value is Method Method) {
+                    Method.Name = MethodName;
+                }
             }
         }
         public class Instances {
@@ -965,6 +987,18 @@ namespace Embers
             Class NewClass = new(Name, Parent, InheritsFrom);
             Parent.Constants[Name] = new ModuleReference(NewClass);
             return NewClass;
+        }
+        public Method CreateMethod(Func<MethodInput, Task<Instance>> Function, Range ArgumentCountRange, bool IsUnsafe = false) {
+            Method NewMethod = new(Function, ArgumentCountRange, IsUnsafe: IsUnsafe, accessModifier: CurrentAccessModifier, parent: CurrentModule);
+            return NewMethod;
+        }
+        public Method CreateMethod(Func<MethodInput, Task<Instance>> Function, IntRange? ArgumentCountRange, bool IsUnsafe = false) {
+            Method NewMethod = new(Function, ArgumentCountRange, IsUnsafe: IsUnsafe, accessModifier: CurrentAccessModifier, parent: CurrentModule);
+            return NewMethod;
+        }
+        public Method CreateMethod(Func<MethodInput, Task<Instance>> Function, int ArgumentCount, bool IsUnsafe = false) {
+            Method NewMethod = new(Function, ArgumentCount, IsUnsafe: IsUnsafe, accessModifier: CurrentAccessModifier, parent: CurrentModule);
+            return NewMethod;
         }
         T CreateTemporaryClassScope<T>(Module Module, Func<T> Do) {
             // Create temporary class/module scope
@@ -1063,7 +1097,7 @@ namespace Embers
                     if (Found) {
                         return await CreateTemporaryClassScope(MethodModule, async () =>
                             await StaticMethod!.Call(
-                                this, MethodOwner, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
+                                this, MethodOwner, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToMethod(CurrentAccessModifier, CurrentModule)
                             )
                         );
                     }
@@ -1080,7 +1114,7 @@ namespace Embers
                         if (Found) {
                             return await CreateTemporaryInstanceScope(CurrentInstance, async () =>
                                 await LocalInstanceMethod!.Call(
-                                    this, CurrentInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
+                                    this, CurrentInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToMethod(CurrentAccessModifier, CurrentModule)
                                 )
                             );
                         }
@@ -1096,7 +1130,7 @@ namespace Embers
                         if (Found) {
                             return await CreateTemporaryInstanceScope(MethodInstance, async () =>
                                 await PathInstanceMethod!.Call(
-                                    this, MethodInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.Method
+                                    this, MethodInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToMethod(CurrentAccessModifier, CurrentModule)
                                 )
                             );
                         }
@@ -1486,7 +1520,7 @@ namespace Embers
                     }
                     // Create or overwrite static method
                     lock (MethodModule.Methods)
-                        MethodModule.Methods[MethodName] = DefineMethodStatement.MethodExpression.Method;
+                        MethodModule.Methods[MethodName] = DefineMethodStatement.MethodExpression.ToMethod(CurrentAccessModifier, CurrentModule);
                 }
                 // Define instance method
                 else {
@@ -1496,7 +1530,7 @@ namespace Embers
                         throw new RuntimeException($"{DefineMethodStatement.Location}: The instance method '{MethodName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
                     }
                     // Create or overwrite instance method
-                    MethodInstance.AddOrUpdateInstanceMethod(MethodName, DefineMethodStatement.MethodExpression.Method);
+                    MethodInstance.AddOrUpdateInstanceMethod(MethodName, DefineMethodStatement.MethodExpression.ToMethod(CurrentAccessModifier, CurrentModule));
                 }
             }
             else {
@@ -1540,11 +1574,14 @@ namespace Embers
                 }
 
                 // Interpret class statements
+                AccessModifier PreviousAccessModifier = CurrentAccessModifier;
+                CurrentAccessModifier = AccessModifier.Public;
                 await CreateTemporaryClassScope(NewModule, async () => {
                     await CreateTemporaryInstanceScope(new Instance(NewModule), async () => {
                         await InternalInterpretAsync(DefineClassStatement.BlockStatements);
                     });
                 });
+                CurrentAccessModifier = PreviousAccessModifier;
 
                 // Store class/module constant
                 if (ClassNameRef.Block != null) {
@@ -1579,17 +1616,17 @@ namespace Embers
         }
         async Task<Instance> InterpretSuperStatement(SuperStatement SuperStatement) {
             Module CurrentModule = this.CurrentModule;
+            string? SuperMethodName = CurrentMethodScope.Method?.Name;
             if (CurrentModule != Interpreter.RootModule && CurrentModule.SuperModule is Module SuperModule) {
-                string? SuperMethodName = MethodNameForSuper.Count != 0 ? MethodNameForSuper.Peek() : null;
-                if (SuperMethodName != null) {
+                if (SuperMethodName != null && SuperModule.InstanceMethods.TryGetValue(SuperMethodName, out Method? SuperMethod)) {
                     Instances? Arguments = null;
                     if (SuperStatement.Arguments != null) {
                         Arguments = await InterpretExpressionsAsync(SuperStatement.Arguments);
                     }
-                    return await SuperModule.InstanceMethods[SuperMethodName].Call(this, null, Arguments);
+                    return await SuperMethod.Call(this, null, Arguments);
                 }
             }
-            throw new RuntimeException($"{SuperStatement.Location}: No super method to call");
+            throw new RuntimeException($"{SuperStatement.Location}: No super method '{SuperMethodName}' to call");
         }
         async Task<Instance> InterpretAliasStatement(AliasStatement AliasStatement) {
             Instance MethodToAlias = await InterpretExpressionAsync(AliasStatement.MethodToAlias, ReturnType.FoundVariable);
@@ -1907,6 +1944,11 @@ namespace Embers
             }
         }
 
+        public enum AccessModifier {
+            Public,
+            Private,
+            Protected,
+        }
         public enum BreakHandleType {
             Invalid,
             Rethrow,
