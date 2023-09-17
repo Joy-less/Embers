@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using static Embers.Phase1;
-using static Embers.Phase2;
 using static Embers.Script;
 
 #nullable enable

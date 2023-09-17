@@ -40,13 +40,15 @@ namespace Embers
             else if (Class.InheritsFrom(Interpreter.String))
                 return new StringInstance(Class, "");
             else if (Class.InheritsFrom(Interpreter.Symbol))
-                return new SymbolInstance(Class, "");
+                return GetSymbol("");
             else if (Class.InheritsFrom(Interpreter.Integer))
                 return new IntegerInstance(Class, 0);
             else if (Class.InheritsFrom(Interpreter.Float))
                 return new FloatInstance(Class, 0);
             else if (Class.InheritsFrom(Interpreter.Proc))
                 throw new RuntimeException($"{ApproximateLocation}: Tried to create Proc instance without a block");
+            else if (Class.InheritsFrom(Interpreter.Range))
+                throw new RuntimeException($"{ApproximateLocation}: Tried to create Range instance with new");
             else if (Class.InheritsFrom(Interpreter.Array))
                 return new ArrayInstance(Class, new List<Instance>());
             else if (Class.InheritsFrom(Interpreter.Hash))
@@ -118,16 +120,13 @@ namespace Embers
             public bool InheritsFrom(Module? Ancestor) {
                 if (Ancestor == null)
                     return false;
-                Module CurrentAncestor = this;
-                while (true) {
+                Module? CurrentAncestor = this;
+                while (CurrentAncestor != null) {
                     if (CurrentAncestor == Ancestor)
                         return true;
-
-                    if (CurrentAncestor.SuperModule is Module ModuleAncestor)
-                        CurrentAncestor = ModuleAncestor;
-                    else
-                        return false;
+                    CurrentAncestor = CurrentAncestor.SuperModule;
                 }
+                return false;
             }
         }
         public class Class : Module {
@@ -846,11 +845,11 @@ namespace Embers
         public class WeakEvent<TDelegate> where TDelegate : class {
             readonly List<WeakReference> Subscribers = new();
 
-            public void Add(TDelegate handler) {
+            public void Add(TDelegate Handler) {
                 // Remove any dead references
                 Subscribers.RemoveAll(WeakRef => !WeakRef.IsAlive);
                 // Add the new handler as a weak reference
-                Subscribers.Add(new WeakReference(handler));
+                Subscribers.Add(new WeakReference(Handler));
             }
 
             public void Remove(TDelegate Handler) {
@@ -935,10 +934,12 @@ namespace Embers
                 return new Instances(InstanceList);
             }
             public static implicit operator Instance(Instances Instances) {
-                if (Instances.Count == 0)
-                    throw new RuntimeException($"Cannot implicitly cast Instances to Instance because there are none.");
-                if (Instances.Count != 1)
-                    throw new RuntimeException($"Cannot implicitly cast Instances to Instance because {Instances.Count - 1} instances would be overlooked");
+                if (Instances.Count != 1) {
+                    if (Instances.Count == 0)
+                        throw new RuntimeException($"Cannot implicitly cast Instances to Instance because there are none");
+                    else
+                        throw new RuntimeException($"Cannot implicitly cast Instances to Instance because {Instances.Count - 1} instances would be overlooked");
+                }
                 return Instances[0];
             }
             public Instance this[int i] => InstanceList != null ? InstanceList[i] : (i == 0 && Instance != null ? Instance : throw new ApiException("Index was outside the range of the instances"));
@@ -1994,7 +1995,7 @@ namespace Embers
                     LoopControlType.Retry => throw new RetryException(),
                     LoopControlType.Redo => throw new RedoException(),
                     LoopControlType.Next => throw new NextException(),
-                    _ => throw new InternalErrorException($"{Expression.Location}: Loop control type not handled: '{LoopControlStatement.Type}'") },
+                    _ => throw new InternalErrorException($"{Expression.Location}: Loop control type not handled: '{LoopControlStatement.Type}'")},
                 YieldStatement YieldStatement => await InterpretYieldStatement(YieldStatement, OnYield),
                 SuperStatement SuperStatement => await InterpretSuperStatement(SuperStatement),
                 AliasStatement AliasStatement => await InterpretAliasStatement(AliasStatement),

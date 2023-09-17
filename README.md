@@ -98,16 +98,16 @@ Note that code running on a single thread will be faster if they are regularly a
 
 ### Custom methods
 ```csharp
-MyScript.Integer.InstanceMethods.Add("double_number", new Method(async Input => {
+MyInterpreter.Integer.InstanceMethods.Add("double_number", MyScript.CreateMethod(async Input => {
     return new IntegerInstance(Input.Interpreter.Integer, Input.Instance.Integer * 2);
 }, 0));
 MyScript.Evaluate("puts 3.double_number"); // 6
 ```
 ```csharp
-MyScript.Integer.InstanceMethods.Add("catify", new Method(async Input => {
+MyInterpreter.Integer.InstanceMethods.Add("catify", MyScript.CreateMethod(async Input => {
     // Get target string
     Instance OnNumber = Input.Instance;
-    Instance OnString = (await OnNumber.InstanceMethods["to_s"].Call(Input.Interpreter, OnNumber))[0];
+    Instance OnString = await OnNumber.InstanceMethods["to_s"].Call(Input.Script, OnNumber);
     // Catify
     long CatifyFactor = Input.Arguments[0].Integer;
     string CatifiedString = OnString.String;
@@ -122,15 +122,15 @@ MyScript.Evaluate("puts 3.catify 2"); // 3 ~nya ~nya
 ### Custom classes
 ```csharp
 Class Vector2 = MyScript.CreateClass("Vector2");
-Vector2.InstanceMethods["initialize"] = new Method(async Input => {
+Vector2.InstanceMethods["initialize"] = MyScript.CreateMethod(async Input => {
     Input.Instance.InstanceVariables["X"] = Input.Arguments[0];
     Input.Instance.InstanceVariables["Y"] = Input.Arguments[1];
     return Input.Interpreter.Nil;
 }, 2);
-Vector2.InstanceMethods["x"] = new Method(async Input => {
+Vector2.InstanceMethods["x"] = MyScript.CreateMethod(async Input => {
     return Input.Instance.InstanceVariables["X"];
 }, 0);
-Vector2.InstanceMethods["y"] = new Method(async Input => {
+Vector2.InstanceMethods["y"] = MyScript.CreateMethod(async Input => {
     return Input.Instance.InstanceVariables["Y"];
 }, 0);
 MyScript.Evaluate("pos = Vector2.new(1, 2); p [pos.x, pos.y]"); // [1, 2]
@@ -168,7 +168,7 @@ Console.ReadLine();
 ```
 This will output some C# code, which you can then run directly by wrapping it in `MyScript.Interpret(...);`:
 ```csharp
-MyScript.Interpret(new List<Embers.Phase2.Expression>() {new Embers.Phase2.MethodCallExpression(new Embers.Phase2.ObjectTokenExpression(new Embers.Phase2.Phase2Token(new DebugLocation(1, 0), Embers.Phase2.Phase2TokenType.LocalVariableOrMethod, "puts", new Embers.Phase1.Phase1Token(new DebugLocation(1, 0), Embers.Phase1.Phase1TokenType.Identifier, "puts", false, false))), new List<Embers.Phase2.Expression>() {new Embers.Phase2.ObjectTokenExpression(new Embers.Phase2.Phase2Token(new DebugLocation(1, 5), Embers.Phase2.Phase2TokenType.String, "Hello there!", new Embers.Phase1.Phase1Token(new DebugLocation(1, 5), Embers.Phase1.Phase1TokenType.String, "Hello there!", true, false)))}, null)});
+MyScript.Interpret(new List<Embers.Phase2.Expression>() {new Embers.Phase2.MethodCallExpression(new Embers.Phase2.ObjectTokenExpression(new Embers.Phase2.Phase2Token(new DebugLocation(1, 0), Embers.Phase2.Phase2TokenType.LocalVariableOrMethod, "puts", new Embers.Phase1.Phase1Token(new DebugLocation(1, 0), Embers.Phase1.Phase1TokenType.Identifier, "puts", false, false, false))), new List<Embers.Phase2.Expression>() {new Embers.Phase2.ObjectTokenExpression(new Embers.Phase2.Phase2Token(new DebugLocation(1, 5), Embers.Phase2.Phase2TokenType.String, "Hello there!", new Embers.Phase1.Phase1Token(new DebugLocation(1, 5), Embers.Phase1.Phase1TokenType.String, "Hello there!", true, false, false)))}, null)});
 ```
 Please note that pre-parsed code will not be compatible between different versions of Embers. It should be done just before building your project.
 
