@@ -1095,7 +1095,7 @@ namespace Embers
             IEnumerable<Instance> CurrentInstanceStack = CurrentObject.Where(obj => obj is Instance).Cast<Instance>();
 
             foreach (Instance Instance in CurrentInstanceStack) {
-                if (Instance.InstanceMethods.TryGetValue(Name, out Method? FindLocalInstanceMethod)) {
+                if ((Instance is PseudoInstance ? Instance.Module!.InstanceMethods : Instance.InstanceMethods).TryGetValue(Name, out Method? FindLocalInstanceMethod)) {
                     LocalInstanceMethod = FindLocalInstanceMethod;
                     return true;
                 }

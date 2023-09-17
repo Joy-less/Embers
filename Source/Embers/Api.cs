@@ -1037,7 +1037,7 @@ namespace Embers
         }
         static class Proc {
             public static async Task<Instance> call(MethodInput Input) {
-                return await Input.Instance.Proc.Call(Input.Script, Input.Instance, Input.Arguments, Input.OnYield);
+                return await Input.Instance.Proc.Call(Input.Script, null, Input.Arguments, Input.OnYield);
             }
         }
         static class Range {

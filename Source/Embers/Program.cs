@@ -95,6 +95,16 @@ class A
 end
 A.new.puts
 puts 'heya'
+
+module B
+    def self.z
+        self.y
+    end
+    def self.y
+        puts 'y'
+    end
+end
+B.method(:z).call
                     ");
                 });
                 Script.WaitForThreads();
