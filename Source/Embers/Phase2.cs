@@ -138,8 +138,8 @@ namespace Embers
                 }
 
                 IsObjectToken = IsObjectToken(this);
-                if (Type == Phase2TokenType.Integer) ValueAsLong = long.Parse(Value!);
-                if (Type == Phase2TokenType.Float) ValueAsDouble = double.Parse(Value!);
+                if (Type == Phase2TokenType.Integer) ValueAsLong = Value!.ParseLong();
+                if (Type == Phase2TokenType.Float) ValueAsDouble = Value!.ParseDouble();
             }
             public override string Inspect() {
                 return Type + (Value != null ? ":" : "") + Value;
@@ -2198,10 +2198,8 @@ namespace Embers
 
                         // Add method call expression for unary operator
                         if (NextObjectToken != null) {
-                            bool DoesNotFollowExpression = LastUnknownObject is null or not Expression;
-                            bool HasNoWhitespace = !Token.FollowedByWhitespace;
-
-                            if (DoesNotFollowExpression || HasNoWhitespace) {
+                            bool DoesNotFollowExpression = LastUnknownObject is null or not ObjectTokenExpression;
+                            if (DoesNotFollowExpression) {
                                 ParsedObjects.RemoveRange(i, 2);
                                 ParsedObjects.Insert(i, new MethodCallExpression(
                                     new PathExpression(NextObjectToken, new Phase2Token(NextObjectToken.Location, Phase2TokenType.LocalVariableOrMethod, Token.Value! + "@")),

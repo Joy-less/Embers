@@ -151,6 +151,15 @@ namespace Embers
         public static bool IsAsciiLetterUpper(this char Chara) {
             return Chara >= 'A' && Chara <= 'Z';
         }
+        public static long ParseLong(this string String) {
+            return long.Parse(String.ToString());
+        }
+        public static double ParseDouble(this string String) {
+            return double.Parse(String.ToString());
+        }
+        public static long ParseHexLong(this string String) {
+            return long.Parse(String.ToString(), System.Globalization.NumberStyles.HexNumber);
+        }
 
         //
         // Compatibility

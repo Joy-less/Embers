@@ -292,14 +292,25 @@ namespace Embers
                 // Integer
                 if (Chara.IsAsciiDigit()) {
                     // Build integer
-                    string Number = BuildWhile(c => c.IsAsciiDigit() || c == '_' || c == 'e' || c == 'x');
+                    string Number = BuildWhile(c => c.IsAsciiDigit() || c is '_' or 'e' or 'E' or 'x' or 'X');
+                    if (Number.EndsWith('e') || Number.EndsWith('E')) {
+                        if (Code[i] is '+' or '-') {
+                            Number += Code[i];
+                            i++;
+                            string Extra = BuildWhile(c => c.IsAsciiDigit());
+                            if (Extra.Length == 0) {
+                                throw new SyntaxErrorException($"{Location}: Trailing '{Number.Last()}' in number");
+                            }
+                            Number += Extra;
+                        }
+                    }
                     // Remove '_'
                     if (Number.EndsWith('_')) throw new SyntaxErrorException($"{Location}: Trailing '_' in number");
                     Number = Number.Replace("_", "");
                     // Hexadecimal notation
                     if (Number.StartsWith("0x")) {
                         if (Number.Length == 2) throw new SyntaxErrorException($"{Location}: '0x' is not a valid number");
-                        Number = long.Parse(Number[2..], System.Globalization.NumberStyles.HexNumber).ToString();
+                        Number = Number[2..].ParseHexLong().ToString();
                     }
                     // Add integer to tokens
                     Tokens.Add(new(Location, Phase1TokenType.Integer, Number, FollowsWhitespace, FollowedByWhitespace));
