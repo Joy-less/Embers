@@ -128,6 +128,8 @@ AB.new.ab
 {:a => 'hi', 5 => 4}.each do |key, value|
     p key, value
 end
+puts 5.clamp(2, 3)
+puts 5.clamp(2, 2.4)
                     ");
                 });
                 Script.WaitForThreads();

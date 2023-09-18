@@ -906,13 +906,19 @@ namespace Embers
             }
             public static async Task<Instance> clamp(MethodInput Input) {
                 long Number = Input.Instance.Integer;
-                long Min = Input.Arguments[0].Integer;
-                long Max = Input.Arguments[1].Integer;
-                if (Number < Min) {
-                    return new IntegerInstance(Input.Interpreter.Integer, Min);
+                Instance Min = Input.Arguments[0];
+                Instance Max = Input.Arguments[1];
+                if (Number < Min.Float) {
+                    if (Min is IntegerInstance)
+                        return new IntegerInstance(Input.Interpreter.Integer, Min.Integer);
+                    else
+                        return new FloatInstance(Input.Interpreter.Float, Min.Float);
                 }
-                else if (Number > Max) {
-                    return new IntegerInstance(Input.Interpreter.Integer, Max);
+                else if (Number > Max.Float) {
+                    if (Max is IntegerInstance)
+                        return new IntegerInstance(Input.Interpreter.Integer, Max.Integer);
+                    else
+                        return new FloatInstance(Input.Interpreter.Float, Max.Float);
                 }
                 else {
                     return Input.Instance;
