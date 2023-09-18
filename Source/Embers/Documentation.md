@@ -247,6 +247,9 @@ hash.keys
 hash.values
 	Returns an array of the values in the hash.
 
+hash.each {|key, value|}
+	Repeats the given block for each key-value pair in the hash.
+
 hash.invert
 	Returns a hash which contains the original hash's keys as values and values as keys.
 
