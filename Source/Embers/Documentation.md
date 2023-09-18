@@ -154,6 +154,9 @@ integer.to_i
 integer.to_f
 	Returns the integer as a float.
 
+integer.clamp(min, max)
+	Returns min if integer < min, max if integer > max or otherwise integer.
+
 integer.times {|n|}
 	Repeats the given block the integer number of times.
 ```
@@ -163,6 +166,9 @@ float.to_i
 
 float.to_f
 	Returns the float.
+
+float.clamp(min, max)
+	Returns min if float < min, max if float > max or otherwise float.
 ```
 ```
 proc.call(*args)

@@ -128,6 +128,7 @@ namespace Embers
             Interpreter.Integer.InstanceMethods["to_i"] = Script.CreateMethod(Integer.to_i, 0);
             Interpreter.Integer.InstanceMethods["to_f"] = Script.CreateMethod(Integer.to_f, 0);
             Interpreter.Integer.InstanceMethods["times"] = Script.CreateMethod(Integer.times, 0);
+            Interpreter.Integer.InstanceMethods["clamp"] = Script.CreateMethod(Integer.clamp, 2);
 
             // Float
             Interpreter.Float.InstanceMethods["+"] = Script.CreateMethod(Float._Add, 1);
@@ -147,6 +148,7 @@ namespace Embers
             Interpreter.Float.InstanceMethods["-@"] = Script.CreateMethod(Float._UnaryMinus, 0);
             Interpreter.Float.InstanceMethods["to_i"] = Script.CreateMethod(Float.to_i, 0);
             Interpreter.Float.InstanceMethods["to_f"] = Script.CreateMethod(Float.to_f, 0);
+            Interpreter.Float.InstanceMethods["clamp"] = Script.CreateMethod(Float.clamp, 2);
 
             // Proc
             Interpreter.Proc.InstanceMethods["call"] = Script.CreateMethod(Proc.call, null);
@@ -902,6 +904,20 @@ namespace Embers
             public static async Task<Instance> to_f(MethodInput Input) {
                 return new FloatInstance(Input.Interpreter.Float, Input.Instance.Float);
             }
+            public static async Task<Instance> clamp(MethodInput Input) {
+                long Number = Input.Instance.Integer;
+                long Min = Input.Arguments[0].Integer;
+                long Max = Input.Arguments[1].Integer;
+                if (Number < Min) {
+                    return new IntegerInstance(Input.Interpreter.Integer, Min);
+                }
+                else if (Number > Max) {
+                    return new IntegerInstance(Input.Interpreter.Integer, Max);
+                }
+                else {
+                    return Input.Instance;
+                }
+            }
             public static async Task<Instance> times(MethodInput Input) {
                 if (Input.OnYield != null) {
                     long Times = Input.Instance.Integer;
@@ -1034,6 +1050,20 @@ namespace Embers
             }
             public static async Task<Instance> to_f(MethodInput Input) {
                 return Input.Instance;
+            }
+            public static async Task<Instance> clamp(MethodInput Input) {
+                double Number = Input.Instance.Float;
+                double Min = Input.Arguments[0].Float;
+                double Max = Input.Arguments[1].Float;
+                if (Number < Min) {
+                    return new FloatInstance(Input.Interpreter.Float, Min);
+                }
+                else if (Number > Max) {
+                    return new FloatInstance(Input.Interpreter.Float, Max);
+                }
+                else {
+                    return Input.Instance;
+                }
             }
         }
         static class File {
