@@ -193,6 +193,7 @@ namespace Embers
             Interpreter.Hash.InstanceMethods["has_value?"] = Script.CreateMethod(Hash.has_value7, 1);
             Interpreter.Hash.InstanceMethods["keys"] = Script.CreateMethod(Hash.keys, 0);
             Interpreter.Hash.InstanceMethods["values"] = Script.CreateMethod(Hash.values, 0);
+            Interpreter.Hash.InstanceMethods["each"] = Script.CreateMethod(Hash.each, 0);
             Interpreter.Hash.InstanceMethods["invert"] = Script.CreateMethod(Hash.invert, 0);
             Interpreter.Hash.InstanceMethods["to_a"] = Script.CreateMethod(Hash.to_a, 0);
             Interpreter.Hash.InstanceMethods["to_hash"] = Script.CreateMethod(Hash.to_hash, 0);
@@ -339,7 +340,7 @@ namespace Embers
 
             string CatchIdentifier = Input.Arguments[0].String;
             try {
-                await OnYield.Call(Input.Script, Input.Instance, CatchReturn: false);
+                await OnYield.Call(Input.Script, null, CatchReturn: false);
             }
             catch (ThrowException Ex) {
                 if (Ex.Identifier != CatchIdentifier)
@@ -351,7 +352,7 @@ namespace Embers
             Method? OnYield = Input.OnYield ?? throw new RuntimeException($"{Input.Location}: No block given for lambda");
 
             Instance NewProc = new ProcInstance(Input.Interpreter.Proc, Input.Script.CreateMethod(
-                async Input => await OnYield.Call(Input.Script, Input.Instance, Input.Arguments, Input.OnYield, CatchReturn: false),
+                async Input => await OnYield.Call(Input.Script, null, Input.Arguments, Input.OnYield, CatchReturn: false),
                 null
             ));
             return NewProc;
@@ -361,7 +362,7 @@ namespace Embers
 
             while (true) {
                 try {
-                    await OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                    await OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                 }
                 catch (BreakException) {
                     break;
@@ -910,11 +911,11 @@ namespace Embers
                         try {
                             // x.times do |n|
                             if (TakesArgument) {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                await Input.OnYield.Call(Input.Script, null, new IntegerInstance(Input.Interpreter.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.times do
                             else {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                         }
                         catch (BreakException) {
@@ -928,7 +929,7 @@ namespace Embers
                             continue;
                         }
                         catch (LoopControlException Ex) {
-                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in {Times}.times do end");
+                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in {Times}.times");
                         }
                     }
                 }
@@ -1095,11 +1096,11 @@ namespace Embers
                         try {
                             // x.each do |n|
                             if (TakesArgument) {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                await Input.OnYield.Call(Input.Script, null, new IntegerInstance(Input.Interpreter.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.each do
                             else {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                         }
                         catch (BreakException) {
@@ -1113,7 +1114,7 @@ namespace Embers
                             continue;
                         }
                         catch (LoopControlException Ex) {
-                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in range.each do end");
+                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in range.each");
                         }
                     }
                 }
@@ -1130,11 +1131,11 @@ namespace Embers
                         try {
                             // x.reverse_each do |n|
                             if (TakesArgument) {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, new IntegerInstance(Input.Interpreter.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                await Input.OnYield.Call(Input.Script, null, new IntegerInstance(Input.Interpreter.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.reverse_each do
                             else {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                         }
                         catch (BreakException) {
@@ -1148,7 +1149,7 @@ namespace Embers
                             continue;
                         }
                         catch (LoopControlException Ex) {
-                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in range.reverse_each do end");
+                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in range.reverse_each");
                         }
                     }
                 }
@@ -1323,15 +1324,15 @@ namespace Embers
                         try {
                             // x.each do |n, i|
                             if (TakesArguments == 2) {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, new List<Instance>() { Array[i], new IntegerInstance(Input.Interpreter.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                await Input.OnYield.Call(Input.Script, null, new List<Instance>() { Array[i], new IntegerInstance(Input.Interpreter.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.each do |n|
                             else if (TakesArguments == 1) {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, Array[i], BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                await Input.OnYield.Call(Input.Script, null, Array[i], BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.each do
                             else {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                         }
                         catch (BreakException) {
@@ -1345,7 +1346,7 @@ namespace Embers
                             continue;
                         }
                         catch (LoopControlException Ex) {
-                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in array.each do end");
+                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in array.each");
                         }
                     }
                 }
@@ -1360,15 +1361,15 @@ namespace Embers
                         try {
                             // x.reverse_each do |n, i|
                             if (TakesArguments == 2) {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, new List<Instance>() { Array[i], new IntegerInstance(Input.Interpreter.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                await Input.OnYield.Call(Input.Script, null, new List<Instance>() { Array[i], new IntegerInstance(Input.Interpreter.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.reverse_each do |n|
                             else if (TakesArguments == 1) {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, Array[i], BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                await Input.OnYield.Call(Input.Script, null, Array[i], BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.reverse_each do
                             else {
-                                await Input.OnYield.Call(Input.Script, Input.Instance, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                         }
                         catch (BreakException) {
@@ -1382,7 +1383,7 @@ namespace Embers
                             continue;
                         }
                         catch (LoopControlException Ex) {
-                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in array.reverse_each do end");
+                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in array.reverse_each");
                         }
                     }
                 }
@@ -1394,7 +1395,7 @@ namespace Embers
                     List<Instance> MappedArray = new();
                     for (int i = 0; i < Array.Count; i++) {
                         Instance Item = Array[i];
-                        Instance MappedItem = await Input.OnYield.Call(Input.Script, Input.Instance, Item, CatchReturn: false);
+                        Instance MappedItem = await Input.OnYield.Call(Input.Script, null, Item, CatchReturn: false);
                         MappedArray.Add(MappedItem);
                     }
                     if (Exclaim) {
@@ -1532,6 +1533,44 @@ namespace Embers
             }
             public static async Task<Instance> values(MethodInput Input) {
                 return new ArrayInstance(Input.Interpreter.Array, Input.Instance.Hash.Values.ToList());
+            }
+            public static async Task<Instance> each(MethodInput Input) {
+                if (Input.OnYield != null) {
+                    Dictionary<Instance, Instance> Hash = Input.Instance.Hash;
+                    
+                    int TakesArguments = Input.OnYield.ArgumentNames.Count;
+                    for (int i = 0; i < Hash.Keys.Count; i++) {
+                        Instance Key = Hash.Keys.ElementAt(i);
+                        try {
+                            // x.each do |key, value|
+                            if (TakesArguments == 2) {
+                                await Input.OnYield.Call(Input.Script, null, new List<Instance>() { Key, Hash[Key] }, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            }
+                            // x.each do |key|
+                            else if (TakesArguments == 1) {
+                                await Input.OnYield.Call(Input.Script, null, Key, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            }
+                            // x.each do
+                            else {
+                                await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            }
+                        }
+                        catch (BreakException) {
+                            break;
+                        }
+                        catch (RedoException) {
+                            i--;
+                            continue;
+                        }
+                        catch (NextException) {
+                            continue;
+                        }
+                        catch (LoopControlException Ex) {
+                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in hash.each");
+                        }
+                    }
+                }
+                return Input.Interpreter.Nil;
             }
             public static async Task<Instance> invert(MethodInput Input) {
                 HashInstance Hash = (HashInstance)Input.Instance;

@@ -599,7 +599,7 @@ namespace Embers
         public class Method {
             public string? Name;
             public readonly Module? Parent;
-            Func<MethodInput, Task<Instance>> Function;
+            public Func<MethodInput, Task<Instance>> Function {get; private set;}
             public readonly IntRange ArgumentCountRange;
             public readonly List<MethodArgumentExpression> ArgumentNames;
             public readonly bool Unsafe;
@@ -734,7 +734,7 @@ namespace Embers
                     return ReturnValue;
                 }
                 else {
-                    throw new RuntimeException($"{Script.ApproximateLocation}: Wrong number of arguments (given {Arguments.Count}, expected {ArgumentCountRange})");
+                    throw new RuntimeException($"{Script.ApproximateLocation}: Wrong number of arguments for '{Name}' (given {Arguments.Count}, expected {ArgumentCountRange})");
                 }
             }
             public void ChangeFunction(Func<MethodInput, Task<Instance>> function) {
@@ -1103,6 +1103,22 @@ namespace Embers
             LocalInstanceMethod = null;
             return false;
         }
+        Method? ToYieldMethod(Method? Current) {
+            // This makes yield methods (do ... end) be called in the scope they're called in, not the scope of the instance/class.
+            // E.g. 5.times do ... end should be called in the scope of the block and not 5.
+            if (Current != null) {
+                Func<MethodInput, Task<Instance>> CurrentFunction = Current.Function;
+                Module CurrentModule = this.CurrentModule;
+                Instance CurrentInstance = this.CurrentInstance;
+                Current.ChangeFunction(async Input =>
+                    await CreateTemporaryClassScope(CurrentModule, async () =>
+                        await CreateTemporaryInstanceScope(CurrentInstance, async () =>
+                            await CurrentFunction(Input))
+                        )
+                    );
+            }
+            return Current;
+        }
 
         async Task<Instance> InterpretMethodCallExpression(MethodCallExpression MethodCallExpression) {
             Instance MethodPath = await InterpretExpressionAsync(MethodCallExpression.MethodPath, ReturnType.FoundVariable);
@@ -1122,10 +1138,8 @@ namespace Embers
                     // Call class method
                     bool Found = MethodModule.Methods.TryGetValue(MethodReference.Token.Value!, out Method? StaticMethod);
                     if (Found) {
-                        return await CreateTemporaryClassScope(MethodModule, async () =>
-                            await StaticMethod!.Call(
-                                this, MethodOwner, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToMethod(CurrentAccessModifier, CurrentModule)
-                            )
+                        return await StaticMethod!.Call(
+                            this, MethodOwner, await InterpretExpressionsAsync(MethodCallExpression.Arguments), ToYieldMethod(MethodCallExpression.OnYield?.ToMethod(AccessModifier.Public, null))
                         );
                     }
                     else {
@@ -1139,10 +1153,8 @@ namespace Embers
                         // Call local instance method
                         bool Found = TryGetLocalInstanceMethod(MethodReference.Token.Value!, out Method? LocalInstanceMethod);
                         if (Found) {
-                            return await CreateTemporaryInstanceScope(CurrentInstance, async () =>
-                                await LocalInstanceMethod!.Call(
-                                    this, CurrentInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToMethod(CurrentAccessModifier, CurrentModule)
-                                )
+                            return await LocalInstanceMethod!.Call(
+                                this, CurrentInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), ToYieldMethod(MethodCallExpression.OnYield?.ToMethod(AccessModifier.Public, null))
                             );
                         }
                         else {
@@ -1155,10 +1167,8 @@ namespace Embers
                         // Call instance method
                         bool Found = MethodInstance.InstanceMethods.TryGetValue(MethodReference.Token.Value!, out Method? PathInstanceMethod);
                         if (Found) {
-                            return await CreateTemporaryInstanceScope(MethodInstance, async () =>
-                                await PathInstanceMethod!.Call(
-                                    this, MethodInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToMethod(CurrentAccessModifier, CurrentModule)
-                                )
+                            return await PathInstanceMethod!.Call(
+                                this, MethodInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), ToYieldMethod(MethodCallExpression.OnYield?.ToMethod(AccessModifier.Public, null))
                             );
                         }
                         else {

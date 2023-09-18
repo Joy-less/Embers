@@ -88,6 +88,7 @@ else
 end
 =end
 
+=begin
 class A
     def puts
         super 'Hi'
@@ -111,6 +112,22 @@ str[0] = 'Hey'
 puts str
 str[-1] = 'No'
 puts str
+=end
+
+class AB
+    def ab
+        @x = 'hi'
+        5.times do |n|
+            @x = n
+        end
+        puts @x
+    end
+end
+AB.new.ab
+
+{:a => 'hi', 5 => 4}.each do |key, value|
+    p key, value
+end
                     ");
                 });
                 Script.WaitForThreads();

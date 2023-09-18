@@ -287,7 +287,7 @@ namespace Embers
             public override string Serialise() {
                 return $"new {PathToSelf}({Location.Serialise()}, {Statements.Serialise()}, {ArgumentCount.Serialise()}, {Arguments.Serialise()})";
             }
-            public Method ToMethod(AccessModifier AccessModifier, Module Parent) {
+            public Method ToMethod(AccessModifier AccessModifier, Module? Parent) {
                 return new Method(async Input => {
                     return await Input.Script.InternalInterpretAsync(Statements, Input.OnYield);
                 }, ArgumentCount, Arguments, accessModifier: AccessModifier, parent: Parent)
@@ -2049,6 +2049,18 @@ namespace Embers
                                         }
                                     }
                                 }
+                                // Check whether [] is []=
+                                Expression? IsIndexEquals = null;
+                                if (NextObject is Phase2Token NextToken && NextToken.Type == Phase2TokenType.AssignmentOperator && NextToken.Value == "=") {
+                                    if (NextNextObject is Expression IndexAssignmentValue) {
+                                        IsIndexEquals = IndexAssignmentValue;
+                                        // Remove equals and value
+                                        ParsedObjects.RemoveRange(i + 1, 2);
+                                    }
+                                    else {
+                                        throw new SyntaxErrorException($"{Token.Location}: Expected value after []=");
+                                    }
+                                }
 
                                 // Get objects enclosed in []
                                 List<Phase2Object> EnclosedObjects = ParsedObjects.GetIndexRange(OpenBracketIndex + 1, i - 1);
@@ -2060,30 +2072,23 @@ namespace Embers
                                     // Get index
                                     Expression Index = ObjectsToExpression(EnclosedObjects);
                                     // []=
-                                    if (NextObject is Phase2Token NextToken && NextToken.Type == Phase2TokenType.AssignmentOperator && NextToken.Value == "=") {
-                                        if (NextNextObject is Expression IndexAssignmentValue) {
-                                            // Create index equals expression
-                                            ParsedObjects.Insert(OpenBracketIndex, new MethodCallExpression(
-                                                new PathExpression(IsIndexer, new Phase2Token(ParsedObjects[OpenBracketIndex].Location, Phase2TokenType.LocalVariableOrMethod, "[]=")),
-                                                new List<Expression>() { Index, IndexAssignmentValue }
-                                            ));
-                                            // Remove equals and value
-                                            ParsedObjects.RemoveRange(OpenBracketIndex + 1, 2);
-                                            // Remove indexed object
-                                            ParsedObjects.RemoveAt(OpenBracketIndex - 1);
-                                        }
-                                        else {
-                                            throw new SyntaxErrorException($"{Token.Location}: Expected value after []=");
-                                        }
+                                    if (IsIndexEquals != null) {
+                                        // Create index equals expression
+                                        ParsedObjects.Insert(OpenBracketIndex, new MethodCallExpression(
+                                            new PathExpression(IsIndexer, new Phase2Token(ParsedObjects[OpenBracketIndex - 1].Location, Phase2TokenType.LocalVariableOrMethod, "[]=")),
+                                            new List<Expression>() { Index, IsIndexEquals }
+                                        ));
+                                        // Remove object before []
+                                        ParsedObjects.RemoveAt(OpenBracketIndex - 1);
                                     }
                                     // []
                                     else {
                                         // Create indexer expression
                                         ParsedObjects.Insert(OpenBracketIndex, new MethodCallExpression(
-                                            new PathExpression(IsIndexer, new Phase2Token(ParsedObjects[OpenBracketIndex].Location, Phase2TokenType.LocalVariableOrMethod, "[]")),
+                                            new PathExpression(IsIndexer, new Phase2Token(ParsedObjects[OpenBracketIndex - 1].Location, Phase2TokenType.LocalVariableOrMethod, "[]")),
                                             new List<Expression>() { Index }
                                         ));
-                                        // Remove indexed object
+                                        // Remove object before []
                                         ParsedObjects.RemoveAt(OpenBracketIndex - 1);
                                     }
                                 }
