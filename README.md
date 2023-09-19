@@ -80,7 +80,7 @@ puts ""\n---""
 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].each do |n|
     Thread.new {
         print n.to_s + ' '
-    }.start
+    }
 end
 getc
 puts ""\n---""
