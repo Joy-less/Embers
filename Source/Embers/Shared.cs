@@ -26,17 +26,10 @@ namespace Embers
     public class ApiException : EmbersException {
         public ApiException(string Message) : base(Message) { }
     }
-    public class ThrowException : EmbersException {
-        public readonly string Identifier;
-        public static ThrowException New(Instance Identifier) {
-            string Message = $"uncaught throw {Identifier.Inspect()}";
-            return new ThrowException(Message, Identifier.String);
-        }
-        private ThrowException(string Message, string identifier) : base(Message) {
-            Identifier = identifier;
-        }
+    public abstract class NonErrorException : EmbersException {
+        public NonErrorException(string Message) : base(Message) {}
+        public NonErrorException() {}
     }
-    public abstract class NonErrorException : EmbersException { }
     public abstract class LoopControlException : NonErrorException { }
     public class BreakException : LoopControlException { }
     public class RetryException : LoopControlException { }
@@ -46,6 +39,16 @@ namespace Embers
         public readonly Instance Instance;
         public ReturnException(Instance instance) {
             Instance = instance;
+        }
+    }
+    public class ThrowException : NonErrorException {
+        public readonly string Identifier;
+        public static ThrowException New(Instance Identifier) {
+            string Message = $"uncaught throw {Identifier.Inspect()}";
+            return new ThrowException(Message, Identifier.String);
+        }
+        private ThrowException(string Message, string identifier) : base(Message) {
+            Identifier = identifier;
         }
     }
     public class ExitException : NonErrorException { }

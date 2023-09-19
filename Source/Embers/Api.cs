@@ -129,6 +129,7 @@ namespace Embers
             Interpreter.Integer.InstanceMethods["to_f"] = Script.CreateMethod(Integer.to_f, 0);
             Interpreter.Integer.InstanceMethods["times"] = Script.CreateMethod(Integer.times, 0);
             Interpreter.Integer.InstanceMethods["clamp"] = Script.CreateMethod(Integer.clamp, 2);
+            Interpreter.Integer.InstanceMethods["round"] = Script.CreateMethod(Float.round, 0..1);
 
             // Float
             Interpreter.Float.InstanceMethods["+"] = Script.CreateMethod(Float._Add, 1);
@@ -149,6 +150,7 @@ namespace Embers
             Interpreter.Float.InstanceMethods["to_i"] = Script.CreateMethod(Float.to_i, 0);
             Interpreter.Float.InstanceMethods["to_f"] = Script.CreateMethod(Float.to_f, 0);
             Interpreter.Float.InstanceMethods["clamp"] = Script.CreateMethod(Float.clamp, 2);
+            Interpreter.Float.InstanceMethods["round"] = Script.CreateMethod(Float.round, 0..1);
 
             // Proc
             Interpreter.Proc.InstanceMethods["call"] = Script.CreateMethod(Proc.call, null);
@@ -1083,6 +1085,32 @@ namespace Embers
                 }
                 else {
                     return Input.Instance;
+                }
+            }
+            public static async Task<Instance> round(MethodInput Input) {
+                // Get number and number of decimal places
+                double Number = Input.Instance.Float;
+                int DecimalPlaces = 0;
+                if (Input.Arguments.Count == 1)
+                    DecimalPlaces = (int)Math.Min(Input.Arguments[0].Integer, 15);
+                // Round
+                double Result;
+                if (DecimalPlaces >= 0) {
+                    // Round decimal places
+                    Result = Math.Round(Number, DecimalPlaces);
+                }
+                else {
+                    // Round digits before dot
+                    double Factor = Math.Pow(10, -DecimalPlaces);
+                    Result = Math.Round(Number / Factor) * Factor;
+                }
+                long ResultAsLong = (long)Result;
+                // Return result
+                if (Result == ResultAsLong) {
+                    return new IntegerInstance(Input.Interpreter.Integer, ResultAsLong);
+                }
+                else {
+                    return new FloatInstance(Input.Interpreter.Float, Result);
                 }
             }
         }

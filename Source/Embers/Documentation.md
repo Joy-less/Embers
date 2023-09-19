@@ -157,6 +157,9 @@ integer.to_f
 integer.clamp(min, max)
 	Returns min if integer < min, max if integer > max or otherwise integer.
 
+integer.round(digits = 0)
+	Returns the integer rounded to the given number of decimal places (which can be negative).
+
 integer.times {|n|}
 	Repeats the given block the integer number of times.
 ```
@@ -169,6 +172,9 @@ float.to_f
 
 float.clamp(min, max)
 	Returns min if float < min, max if float > max or otherwise float.
+
+float.round(digits = 0)
+	Returns the float rounded to the given number of decimal places (which can be negative).
 ```
 ```
 proc.call(*args)

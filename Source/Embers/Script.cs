@@ -1775,7 +1775,7 @@ namespace Embers
                     await InternalInterpretAsync(BeginBranch.Statements);
                 });
             }
-            catch (Exception Ex) when (Ex is not (ExitException or LoopControlException)) {
+            catch (Exception Ex) when (Ex is not NonErrorException) {
                 ExceptionToRescue = Ex;
             }
 

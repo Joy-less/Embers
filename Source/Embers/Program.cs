@@ -72,53 +72,13 @@ puts_alias 'Aliased!'
                 Script Script = new(Interpreter);
                 Benchmark(() => {
                     Script.Evaluate(@"
-=begin
-puts -1, 2
-puts 4 -1, 2
-
-def a b
-    3
-end
-
-puts a -1
-puts 1 -1
-puts 1 - 1
-
-a = -1
-b = - 2
-c = (- 3.4)
-puts a, b, c
-
-z = 'c'
-if true
-    u = 'b'
-end
-p defined? z
-p defined? u
-=end
-
-def abc zzz
-    sleep(2)
-    2.times do
-        puts '1'
-        2.times do
-            puts '2'
-            yield
-            zzz = 'test'
-        end
-    end
-    puts zzz
-end
-Thread.new {abc 2 do; puts '3'; end}
-abc 2 do; puts '3'; end
-
-puts Time.new
-puts Time.new 2023, 09, 19, 16, 38
-puts Time.new 2023, 09, 19, 16, 38, 5, +5
-puts Time.now
-puts Time.now.to_i
-puts Time.now.to_f
-puts Time.at 140293586
+puts 5.243567.round
+puts 5.243567.round 1
+puts 5.243567.round 0
+puts 5.243567.round 20
+puts 565464.243567.round -1
+puts 565464.243567.round -20
+puts 123456.7.round 1
                     ");
                 });
                 Script.WaitForThreads();
