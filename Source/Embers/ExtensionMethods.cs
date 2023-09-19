@@ -144,10 +144,10 @@ namespace Embers
         public static string PathTo(this Type Self) => (Self.FullName ?? "").Replace('+', '.');
         public static string ReplaceFirst(this string Original, string Replace, string With) {
             int FoundIndex = Original.IndexOf(Replace);
-            if (FoundIndex != -1) {
+            if (FoundIndex != -1)
                 return Original.Remove(FoundIndex, Replace.Length).Insert(FoundIndex, With);
-            }
-            return Original;
+            else
+                return Original;
         }
         public static bool IsAsciiDigit(this char Chara) {
             return Chara >= '0' && Chara <= '9';
