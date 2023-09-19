@@ -409,9 +409,9 @@ namespace Embers
                     // Create a new script
                     FromScript.CurrentObject.CopyTo(ThreadScript.CurrentObject);
                     Phase = ThreadPhase.Running;
-                    // Run the method in the script
-                    _ = Method!.Call(ThreadScript, null, Arguments);
-                    while (!ThreadScript.Stopping && !FromScript.Stopping) {
+                    // Call the method in the script
+                    Task CallTask = Method!.Call(ThreadScript, null, Arguments);
+                    while (!ThreadScript.Stopping && !FromScript.Stopping && !CallTask.IsCompleted) {
                         await Task.Delay(10);
                     }
                     // Stop the script
@@ -1142,16 +1142,16 @@ namespace Embers
                 Func<MethodInput, Task<Instance>> CurrentFunction = Current.Function;
                 Stack<object> OriginalSnapshot = new(CurrentObject);
                 Current.ChangeFunction(async Input => {
-                    Stack<object> TemporarySnapshot = new(CurrentObject);
+                    Stack<object> TemporarySnapshot = new(Input.Script.CurrentObject);
                     try {
-                        CurrentObject.ReplaceContentsWith(OriginalSnapshot);
+                        Input.Script.CurrentObject.ReplaceContentsWith(OriginalSnapshot);
                         return await CreateTemporaryScope(async () => {
-                            await Current.SetArgumentVariables(CurrentScope, Input);
+                            await Current.SetArgumentVariables(Input.Script.CurrentScope, Input);
                             return await CurrentFunction(Input);
                         });
                     }
                     finally {
-                        CurrentObject.ReplaceContentsWith(TemporarySnapshot);
+                        Input.Script.CurrentObject.ReplaceContentsWith(TemporarySnapshot);
                     }
                 });
             }

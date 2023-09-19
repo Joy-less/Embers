@@ -98,6 +98,7 @@ p defined? u
 =end
 
 def abc
+    sleep(2)
     2.times do
         puts '1'
         2.times do
@@ -106,7 +107,8 @@ def abc
         end
     end
 end
-abc {puts '3'}
+# Thread.new {abc {puts '3'}}.join
+Thread.new {sleep(5); puts 'hiyaaa'}
 
 puts Time.new
 puts Time.new 2023, 09, 19, 16, 38
