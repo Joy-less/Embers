@@ -97,18 +97,20 @@ p defined? z
 p defined? u
 =end
 
-def abc
+def abc zzz
     sleep(2)
     2.times do
         puts '1'
         2.times do
             puts '2'
             yield
+            zzz = 'test'
         end
     end
+    puts zzz
 end
-# Thread.new {abc {puts '3'}}.join
-Thread.new {sleep(5); puts 'hiyaaa'}
+Thread.new {abc 2 do; puts '3'; end}
+abc 2 do; puts '3'; end
 
 puts Time.new
 puts Time.new 2023, 09, 19, 16, 38

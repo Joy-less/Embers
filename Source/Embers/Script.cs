@@ -1138,6 +1138,7 @@ namespace Embers
         internal Method? ToYieldMethod(Method? Current) {
             // This makes yield methods (do ... end) be called in the scope they're called in, not the scope of the instance/class.
             // e.g. 5.times do ... end should be called in the scope of the line, not in the instance of 5.
+            // If you've changed this function and are receiving errors, ensure you're referencing Input.Script and not this script.
             if (Current != null) {
                 Func<MethodInput, Task<Instance>> CurrentFunction = Current.Function;
                 Stack<object> OriginalSnapshot = new(CurrentObject);
@@ -1145,7 +1146,7 @@ namespace Embers
                     Stack<object> TemporarySnapshot = new(Input.Script.CurrentObject);
                     try {
                         Input.Script.CurrentObject.ReplaceContentsWith(OriginalSnapshot);
-                        return await CreateTemporaryScope(async () => {
+                        return await Input.Script.CreateTemporaryScope(async () => {
                             await Current.SetArgumentVariables(Input.Script.CurrentScope, Input);
                             return await CurrentFunction(Input);
                         });
