@@ -1886,13 +1886,13 @@ namespace Embers
                 
                 ThreadInstance Thread = (ThreadInstance)Input.Instance;
                 Thread.SetMethod(OnYield);
-                _ = Thread.Thread.Run(Input.Arguments);
+                _ = Thread.Thread.Run(Input.Arguments, Input.OnYield);
 
                 return Input.Interpreter.Nil;
             }
             public static async Task<Instance> join(MethodInput Input) {
                 ThreadInstance Thread = (ThreadInstance)Input.Instance;
-                await Thread.Thread.Run();
+                await Thread.Thread.Run(OnYield: Input.OnYield);
                 return Input.Interpreter.Nil;
             }
             public static async Task<Instance> stop(MethodInput Input) {
@@ -1918,15 +1918,15 @@ namespace Embers
 
                             // Parallel.each do |n, i|
                             if (TakesArguments == 2) {
-                                await Thread.Thread.Run(new List<Instance>() { Current, new IntegerInstance(Input.Interpreter.Integer, CurrentIndex) });
+                                await Thread.Thread.Run(new List<Instance>() { Current, new IntegerInstance(Input.Interpreter.Integer, CurrentIndex) }, Input.OnYield);
                             }
                             // Parallel.each do |n|
                             else if (TakesArguments == 1) {
-                                await Thread.Thread.Run(Current);
+                                await Thread.Thread.Run(Current, Input.OnYield);
                             }
                             // Parallel.each do
                             else {
-                                await Thread.Thread.Run();
+                                await Thread.Thread.Run(OnYield: Input.OnYield);
                             }
                         };
                     }

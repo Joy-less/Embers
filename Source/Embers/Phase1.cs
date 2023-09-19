@@ -33,6 +33,10 @@ namespace Embers
             TernaryQuestion,
             TernaryElse,
         }
+        public static readonly Phase1TokenType[] OmitEndOfStatementAfterList = new Phase1TokenType[] {
+            Phase1TokenType.OpenBracket, Phase1TokenType.AssignmentOperator, Phase1TokenType.Operator, Phase1TokenType.Dot, Phase1TokenType.DoubleColon, Phase1TokenType.Comma,
+            Phase1TokenType.StartCurly, Phase1TokenType.StartSquare, Phase1TokenType.Pipe, Phase1TokenType.RightArrow, Phase1TokenType.TernaryQuestion, Phase1TokenType.TernaryElse
+        };
         public class Phase1Token {
             public readonly DebugLocation Location;
             public Phase1TokenType Type;
@@ -413,7 +417,7 @@ namespace Embers
                             goto case ';';
                         case ';':
                             // Add EndOfStatement if there isn't already one
-                            if (!LastTokenWas(Phase1TokenType.EndOfStatement))
+                            if (!LastTokenWas(Phase1TokenType.EndOfStatement) && !LastTokenWasAny(OmitEndOfStatementAfterList))
                                 AddToken(Phase1TokenType.EndOfStatement, Chara.ToString());
                             // \r + \n --> \r\n
                             else if (Chara == '\n' && Tokens[^1].Value == "\r")
@@ -623,6 +627,7 @@ namespace Embers
                             AddToken(Phase1TokenType.StartSquare, "[");
                             break;
                         case ']':
+                            RemoveEndOfStatement();
                             AddToken(Phase1TokenType.EndSquare, "]");
                             break;
                         case '\\':
@@ -668,6 +673,7 @@ namespace Embers
                     }
                 }
             }
+            // Parse "or", "and" and "not" as operators
             for (int i = 0; i < Tokens.Count; i++) {
                 Phase1Token Token = Tokens[i];
                 if (Token.Type == Phase1TokenType.Identifier) {

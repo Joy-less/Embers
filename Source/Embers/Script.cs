@@ -27,6 +27,8 @@ namespace Embers
 
         public AccessModifier CurrentAccessModifier = AccessModifier.Public;
 
+        Method? CurrentOnYield;
+
         internal readonly ConditionalWeakTable<Exception, ExceptionInstance> ExceptionsTable = new();
         public int ThreadCount { get; private set; }
 
@@ -396,7 +398,7 @@ namespace Embers
                 ThreadScript = new Script(FromScript.Interpreter, FromScript.AllowUnsafeApi);
                 Phase = ThreadPhase.Idle;
             }
-            public async Task Run(Instances? Arguments = null) {
+            public async Task Run(Instances? Arguments = null, Method? OnYield = null) {
                 // If already running, wait until it's finished
                 if (Phase != ThreadPhase.Idle) {
                     while (Phase != ThreadPhase.Completed)
@@ -410,7 +412,7 @@ namespace Embers
                     FromScript.CurrentObject.CopyTo(ThreadScript.CurrentObject);
                     Phase = ThreadPhase.Running;
                     // Call the method in the script
-                    Task CallTask = Method!.Call(ThreadScript, null, Arguments);
+                    Task CallTask = Method!.Call(ThreadScript, null, Arguments, OnYield);
                     while (!ThreadScript.Stopping && !FromScript.Stopping && !CallTask.IsCompleted) {
                         await Task.Delay(10);
                     }
@@ -1159,7 +1161,7 @@ namespace Embers
             return Current;
         }
 
-        async Task<Instance> InterpretMethodCallExpression(MethodCallExpression MethodCallExpression, Method? OnYield) {
+        async Task<Instance> InterpretMethodCallExpression(MethodCallExpression MethodCallExpression) {
             Instance MethodPath = await InterpretExpressionAsync(MethodCallExpression.MethodPath, ReturnType.FoundVariable);
             if (MethodPath is VariableReference MethodReference) {
                 // Static method
@@ -1178,7 +1180,7 @@ namespace Embers
                     bool Found = MethodModule.Methods.TryGetValue(MethodReference.Token.Value!, out Method? StaticMethod);
                     if (Found) {
                         return await StaticMethod!.Call(
-                            this, MethodOwner, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToYieldMethod(this, OnYield)
+                            this, MethodOwner, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToYieldMethod(this, CurrentOnYield)
                         );
                     }
                     else {
@@ -1193,7 +1195,7 @@ namespace Embers
                         bool Found = TryGetLocalInstanceMethod(MethodReference.Token.Value!, out Method? LocalInstanceMethod);
                         if (Found) {
                             return await LocalInstanceMethod!.Call(
-                                this, CurrentInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToYieldMethod(this, OnYield)
+                                this, CurrentInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToYieldMethod(this, CurrentOnYield)
                             );
                         }
                         else {
@@ -1207,7 +1209,7 @@ namespace Embers
                         bool Found = MethodInstance.InstanceMethods.TryGetValue(MethodReference.Token.Value!, out Method? PathInstanceMethod);
                         if (Found) {
                             return await PathInstanceMethod!.Call(
-                                this, MethodInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToYieldMethod(this, OnYield)
+                                this, MethodInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToYieldMethod(this, CurrentOnYield)
                             );
                         }
                         else {
@@ -1442,7 +1444,7 @@ namespace Embers
         }
         async Task<Instance> InterpretIfExpression(IfExpression IfExpression) {
             if (IfExpression.Condition == null || (await InterpretExpressionAsync(IfExpression.Condition)).IsTruthy != IfExpression.Inverse) {
-                return await InternalInterpretAsync(IfExpression.Statements);
+                return await InternalInterpretAsync(IfExpression.Statements, CurrentOnYield);
             }
             return Interpreter.Nil;
         }
@@ -1485,7 +1487,7 @@ namespace Embers
                 }
                 // Run when statements
                 if (WhenApplies) {
-                    return await InternalInterpretAsync(Branch.Statements);
+                    return await InternalInterpretAsync(Branch.Statements, CurrentOnYield);
                 }
             }
             return Interpreter.Nil;
@@ -1507,7 +1509,7 @@ namespace Embers
         async Task<Instance> InterpretWhileExpression(WhileExpression WhileExpression) {
             while ((await InterpretExpressionAsync(WhileExpression.Condition!)).IsTruthy != WhileExpression.Inverse) {
                 try {
-                    await InternalInterpretAsync(WhileExpression.Statements);
+                    await InternalInterpretAsync(WhileExpression.Statements, CurrentOnYield);
                 }
                 catch (BreakException) {
                     break;
@@ -1647,7 +1649,7 @@ namespace Embers
                 CurrentAccessModifier = AccessModifier.Public;
                 await CreateTemporaryClassScope(NewModule, async () => {
                     await CreateTemporaryInstanceScope(new Instance(NewModule), async () => {
-                        await InternalInterpretAsync(DefineClassStatement.BlockStatements);
+                        await InternalInterpretAsync(DefineClassStatement.BlockStatements, CurrentOnYield);
                     });
                 });
                 CurrentAccessModifier = PreviousAccessModifier;
@@ -1669,12 +1671,12 @@ namespace Embers
             }
             return Interpreter.Nil;
         }
-        async Task<Instance> InterpretYieldStatement(YieldStatement YieldStatement, Method? OnYield) {
-            if (OnYield != null) {
+        async Task<Instance> InterpretYieldStatement(YieldStatement YieldStatement) {
+            if (CurrentOnYield != null) {
                 List<Instance> YieldArgs = YieldStatement.YieldValues != null
                     ? await InterpretExpressionsAsync(YieldStatement.YieldValues)
                     : new();
-                await OnYield.Call(this, null, YieldArgs, BreakHandleType: BreakHandleType.Destroy, CatchReturn: false);
+                await CurrentOnYield.Call(this, null, YieldArgs, BreakHandleType: BreakHandleType.Destroy, CatchReturn: false);
             }
             else {
                 throw new RuntimeException($"{YieldStatement.Location}: No block given to yield to");
@@ -1749,7 +1751,7 @@ namespace Embers
                     if (ConditionResult.IsTruthy != Branch.Inverse) {
                         // Run statements
                         return await CreateTemporaryScope(async () =>
-                            await InternalInterpretAsync(Branch.Statements)
+                            await InternalInterpretAsync(Branch.Statements, CurrentOnYield)
                         );
                     }
                 }
@@ -1757,7 +1759,7 @@ namespace Embers
                 else {
                     // Run statements
                     return await CreateTemporaryScope(async () =>
-                        await InternalInterpretAsync(Branch.Statements)
+                        await InternalInterpretAsync(Branch.Statements, CurrentOnYield)
                     );
                 }
             }
@@ -1772,7 +1774,7 @@ namespace Embers
                     // Create scope
                     CurrentObject.Push(new Scope());
                     // Run statements
-                    await InternalInterpretAsync(BeginBranch.Statements);
+                    await InternalInterpretAsync(BeginBranch.Statements, CurrentOnYield);
                 });
             }
             catch (Exception Ex) when (Ex is not NonErrorException) {
@@ -1808,7 +1810,7 @@ namespace Embers
                                 if (RescueStatement.ExceptionVariable != null) {
                                     CurrentScope.LocalVariables.Add(RescueStatement.ExceptionVariable.Value!, ExceptionInstance);
                                 }
-                                await InternalInterpretAsync(RescueStatement.Statements);
+                                await InternalInterpretAsync(RescueStatement.Statements, CurrentOnYield);
                             });
                             break;
                         }
@@ -1824,7 +1826,7 @@ namespace Embers
                 if (Branch is EnsureStatement || (Branch is RescueElseStatement && !Rescued)) {
                     // Run statements
                     await CreateTemporaryScope(async () => {
-                        await InternalInterpretAsync(Branch.Statements);
+                        await InternalInterpretAsync(Branch.Statements, CurrentOnYield);
                     });
                 }
             }
@@ -2023,7 +2025,7 @@ namespace Embers
             FoundVariable,
             HypotheticalVariable
         }
-        async Task<Instance> InterpretExpressionAsync(Expression Expression, ReturnType ReturnType = ReturnType.InterpretResult, Method? OnYield = null) {
+        async Task<Instance> InterpretExpressionAsync(Expression Expression, ReturnType ReturnType = ReturnType.InterpretResult) {
             // Set approximate location
             ApproximateLocation = Expression.Location;
 
@@ -2033,7 +2035,7 @@ namespace Embers
 
             // Interpret expression
             return Expression switch {
-                MethodCallExpression MethodCallExpression => await InterpretMethodCallExpression(MethodCallExpression, OnYield),
+                MethodCallExpression MethodCallExpression => await InterpretMethodCallExpression(MethodCallExpression),
                 ObjectTokenExpression ObjectTokenExpression => await InterpretObjectTokenExpression(ObjectTokenExpression, ReturnType),
                 IfExpression IfExpression => await InterpretIfExpression(IfExpression),
                 WhileExpression WhileExpression => await InterpretWhileExpression(WhileExpression),
@@ -2059,7 +2061,7 @@ namespace Embers
                     LoopControlType.Redo => throw new RedoException(),
                     LoopControlType.Next => throw new NextException(),
                     _ => throw new InternalErrorException($"{Expression.Location}: Loop control type not handled: '{LoopControlStatement.Type}'")},
-                YieldStatement YieldStatement => await InterpretYieldStatement(YieldStatement, OnYield),
+                YieldStatement YieldStatement => await InterpretYieldStatement(YieldStatement),
                 SuperStatement SuperStatement => await InterpretSuperStatement(SuperStatement),
                 AliasStatement AliasStatement => await InterpretAliasStatement(AliasStatement),
                 RangeExpression RangeExpression => await InterpretRangeExpression(RangeExpression),
@@ -2081,15 +2083,23 @@ namespace Embers
             return Results;
         }
         internal async Task<Instance> InternalInterpretAsync(List<Expression> Statements, Method? OnYield = null) {
-            // Interpret statements
-            Instance LastInstance = Interpreter.Nil;
-            for (int Index = 0; Index < Statements.Count; Index++) {
-                // Interpret expression and store the result
-                Expression Statement = Statements[Index];
-                LastInstance = await InterpretExpressionAsync(Statement, OnYield: OnYield);
+            try {
+                // Set on yield
+                CurrentOnYield = OnYield;
+                // Interpret statements
+                Instance LastInstance = Interpreter.Nil;
+                for (int Index = 0; Index < Statements.Count; Index++) {
+                    // Interpret expression and store the result
+                    Expression Statement = Statements[Index];
+                    LastInstance = await InterpretExpressionAsync(Statement);
+                }
+                // Return last expression
+                return LastInstance;
             }
-            // Return last expression
-            return LastInstance;
+            finally {
+                // Reset on yield
+                CurrentOnYield = null;
+            }
         }
         internal async Task<Instance> InternalEvaluateAsync(string Code) {
             // Get statements from code
