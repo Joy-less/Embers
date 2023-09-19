@@ -73,63 +73,48 @@ puts_alias 'Aliased!'
                 Benchmark(() => {
                     Script.Evaluate(@"
 =begin
-puts 5 === (2..7)
-puts (2..7) === 5
-puts (2..7) === (2..7)
-puts (2..7) === 5.5
+puts -1, 2
+puts 4 -1, 2
 
-case 500
-when 1..8
-    puts 'Between 1 and 8'
-when 499..501
-    puts 'Between 499 and 501'
-else
-    puts 'Who knows'
+def a b
+    3
 end
+
+puts a -1
+puts 1 -1
+puts 1 - 1
+
+a = -1
+b = - 2
+c = (- 3.4)
+puts a, b, c
+
+z = 'c'
+if true
+    u = 'b'
+end
+p defined? z
+p defined? u
 =end
 
-=begin
-class A
-    def puts
-        super 'Hi'
-    end
-end
-A.new.puts
-puts 'heya'
-
-module B
-    def self.z
-        self.y
-    end
-    def self.y
-        puts 'y'
-    end
-end
-B.method(:z).call
-
-str = 'Hiya'
-str[0] = 'Hey'
-puts str
-str[-1] = 'No'
-puts str
-=end
-
-class AB
-    def ab
-        @x = 'hi'
-        5.times do |n|
-            @x = n
+def abc
+    2.times do
+        puts '1'
+        2.times do
+            puts '2'
+            yield
         end
-        puts @x
     end
 end
-AB.new.ab
+abc {puts '3'}
 
-{:a => 'hi', 5 => 4}.each do |key, value|
-    p key, value
-end
-puts 5.clamp(2, 3)
-puts 5.clamp(2, 2.4)
+puts Time.new
+puts Time.new 2023, 09, 19, 16, 38
+puts Time.new 2023, 09, 19, 16, 38, 5, +5
+puts Time.now
+puts Time.now.to_i
+puts Time.now.to_f
+puts Time.at 140293586
                     ");
                 });
                 Script.WaitForThreads();

@@ -124,12 +124,16 @@ namespace Embers
                 Target[Pair.Key] = Pair.Value;
             }
         }
-        public static void CopyTo<T>(this Stack<T> Origin, Stack<T> Target) where T : notnull {
+        public static void CopyTo<T>(this Stack<T> Origin, Stack<T> Target) {
             foreach (T Value in Origin) {
                 Target.Push(Value);
             }
         }
-        public static Dictionary<T, T> ListAsHash<T>(this List<T> HashItemsList) where T : Expression {
+        public static void ReplaceContentsWith<T>(this Stack<T> Stack, Stack<T> With) {
+            Stack.Clear();
+            With.CopyTo(Stack);
+        }
+        public static Dictionary<T, T> ListAsHash<T>(this List<T> HashItemsList) where T : notnull {
             Dictionary<T, T> HashItems = new();
             for (int i2 = 0; i2 < HashItemsList.Count; i2 += 2) {
                 HashItems[HashItemsList[i2]] = HashItemsList[i2 + 1];
@@ -159,6 +163,12 @@ namespace Embers
         }
         public static long ParseHexLong(this string String) {
             return long.Parse(String.ToString(), System.Globalization.NumberStyles.HexNumber);
+        }
+        public static long ToUnixTimeSeconds(this DateTimeOffset DateTimeOffset) {
+            return DateTimeOffset.ToUnixTimeSeconds();
+        }
+        public static double ToUnixTimeSecondsDouble(this DateTimeOffset DateTimeOffset) {
+            return DateTimeOffset.ToUnixTimeSeconds() + (DateTimeOffset.Ticks % TimeSpan.TicksPerSecond) / (double)TimeSpan.TicksPerSecond;
         }
 
         //

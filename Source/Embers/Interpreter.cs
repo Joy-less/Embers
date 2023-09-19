@@ -23,13 +23,14 @@ namespace Embers
         public readonly Class Integer;
         public readonly Class Float;
         public readonly Class Proc;
-        public readonly Class Thread;
         public readonly Class Range;
         public readonly Class Array;
         public readonly Class Hash;
         public readonly Class Exception;
         public readonly Class StandardError;
         public readonly Class RuntimeError;
+        public readonly Class Thread;
+        public readonly Class Time;
 
         public readonly NilInstance Nil;
         public readonly TrueInstance True;
@@ -52,7 +53,7 @@ namespace Embers
             Object = new Class("Object", this); Object.InstanceMethods.Remove("initialize"); Object.Methods.Remove("new");
             RootModule = new Module("main", this, Object);
             RootInstance = new Instance(RootModule);
-            RootScope = new Scope(RootInstance);
+            RootScope = new Scope();
 
             Script MainScript = new(this);
 
@@ -64,13 +65,14 @@ namespace Embers
             Integer = MainScript.CreateClass("Integer");
             Float = MainScript.CreateClass("Float");
             Proc = MainScript.CreateClass("Proc");
-            Thread = MainScript.CreateClass("Thread");
             Range = MainScript.CreateClass("Range");
             Array = MainScript.CreateClass("Array");
             Hash = MainScript.CreateClass("Hash");
             Exception = MainScript.CreateClass("Exception");
             StandardError = MainScript.CreateClass("StandardError", InheritsFrom: Exception);
             RuntimeError = MainScript.CreateClass("RuntimeError", InheritsFrom: StandardError);
+            Thread = MainScript.CreateClass("Thread");
+            Time = MainScript.CreateClass("Time");
 
             RandomSeed = InternalRandom.NextInt64();
             Random = new Random(RandomSeed.GetHashCode());

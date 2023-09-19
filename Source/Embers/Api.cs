@@ -242,14 +242,20 @@ namespace Embers
             Interpreter.Exception.InstanceMethods["message"] = Script.CreateMethod(_Exception.message, 0);
 
             // Thread
-            Interpreter.Thread.InstanceMethods["initialize"] = Script.CreateMethod(_Thread.initialize, 0);
+            Interpreter.Thread.InstanceMethods["initialize"] = Script.CreateMethod(_Thread.initialize, null);
             Interpreter.Thread.InstanceMethods["join"] = Script.CreateMethod(_Thread.join, 0);
-            Interpreter.Thread.InstanceMethods["start"] = Script.CreateMethod(_Thread.start, 0);
             Interpreter.Thread.InstanceMethods["stop"] = Script.CreateMethod(_Thread.stop, 0);
 
             // Parallel
             Module ParallelModule = Script.CreateModule("Parallel");
             ParallelModule.Methods["each"] = Script.CreateMethod(_Parallel.each, 1);
+
+            // Time
+            Interpreter.Time.Methods["now"] = Script.CreateMethod(Time.now, 0);
+            Interpreter.Time.Methods["at"] = Script.CreateMethod(Time.at, 1);
+            Interpreter.Time.InstanceMethods["initialize"] = Script.CreateMethod(Time.initialize, 0..7);
+            Interpreter.Time.InstanceMethods["to_i"] = Script.CreateMethod(Time.to_i, 0);
+            Interpreter.Time.InstanceMethods["to_f"] = Script.CreateMethod(Time.to_f, 0);
 
             //
             // UNSAFE APIS
@@ -410,7 +416,15 @@ namespace Embers
             throw new ExitException();
         }
         static async Task<Instance> eval(MethodInput Input) {
-            return await Input.Script.InternalEvaluateAsync(Input.Arguments[0].String);
+            try {
+                return await Input.Script.InternalEvaluateAsync(Input.Arguments[0].String);
+            }
+            catch (LoopControlException Ex) {
+                throw new SyntaxErrorException($"{Input.Location}: Can't escape from eval with {Ex.GetType().Name}");
+            }
+            catch (ReturnException Ex) {
+                return Ex.Instance;
+            }
         }
         static class ClassInstance {
             public static async Task<Instance> _Equals(MethodInput Input) {
@@ -1842,25 +1856,15 @@ namespace Embers
             public static async Task<Instance> initialize(MethodInput Input) {
                 Method? OnYield = Input.OnYield ?? throw new RuntimeException($"{Input.Location}: No block given for Thread.new");
                 
-                ((ThreadInstance)Input.Instance).SetMethod(OnYield);
+                ThreadInstance Thread = (ThreadInstance)Input.Instance;
+                Thread.SetMethod(OnYield);
+                _ = Thread.Thread.Run(Input.Arguments);
 
                 return Input.Interpreter.Nil;
             }
             public static async Task<Instance> join(MethodInput Input) {
                 ThreadInstance Thread = (ThreadInstance)Input.Instance;
                 await Thread.Thread.Run();
-                return Input.Interpreter.Nil;
-            }
-            public static async Task<Instance> start(MethodInput Input) {
-                ThreadInstance Thread = (ThreadInstance)Input.Instance;
-                _ = Thread.Thread.Run();
-                return Input.Interpreter.Nil;
-            }
-            public static async Task<Instance> start_parallel(MethodInput Input) {
-                ThreadInstance Thread = (ThreadInstance)Input.Instance;
-                Parallel.Invoke(() => {
-                    _ = Thread.Thread.Run();
-                });
                 return Input.Interpreter.Nil;
             }
             public static async Task<Instance> stop(MethodInput Input) {
@@ -1902,6 +1906,50 @@ namespace Embers
                     Parallel.Invoke(Methods);
                 }
                 return Input.Interpreter.Nil;
+            }
+        }
+        static class Time {
+            public static async Task<Instance> now(MethodInput Input) {
+                return new TimeInstance(Input.Interpreter.Time, DateTime.Now);
+            }
+            public static async Task<Instance> initialize(MethodInput Input) {
+                int ArgsCount = Input.Arguments.Count;
+
+                int Year = ArgsCount >= 1 ? (int)Input.Arguments[0].Integer : DateTime.Now.Year;
+                int Month = ArgsCount >= 2 ? (int)Input.Arguments[1].Integer : ArgsCount == 0 ? DateTime.Now.Month : 0;
+                double Day = ArgsCount >= 3 ? Input.Arguments[2].Float : ArgsCount == 0 ? DateTime.Now.Day : 0;
+                double Hour = ArgsCount >= 4 ? Input.Arguments[3].Float : ArgsCount == 0 ? DateTime.Now.Hour : 0;
+                double Minute = ArgsCount >= 5 ? Input.Arguments[4].Float : ArgsCount == 0 ? DateTime.Now.Minute : 0;
+                double Second = ArgsCount >= 6 ? Input.Arguments[5].Float : ArgsCount == 0 ? DateTime.Now.Second : 0;
+                TimeSpan UtcOffset = ArgsCount >= 7 ? TimeSpan.FromHours(Input.Arguments[6].Integer) : DateTimeOffset.Now.Offset;
+
+                DateTimeOffset Time = new(Year, Month, (int)Day, (int)Hour, (int)Minute, (int)Second, UtcOffset);
+                Time = Time
+                    .AddDays(Day - Time.Day)
+                    .AddHours(Hour - Time.Hour)
+                    .AddMinutes(Minute - Time.Minute)
+                    .AddSeconds(Second - Time.Second);
+                ((TimeInstance)Input.Instance).SetValue(Time);
+
+                return Input.Interpreter.Nil;
+            }
+            public static async Task<Instance> to_i(MethodInput Input) {
+                return new IntegerInstance(Input.Interpreter.Integer, Input.Instance.Time.ToUnixTimeSeconds());
+            }
+            public static async Task<Instance> to_f(MethodInput Input) {
+                return new FloatInstance(Input.Interpreter.Float, Input.Instance.Time.ToUnixTimeSecondsDouble());
+            }
+            public static async Task<Instance> at(MethodInput Input) {
+                double Seconds = Input.Arguments[0].Float;
+                long TruncatedSeconds = (long)Seconds;
+
+                DateTimeOffset dateTimeOffset = DateTimeOffset.FromUnixTimeSeconds(TruncatedSeconds);
+                TimeSpan TimeZoneOffset = TimeZoneInfo.Local.GetUtcOffset(DateTime.UtcNow);
+                dateTimeOffset = dateTimeOffset.ToOffset(TimeZoneOffset);
+                DateTime Time = dateTimeOffset.DateTime;
+                Time = Time.AddSeconds(Seconds - TruncatedSeconds);
+
+                return new TimeInstance(Input.Interpreter.Time, Time);
             }
         }
     }

@@ -293,6 +293,12 @@ namespace Embers
                 }, ArgumentCount, Arguments, accessModifier: AccessModifier, parent: Parent)
                 { Name = Name };
             }
+            public Method? ToYieldMethod(Script Script, Method? OnYield) {
+                return Script.ToYieldMethod(new Method(async Input => {
+                    return await Input.Script.InternalInterpretAsync(Statements, OnYield);
+                }, ArgumentCount, Arguments, accessModifier: AccessModifier.Public)
+                { Name = Name });
+            }
         }
         public class SelfExpression : Expression {
             public SelfExpression(DebugLocation location) : base(location) { }
@@ -2198,8 +2204,16 @@ namespace Embers
 
                         // Add method call expression for unary operator
                         if (NextObjectToken != null) {
-                            bool DoesNotFollowExpression = LastUnknownObject is null or not ObjectTokenExpression;
-                            if (DoesNotFollowExpression) {
+                            /*If previous object is LocalVariableOrMethod/ConstantOrMethod, then it's add/sub unless space before operator AND NO space after operator
+                              If there is no previous object, then it's unary.
+                              If the previous object is an ObjectToken/VariableToken, then it's add/sub.
+                              Otherwise, it's unary.*/
+                            ObjectTokenExpression? LastObjectToken = LastUnknownObject as ObjectTokenExpression;
+                            bool LastObjectIsMethod = LastObjectToken != null && LastObjectToken.Token.Type is Phase2TokenType.LocalVariableOrMethod or Phase2TokenType.ConstantOrMethod;
+                            bool LastObjectIsObjectToken = LastObjectToken != null && (LastObjectToken.Token.IsObjectToken || IsVariableToken(LastObjectToken.Token));
+                            bool SpaceBeforeOperator = Token.FollowsWhitespace;
+                            bool SpaceAfterOperator = Token.FollowedByWhitespace;
+                            if ((LastObjectIsMethod && SpaceBeforeOperator && !SpaceAfterOperator) || LastUnknownObject == null || !LastObjectIsObjectToken) {
                                 ParsedObjects.RemoveRange(i, 2);
                                 ParsedObjects.Insert(i, new MethodCallExpression(
                                     new PathExpression(NextObjectToken, new Phase2Token(NextObjectToken.Location, Phase2TokenType.LocalVariableOrMethod, Token.Value! + "@")),

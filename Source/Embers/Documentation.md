@@ -293,14 +293,11 @@ exception.message
 	Returns the exception's message.
 ```
 ```
-Thread.new {}
-	Returns a thread created from the given block. It can only be run once.
+Thread.new(*args) {}
+	Runs the given block asynchronously and returns the thread.
 
 thread.join
-	Runs the thread in the current thread if it's not already started, and waits for it to finish.
-
-thread.start
-	Runs the thread in the background if it's not already started.
+	Waits for the thread to finish.
 
 thread.stop
 	Stops the thread.
@@ -308,6 +305,22 @@ thread.stop
 ```
 Parallel.each(array) {|n, i|}
 	Creates a new thread for each item in the array and repeats the given block in parallel for each thread.
+```
+```
+Time.new | Time.new(year, [month = 0], [day = 0], [hour = 0], [minute = 0], [second = 0], [utc_offset = +0])
+	Returns a time instance representing the local time or the given time.
+
+Time.now
+	Returns a time instance representing the local time.
+
+Time.at(timestamp)
+	Returns a time instance representing the time, timestamp seconds after the epoch (1970-01-01 00:00:00 +0).
+
+time.to_i
+	Returns the amount of seconds since the epoch as an integer.
+
+time.to_f
+	Returns the amount of seconds since the epoch as a float.
 ```
 ```
 __LINE__
