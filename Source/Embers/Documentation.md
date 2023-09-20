@@ -77,6 +77,9 @@ object.is_a?(module)
 object.instance_of?(module)
 	Returns true if the object is an instance of the module or a module that inherits from it.
 
+object.in?(array)
+	Returns true if the array contains the item.
+
 instance.attr_reader(instance_variable_name)
 	Creates an instance method called "{the given name}" which returns the given instance variable.
 
@@ -160,10 +163,16 @@ integer.clamp(min, max)
 integer.round(digits = 0)
 	Returns the integer rounded to the given number of decimal places (which can be negative).
 
+integer.floor, integer.ceil, integer.truncate
+	Returns the integer.
+
 integer.times {|n|}
 	Repeats the given block the integer number of times.
 ```
 ```
+Float::INFINITY
+	A constant representing positive infinity.
+
 float.to_i
 	Returns the float as a truncated integer.
 
@@ -175,6 +184,15 @@ float.clamp(min, max)
 
 float.round(digits = 0)
 	Returns the float rounded to the given number of decimal places (which can be negative).
+
+float.floor
+	Returns the highest integer lower than the given float.
+
+float.ceil
+	Returns the lowest integer higher than the given float.
+
+float.truncate
+	Returns the float as an integer with the decimal places removed.
 ```
 ```
 proc.call(*args)
@@ -234,14 +252,14 @@ array.sort {|a, b|} | array.sort! {|item|}
 	If a block is given, returns a new array sorted by the block's return value. It should return -1 if a -> b, 0 if a and b are the same, and 1 if b -> a.
 	If a block is not given, returns a new array sorted in ascending order by the "<=>" operator.
 
-array.contains?(item)
-	Returns true if the array contains the item.
-
-array.include?(item)
+array.include?(item) | array.includes?(item) | array.contain?(item) | array.contains?(item)
 	Returns true if the array contains the item.
 
 array.empty?
 	Returns true if the array contains no items.
+
+array.reverse | array.reverse!
+	Returns the array in the opposite order.
 ```
 ```
 Hash.new([default_value = nil])
@@ -276,16 +294,22 @@ hash.empty?
 ```
 ```
 Math::PI
-	A constant containig 17 digits of pi.
+	A constant containing 17 digits of pi.
 
 Math::E
-	A constant containig 17 digits of e.
+	A constant containing 17 digits of e.
 
 Math.sqrt(number)
 	Returns the square root of the number.
 
 Math.cbrt(number)
 	Returns the cube root of the number.
+
+Math.to_rad(degrees)
+	Returns the degrees in radians.
+
+Math.to_deg(radians)
+	Returns the radians in degrees.
 
 Math.sin, Math.cos, Math.tan, Math.asin, Math.acos, Math.atan, Math.atan2, Math.sinh, Math.cosh, Math.tanh, Math.asinh, Math.acosh,
 Math.atanh, Math.exp, Math.log, Math.log10, Math.log2, Math.frexp, Math.ldexp, Math.hypot, Math.erf, Math.erfc, Math.gamma, Math.lgamma
@@ -360,4 +384,7 @@ File.read(file_path)
 
 File.write(file_path, text)
 	Writes the text to the given file.
+
+File.exist?(file_path) | File.exists?(file_path)
+	Returns true if a file exists with the given path.
 ```

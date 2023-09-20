@@ -32,6 +32,7 @@ namespace Embers
             Interpreter.Object.InstanceMethods["methods"] = Interpreter.Object.Methods["methods"] = Script.CreateMethod(ClassInstance.methods, 0);
             Interpreter.Object.InstanceMethods["is_a?"] = Interpreter.Object.Methods["is_a?"] = Script.CreateMethod(ClassInstance.is_a7, 1);
             Interpreter.Object.InstanceMethods["instance_of?"] = Interpreter.Object.Methods["instance_of?"] = Script.CreateMethod(ClassInstance.instance_of7, 1);
+            Interpreter.Object.InstanceMethods["in?"] = Interpreter.Object.Methods["in?"] = Script.CreateMethod(ClassInstance.in7, 1);
 
             Script.CurrentAccessModifier = AccessModifier.Protected;
             Interpreter.Object.InstanceMethods["puts"] = Interpreter.Object.Methods["puts"] = Script.CreateMethod(puts, null);
@@ -130,8 +131,12 @@ namespace Embers
             Interpreter.Integer.InstanceMethods["times"] = Script.CreateMethod(Integer.times, 0);
             Interpreter.Integer.InstanceMethods["clamp"] = Script.CreateMethod(Integer.clamp, 2);
             Interpreter.Integer.InstanceMethods["round"] = Script.CreateMethod(Float.round, 0..1);
+            Interpreter.Integer.InstanceMethods["floor"] = Script.CreateMethod(Float.floor, 0);
+            Interpreter.Integer.InstanceMethods["ceil"] = Script.CreateMethod(Float.ceil, 0);
+            Interpreter.Integer.InstanceMethods["truncate"] = Script.CreateMethod(Float.truncate, 0);
 
             // Float
+            Interpreter.Float.Constants["INFINITY"] = new FloatInstance(Interpreter.Float, double.PositiveInfinity);
             Interpreter.Float.InstanceMethods["+"] = Script.CreateMethod(Float._Add, 1);
             Interpreter.Float.InstanceMethods["-"] = Script.CreateMethod(Float._Subtract, 1);
             Interpreter.Float.InstanceMethods["*"] = Script.CreateMethod(Float._Multiply, 1);
@@ -151,6 +156,9 @@ namespace Embers
             Interpreter.Float.InstanceMethods["to_f"] = Script.CreateMethod(Float.to_f, 0);
             Interpreter.Float.InstanceMethods["clamp"] = Script.CreateMethod(Float.clamp, 2);
             Interpreter.Float.InstanceMethods["round"] = Script.CreateMethod(Float.round, 0..1);
+            Interpreter.Float.InstanceMethods["floor"] = Script.CreateMethod(Float.floor, 0);
+            Interpreter.Float.InstanceMethods["ceil"] = Script.CreateMethod(Float.ceil, 0);
+            Interpreter.Float.InstanceMethods["truncate"] = Script.CreateMethod(Float.truncate, 0);
 
             // Proc
             Interpreter.Proc.InstanceMethods["call"] = Script.CreateMethod(Proc.call, null);
@@ -183,9 +191,10 @@ namespace Embers
             Interpreter.Array.InstanceMethods["map!"] = Script.CreateMethod(Array.map1, 0);
             Interpreter.Array.InstanceMethods["sort"] = Script.CreateMethod(Array.sort, 0);
             Interpreter.Array.InstanceMethods["sort!"] = Script.CreateMethod(Array.sort1, 0);
-            Interpreter.Array.InstanceMethods["contains?"] = Script.CreateMethod(Array.contains7, 1);
-            Interpreter.Array.InstanceMethods["include?"] = Script.CreateMethod(Array.contains7, 1);
+            Interpreter.Array.InstanceMethods["include?", "includes?", "contain?", "contains?"] = Script.CreateMethod(Array.include7, 1);
             Interpreter.Array.InstanceMethods["empty?"] = Script.CreateMethod(Array.empty7, 0);
+            Interpreter.Array.InstanceMethods["reverse"] = Script.CreateMethod(Array.reverse, 0);
+            Interpreter.Array.InstanceMethods["reverse!"] = Script.CreateMethod(Array.reverse1, 0);
 
             // Hash
             Interpreter.Hash.InstanceMethods["[]"] = Script.CreateMethod(Hash._Indexer, 1);
@@ -238,6 +247,8 @@ namespace Embers
             MathModule.Methods["erfc"] = Script.CreateMethod(_Math.erfc, 1);
             MathModule.Methods["gamma"] = Script.CreateMethod(_Math.gamma, 1);
             MathModule.Methods["lgamma"] = Script.CreateMethod(_Math.lgamma, 1);
+            MathModule.Methods["to_rad"] = Script.CreateMethod(_Math.to_rad, 1);
+            MathModule.Methods["to_deg"] = Script.CreateMethod(_Math.to_deg, 1);
 
             // Exception
             Interpreter.Exception.InstanceMethods["initialize"] = Script.CreateMethod(_Exception.initialize, 0..1);
@@ -270,6 +281,7 @@ namespace Embers
             Module FileModule = Script.CreateModule("File");
             FileModule.Methods["read"] = Script.CreateMethod(File.read, 1, IsUnsafe: true);
             FileModule.Methods["write"] = Script.CreateMethod(File.write, 2, IsUnsafe: true);
+            FileModule.Methods["exist?", "exists?"] = Script.CreateMethod(File.exist7, 1, IsUnsafe: true);
         }
 
         // API
@@ -516,6 +528,15 @@ namespace Embers
                     return Input.Interpreter.False;
                 }
             }
+            public static async Task<Instance> in7(MethodInput Input) {
+                List<Instance> Array = Input.Arguments[0].Array;
+                foreach (Instance Item in Array) {
+                    if ((await Item.InstanceMethods["=="].Call(Input.Script, Item, Input.Instance)).IsTruthy) {
+                        return Input.Interpreter.True;
+                    }
+                }
+                return Input.Interpreter.False;
+            }
             public static async Task<Instance> attr_reader(MethodInput Input) {
                 string VariableName = Input.Arguments[0].String;
                 // Prevent redefining unsafe API methods
@@ -754,7 +775,7 @@ namespace Embers
             public static async Task<Instance> to_a(MethodInput Input) {
                 List<Instance> Array = new();
                 foreach (char Chara in Input.Instance.String) {
-                    Array.Add(new StringInstance(Input.Interpreter.Array, Chara.ToString()));
+                    Array.Add(new StringInstance(Input.Interpreter.String, Chara.ToString()));
                 }
                 return new ArrayInstance(Input.Interpreter.Array, Array);
             }
@@ -1113,6 +1134,18 @@ namespace Embers
                     return new FloatInstance(Input.Interpreter.Float, Result);
                 }
             }
+            public static async Task<Instance> floor(MethodInput Input) {
+                long Result = (long)Math.Floor(Input.Instance.Float);
+                return new IntegerInstance(Input.Interpreter.Integer, Result);
+            }
+            public static async Task<Instance> ceil(MethodInput Input) {
+                long Result = (long)Math.Ceiling(Input.Instance.Float);
+                return new IntegerInstance(Input.Interpreter.Integer, Result);
+            }
+            public static async Task<Instance> truncate(MethodInput Input) {
+                long Result = (long)Math.Truncate(Input.Instance.Float);
+                return new IntegerInstance(Input.Interpreter.Integer, Result);
+            }
         }
         static class File {
             public static async Task<Instance> read(MethodInput Input) {
@@ -1138,6 +1171,11 @@ namespace Embers
                 catch (Exception Ex) {
                     throw new RuntimeException($"{Input.Location}: Error writing file: '{Ex.Message}'");
                 }
+            }
+            public static async Task<Instance> exist7(MethodInput Input) {
+                string FilePath = Input.Arguments[0].String;
+                bool Exists = System.IO.File.Exists(FilePath);
+                return Exists ? Input.Interpreter.True : Input.Interpreter.False;
             }
         }
         static class Proc {
@@ -1523,7 +1561,7 @@ namespace Embers
             }
             public static async Task<Instance> sort(MethodInput Input) => await _sort(Input, false);
             public static async Task<Instance> sort1(MethodInput Input) => await _sort(Input, true);
-            public static async Task<Instance> contains7(MethodInput Input) {
+            public static async Task<Instance> include7(MethodInput Input) {
                 Instance ItemToFind = Input.Arguments[0];
                 foreach (Instance Item in Input.Instance.Array) {
                     if ((await Item.InstanceMethods["=="].Call(Input.Script, Item, ItemToFind)).IsTruthy) {
@@ -1534,6 +1572,15 @@ namespace Embers
             }
             public static async Task<Instance> empty7(MethodInput Input) {
                 return Input.Instance.Array.Count == 0 ? Input.Interpreter.True : Input.Interpreter.False;
+            }
+            public static async Task<Instance> reverse(MethodInput Input) {
+                List<Instance> ReversedArray = new(Input.Instance.Array);
+                ReversedArray.Reverse();
+                return new ArrayInstance(Input.Interpreter.Array, ReversedArray);
+            }
+            public static async Task<Instance> reverse1(MethodInput Input) {
+                Input.Instance.Array.Reverse();
+                return Input.Instance;
             }
         }
         static class Hash {
@@ -1863,10 +1910,18 @@ namespace Embers
                 double GammaValue = _Gamma(Value);
                 double A = Math.Log(Math.Abs(GammaValue));
                 long B = GammaValue < 0 ? -1 : 1;
-                return new ArrayInstance(Input.Interpreter.Float, new List<Instance>() {
+                return new ArrayInstance(Input.Interpreter.Array, new List<Instance>() {
                     new FloatInstance(Input.Interpreter.Float, A),
-                    new IntegerInstance(Input.Interpreter.Float, B)
+                    new IntegerInstance(Input.Interpreter.Integer, B)
                 });
+            }
+            public static async Task<Instance> to_rad(MethodInput Input) {
+                double Degrees = Input.Arguments[0].Float;
+                return new FloatInstance(Input.Interpreter.Float, Degrees * (Math.PI / 180));
+            }
+            public static async Task<Instance> to_deg(MethodInput Input) {
+                double Radians = Input.Arguments[0].Float;
+                return new FloatInstance(Input.Interpreter.Float, Radians / (Math.PI / 180));
             }
         }
         static class _Exception {

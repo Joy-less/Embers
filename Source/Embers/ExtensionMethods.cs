@@ -76,6 +76,17 @@ namespace Embers
             }
             return ListInspection;
         }
+        public static string LightInspectInstances<T>(this List<T>? List, string Separator = ", ") where T : Instance {
+            string ListInspection = "";
+            if (List != null) {
+                foreach (Instance Object in List) {
+                    if (ListInspection.Length != 0)
+                        ListInspection += Separator;
+                    ListInspection += Object.LightInspect();
+                }
+            }
+            return ListInspection;
+        }
         public static string Serialise<T>(this Dictionary<T, T> Dictionary) where T : Phase2Object {
             string Serialised = $"new Dictionary<{typeof(T).PathTo()}, {typeof(T).PathTo()}>() {{";
             bool IsFirst = true;

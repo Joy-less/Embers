@@ -347,10 +347,14 @@ namespace Embers
             public override double Float { get { return Value; } }
             public override long Integer { get { return (long)Value; } }
             public override string Inspect() {
+                if (double.IsPositiveInfinity(Value))
+                    return "Infinity";
+                else if (double.IsNegativeInfinity(Value))
+                    return "-Infinity";
+
                 string FloatString = Value.ToString();
-                if (!FloatString.Contains('.')) {
+                if (!FloatString.Contains('.'))
                     FloatString += ".0";
-                }
                 return FloatString;
             }
             public FloatInstance(Class fromClass, double value) : base(fromClass) {
@@ -481,6 +485,9 @@ namespace Embers
             public override List<Instance> Array { get { return Value; } }
             public override string Inspect() {
                 return $"[{Value.InspectInstances()}]";
+            }
+            public override string LightInspect() {
+                return Value.LightInspectInstances("\n");
             }
             public ArrayInstance(Class fromClass, List<Instance> value) : base(fromClass) {
                 Value = value;
@@ -905,17 +912,26 @@ namespace Embers
                 set {
                     TrySetMethodName(Key, value);
                     base[Key] = value;
-                    SetEvent.Raise(handler => handler(Key, value));
+                    SetEvent.Raise(Handler => Handler(Key, value));
+                }
+            }
+            public TValue this[params TKey[] Keys] {
+                set {
+                    foreach (TKey Key in Keys) {
+                        TrySetMethodName(Key, value);
+                        base[Key] = value;
+                        SetEvent.Raise(Handler => Handler(Key, value));
+                    }
                 }
             }
             public new void Add(TKey Key, TValue Value) {
                 TrySetMethodName(Key, Value);
                 base.Add(Key, Value);
-                SetEvent.Raise(handler => handler(Key, Value));
+                SetEvent.Raise(Handler => Handler(Key, Value));
             }
             public new bool Remove(TKey Key) {
                 if (base.Remove(Key)) {
-                    RemovedEvent.Raise(handler => handler(Key));
+                    RemovedEvent.Raise(Handler => Handler(Key));
                     return true;
                 }
                 return false;

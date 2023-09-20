@@ -79,6 +79,16 @@ puts 5.243567.round 20
 puts 565464.243567.round -1
 puts 565464.243567.round -20
 puts 123456.7.round 1
+
+puts 5.in? [2, 5, 7]
+puts 5.in? [2, 6, 7]
+
+puts 5.ceil
+
+p 123.to_s.to_a.map {|n| n.to_i}.reverse
+
+puts Float::INFINITY
+puts -Float::INFINITY
                     ");
                 });
                 Script.WaitForThreads();
