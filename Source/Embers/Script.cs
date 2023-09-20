@@ -175,7 +175,7 @@ namespace Embers
             public virtual Module ModuleRef { get { throw new ApiException("Instance is not a class/module reference"); } }
             public virtual Method MethodRef { get { throw new ApiException("Instance is not a method reference"); } }
             public virtual string Inspect() {
-                return $"Instance of {Module?.Name}";
+                return $"#<{Module?.Name}:0x{GetHashCode():x16}>";
             }
             public virtual string LightInspect() {
                 return Inspect();
@@ -368,9 +368,6 @@ namespace Embers
             Method Value;
             public override object? Object { get { return Value; } }
             public override Method Proc { get { return Value; } }
-            public override string Inspect() {
-                return "ProcInstance";
-            }
             public ProcInstance(Class fromClass, Method value) : base(fromClass) {
                 Value = value;
             }
@@ -382,9 +379,6 @@ namespace Embers
             public readonly ScriptThread ScriptThread;
             public override object? Object { get { return ScriptThread; } }
             public override ScriptThread Thread { get { return ScriptThread; } }
-            public override string Inspect() {
-                return $"ThreadInstance";
-            }
             public ThreadInstance(Class fromClass, Script fromScript) : base(fromClass) {
                 ScriptThread = new(fromScript);
             }
@@ -529,9 +523,6 @@ namespace Embers
             Exception Value;
             public override object? Object { get { return Value; } }
             public override Exception Exception { get { return Value; } }
-            public override string Inspect() {
-                return $"ExceptionInstance('{Value.Message}')";
-            }
             public ExceptionInstance(Class fromClass, string message) : base(fromClass) {
                 Value = new Exception(message);
             }
@@ -588,7 +579,7 @@ namespace Embers
                 Scope = scope;
             }
         }
-        public class ModuleReference : PseudoInstance {
+        public class ModuleReference : Instance {
             public override object? Object { get { return Module; } }
             public override Module ModuleRef { get { return Module!; } }
             public override string Inspect() {
@@ -1437,14 +1428,10 @@ namespace Embers
                                 else {
                                     throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Uninitialized class variable '{ObjectTokenExpression.Token.Value!}' for {CurrentModule}");
                                 }
-                                }
+                            }
                             // Symbol
                             case Phase2TokenType.Symbol: {
                                 return GetSymbol(ObjectTokenExpression.Token.Value!);
-                            }
-                            // Self
-                            case Phase2TokenType.Self: {
-                                return new ModuleReference(CurrentModule);
                             }
                             // Error
                             default:
@@ -1664,7 +1651,7 @@ namespace Embers
                 AccessModifier PreviousAccessModifier = CurrentAccessModifier;
                 CurrentAccessModifier = AccessModifier.Public;
                 await CreateTemporaryClassScope(NewModule, async () => {
-                    await CreateTemporaryInstanceScope(new Instance(NewModule), async () => {
+                    await CreateTemporaryInstanceScope(new ModuleReference(NewModule), async () => {
                         await InternalInterpretAsync(DefineClassStatement.BlockStatements, CurrentOnYield);
                     });
                 });
@@ -2062,7 +2049,7 @@ namespace Embers
                 HashExpression HashExpression => await InterpretHashExpression(HashExpression),
                 WhileStatement WhileStatement => await InterpretWhileStatement(WhileStatement),
                 ForStatement ForStatement => await InterpretForStatement(ForStatement),
-                SelfExpression => new ModuleReference(CurrentModule),
+                SelfExpression => CurrentInstance,
                 LogicalExpression LogicalExpression => await InterpretLogicalExpression(LogicalExpression),
                 NotExpression NotExpression => await InterpretNotExpression(NotExpression),
                 DefineMethodStatement DefineMethodStatement => await InterpretDefineMethodStatement(DefineMethodStatement),

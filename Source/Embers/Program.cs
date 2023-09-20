@@ -89,6 +89,15 @@ p 123.to_s.to_a.map {|n| n.to_i}.reverse
 
 puts Float::INFINITY
 puts -Float::INFINITY
+
+class MyClass
+end
+
+obj1 = MyClass.new
+obj2 = MyClass.new
+
+puts obj1.inspect
+puts obj2.inspect
                     ");
                 });
                 Script.WaitForThreads();
