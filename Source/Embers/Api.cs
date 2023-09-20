@@ -1949,7 +1949,7 @@ namespace Embers
                 double Hour = ArgsCount >= 4 ? Input.Arguments[3].Float : ArgsCount == 0 ? DateTime.Now.Hour : 0;
                 double Minute = ArgsCount >= 5 ? Input.Arguments[4].Float : ArgsCount == 0 ? DateTime.Now.Minute : 0;
                 double Second = ArgsCount >= 6 ? Input.Arguments[5].Float : ArgsCount == 0 ? DateTime.Now.Second : 0;
-                TimeSpan UtcOffset = ArgsCount >= 7 ? TimeSpan.FromHours(Input.Arguments[6].Integer) : DateTimeOffset.Now.Offset;
+                TimeSpan UtcOffset = ArgsCount >= 7 ? TimeSpan.FromHours(Input.Arguments[6].Float) : DateTimeOffset.Now.Offset;
 
                 DateTimeOffset Time = new(Year, Month, (int)Day, (int)Hour, (int)Minute, (int)Second, UtcOffset);
                 Time = Time
@@ -1971,10 +1971,10 @@ namespace Embers
                 double Seconds = Input.Arguments[0].Float;
                 long TruncatedSeconds = (long)Seconds;
 
-                DateTimeOffset dateTimeOffset = DateTimeOffset.FromUnixTimeSeconds(TruncatedSeconds);
+                DateTimeOffset DateTimeOffset = DateTimeOffset.FromUnixTimeSeconds(TruncatedSeconds);
                 TimeSpan TimeZoneOffset = TimeZoneInfo.Local.GetUtcOffset(DateTime.UtcNow);
-                dateTimeOffset = dateTimeOffset.ToOffset(TimeZoneOffset);
-                DateTime Time = dateTimeOffset.DateTime;
+                DateTimeOffset = DateTimeOffset.ToOffset(TimeZoneOffset);
+                DateTime Time = DateTimeOffset.DateTime;
                 Time = Time.AddSeconds(Seconds - TruncatedSeconds);
 
                 return new TimeInstance(Input.Interpreter.Time, Time);
