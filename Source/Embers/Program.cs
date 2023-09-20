@@ -91,6 +91,12 @@ puts Float::INFINITY
 puts -Float::INFINITY
 
 class MyClass
+    def a
+        puts 'a'
+    end
+    def self.b
+        puts 'b'
+    end
 end
 
 obj1 = MyClass.new
@@ -98,6 +104,13 @@ obj2 = MyClass.new
 
 puts obj1.inspect
 puts obj2.inspect
+
+MyClass.new.a
+MyClass.b
+puts Math.method :sqrt
+puts 5.is_a? Integer
+puts Integer.is_a? Integer
+p Integer.methods
                     ");
                 });
                 Script.WaitForThreads();

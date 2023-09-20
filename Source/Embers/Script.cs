@@ -579,7 +579,9 @@ namespace Embers
                 Scope = scope;
             }
         }
-        public class ModuleReference : Instance {
+        public class ModuleReference : PseudoInstance {
+            public override ReactiveDictionary<string, Instance> InstanceVariables { get; } = new();
+            public override ReactiveDictionary<string, Method> InstanceMethods { get; } = new();
             public override object? Object { get { return Module; } }
             public override Module ModuleRef { get { return Module!; } }
             public override string Inspect() {
