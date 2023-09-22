@@ -770,7 +770,7 @@ namespace Embers
                 return new FloatInstance(Input.Interpreter.Float, FloatString.ToString().ParseDouble());
             }
             public static async Task<Instance> to_sym(MethodInput Input) {
-                return new SymbolInstance(Input.Interpreter.Symbol, Input.Instance.LightInspect());
+                return Input.Script.GetSymbol(Input.Instance.String);
             }
             public static async Task<Instance> to_a(MethodInput Input) {
                 List<Instance> Array = new();
