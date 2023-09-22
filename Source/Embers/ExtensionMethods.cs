@@ -130,20 +130,6 @@ namespace Embers
                 Target[Pair.Key] = Pair.Value;
             }
         }
-        public static void CopyTo<TKey, TValue>(this IReadOnlyDictionary<TKey, TValue> Origin, Dictionary<TKey, TValue> Target) where TKey : notnull {
-            foreach (KeyValuePair<TKey, TValue> Pair in Origin) {
-                Target[Pair.Key] = Pair.Value;
-            }
-        }
-        public static void CopyTo<T>(this Stack<T> Origin, Stack<T> Target) {
-            foreach (T Value in Origin) {
-                Target.Push(Value);
-            }
-        }
-        public static void ReplaceContentsWith<T>(this Stack<T> Stack, Stack<T> With) {
-            Stack.Clear();
-            With.CopyTo(Stack);
-        }
         public static Dictionary<T, T> ListAsHash<T>(this List<T> HashItemsList) where T : notnull {
             Dictionary<T, T> HashItems = new();
             for (int i2 = 0; i2 < HashItemsList.Count; i2 += 2) {
@@ -185,17 +171,6 @@ namespace Embers
         //
         // Compatibility
         //
-        #if !NET6_0_OR_GREATER
-            public static Task WaitForExitAsync(this Process Process) {
-                if (Process.HasExited) return Task.CompletedTask;
-
-                TaskCompletionSource<object?> TCS = new();
-                Process.EnableRaisingEvents = true;
-                Process.Exited += (sender, args) => TCS.TrySetResult(null);
-
-                return Process.HasExited ? Task.CompletedTask : TCS.Task;
-            }
-        #endif
         #if !NET5_0_OR_GREATER
             public static long NextInt64(this Random Random) {
                 byte[] Buffer = new byte[8];
@@ -222,6 +197,17 @@ namespace Embers
                 Result = Math.Abs(Result % Range) + IncludingMin;
 
                 return Result;
+            }
+        #endif
+        #if !NET6_0_OR_GREATER
+            public static Task WaitForExitAsync(this Process Process) {
+                if (Process.HasExited) return Task.CompletedTask;
+
+                TaskCompletionSource<object?> TCS = new();
+                Process.EnableRaisingEvents = true;
+                Process.Exited += (Sender, Args) => TCS.TrySetResult(null);
+
+                return Process.HasExited ? Task.CompletedTask : TCS.Task;
             }
         #endif
         #if !NET7_0_OR_GREATER

@@ -66,7 +66,7 @@ puts_alias 'Aliased!'
                 Console.WriteLine("Done.");
                 Console.ReadLine();
             }*/
-            // Test 2
+            /*// Test 2
             {
                 Interpreter Interpreter = new();
                 Script Script = new(Interpreter);
@@ -127,12 +127,12 @@ p a, b
                 Script.WaitForThreads();
                 Console.WriteLine("Done.");
                 Console.ReadLine();
-            }
+            }*/
             // Benchmark
             {
                 Interpreter Interpreter = new();
                 Script Script = new(Interpreter);
-                Benchmark(() => 
+                Benchmark(() =>
                     Script.Evaluate("250_000_000.times do \n end")
                 );
                 Console.ReadLine();

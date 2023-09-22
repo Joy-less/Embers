@@ -18,7 +18,7 @@ namespace Embers
         public bool Stopping { get; private set; }
         public DebugLocation ApproximateLocation { get; private set; } = DebugLocation.Unknown;
 
-        readonly Stack<object> CurrentObject = new();
+        Stack<object> CurrentObject = new();
         Block CurrentBlock => (Block)CurrentObject.First(obj => obj is Block);
         Scope CurrentScope => (Scope)CurrentObject.First(obj => obj is Scope);
         MethodScope CurrentMethodScope => (MethodScope)CurrentObject.First(obj => obj is MethodScope);
@@ -407,7 +407,7 @@ namespace Embers
                 FromScript.ThreadCount++;
                 try {
                     // Create a new script
-                    FromScript.CurrentObject.CopyTo(ThreadScript.CurrentObject);
+                    ThreadScript.CurrentObject = new Stack<object>(FromScript.CurrentObject);
                     Phase = ThreadPhase.Running;
                     // Call the method in the script
                     Task CallTask = Method!.Call(ThreadScript, null, Arguments, OnYield);
@@ -647,7 +647,7 @@ namespace Embers
                         throw new RuntimeException($"{Script.ApproximateLocation}: Protected method '{Name}' called {(Parent != null ? $"for {Parent.Name}" : "")}");
                 }
 
-                Arguments ??= new Instances();
+                Arguments ??= Instances.None;
                 if (ArgumentCountRange.IsInRange(Arguments.Count)) {
                     // Create temporary scope
                     if (OnInstance != null) {
@@ -942,6 +942,8 @@ namespace Embers
             readonly List<Instance>? InstanceList;
             public readonly int Count;
 
+            public static readonly Instances None = new();
+
             public Instances(Instance? instance = null) {
                 Instance = instance;
                 Count = instance != null ? 1 : 0;
@@ -1154,16 +1156,16 @@ namespace Embers
                 Func<MethodInput, Task<Instance>> CurrentFunction = Current.Function;
                 Stack<object> OriginalSnapshot = new(CurrentObject);
                 Current.ChangeFunction(async Input => {
-                    Stack<object> TemporarySnapshot = new(Input.Script.CurrentObject);
+                    Stack<object> TemporarySnapshot = Input.Script.CurrentObject;
+                    Input.Script.CurrentObject = OriginalSnapshot;
                     try {
-                        Input.Script.CurrentObject.ReplaceContentsWith(OriginalSnapshot);
                         return await Input.Script.CreateTemporaryScope(async () => {
                             await Current.SetArgumentVariables(Input.Script.CurrentScope, Input);
                             return await CurrentFunction(Input);
                         });
                     }
                     finally {
-                        Input.Script.CurrentObject.ReplaceContentsWith(TemporarySnapshot);
+                        Input.Script.CurrentObject = TemporarySnapshot;
                     }
                 });
             }
@@ -1776,8 +1778,6 @@ namespace Embers
             Exception? ExceptionToRescue = null;
             try {
                 await CreateTemporaryScope(async () => {
-                    // Create scope
-                    CurrentObject.Push(new Scope());
                     // Run statements
                     await InternalInterpretAsync(BeginBranch.Statements, CurrentOnYield);
                 });
