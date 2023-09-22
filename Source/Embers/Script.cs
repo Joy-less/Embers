@@ -1838,62 +1838,60 @@ namespace Embers
 
             return Interpreter.Nil;
         }
-        async Task<Instance> InterpretAssignmentExpression(AssignmentExpression AssignmentExpression, ReturnType ReturnType) {
-            async Task AssignToVariable(VariableReference Variable, Instance Value) {
-                switch (Variable.Token.Type) {
-                    case Phase2TokenType.LocalVariableOrMethod:
-                        // call instance.variable=
-                        if (Variable.Instance != null) {
-                            await Variable.Instance.TryCallInstanceMethod(this, Variable.Token.Value! + "=", Value);
-                        }
-                        // set variable =
-                        else {
-                            // Find appropriate local variable block
-                            Block SetBlock = CurrentBlock;
-                            foreach (object Object in CurrentObject)
-                                if (Object is Block Block) {
-                                    if (Block.LocalVariables.ContainsKey(Variable.Token.Value!)) {
-                                        SetBlock = Block;
-                                        break;
-                                    }
+        async Task AssignToVariable(VariableReference Variable, Instance Value) {
+            switch (Variable.Token.Type) {
+                case Phase2TokenType.LocalVariableOrMethod:
+                    // call instance.variable=
+                    if (Variable.Instance != null) {
+                        await Variable.Instance.TryCallInstanceMethod(this, Variable.Token.Value! + "=", Value);
+                    }
+                    // set variable =
+                    else {
+                        // Find appropriate local variable block
+                        Block SetBlock = CurrentBlock;
+                        foreach (object Object in CurrentObject)
+                            if (Object is Block Block) {
+                                if (Block.LocalVariables.ContainsKey(Variable.Token.Value!)) {
+                                    SetBlock = Block;
+                                    break;
                                 }
-                                else break;
-                            // Set local variable
-                            lock (SetBlock.LocalVariables)
-                                SetBlock.LocalVariables[Variable.Token.Value!] = Value;
-                        }
-                        break;
-                    case Phase2TokenType.GlobalVariable:
-                        lock (Interpreter.GlobalVariables)
-                            Interpreter.GlobalVariables[Variable.Token.Value!] = Value;
-                        break;
-                    case Phase2TokenType.ConstantOrMethod:
-                        if (CurrentBlock.Constants.ContainsKey(Variable.Token.Value!))
-                            await Warn($"{Variable.Token.Location}: Already initialized constant '{Variable.Token.Value!}'");
-                        lock (CurrentBlock.Constants)
-                            CurrentBlock.Constants[Variable.Token.Value!] = Value;
-                        break;
-                    case Phase2TokenType.InstanceVariable:
-                        lock (CurrentInstance.InstanceVariables)
-                            CurrentInstance.InstanceVariables[Variable.Token.Value!] = Value;
-                        break;
-                    case Phase2TokenType.ClassVariable:
-                        lock (CurrentModule.ClassVariables)
-                            CurrentModule.ClassVariables[Variable.Token.Value!] = Value;
-                        break;
-                    default:
-                        throw new InternalErrorException($"{Variable.Token.Location}: Assignment variable token is not a variable type (got {Variable.Token.Type})");
-                }
+                            }
+                            else break;
+                        // Set local variable
+                        lock (SetBlock.LocalVariables)
+                            SetBlock.LocalVariables[Variable.Token.Value!] = Value;
+                    }
+                    break;
+                case Phase2TokenType.GlobalVariable:
+                    lock (Interpreter.GlobalVariables)
+                        Interpreter.GlobalVariables[Variable.Token.Value!] = Value;
+                    break;
+                case Phase2TokenType.ConstantOrMethod:
+                    if (CurrentBlock.Constants.ContainsKey(Variable.Token.Value!))
+                        await Warn($"{Variable.Token.Location}: Already initialized constant '{Variable.Token.Value!}'");
+                    lock (CurrentBlock.Constants)
+                        CurrentBlock.Constants[Variable.Token.Value!] = Value;
+                    break;
+                case Phase2TokenType.InstanceVariable:
+                    lock (CurrentInstance.InstanceVariables)
+                        CurrentInstance.InstanceVariables[Variable.Token.Value!] = Value;
+                    break;
+                case Phase2TokenType.ClassVariable:
+                    lock (CurrentModule.ClassVariables)
+                        CurrentModule.ClassVariables[Variable.Token.Value!] = Value;
+                    break;
+                default:
+                    throw new InternalErrorException($"{Variable.Token.Location}: Assignment variable token is not a variable type (got {Variable.Token.Type})");
             }
-
+        }
+        async Task<Instance> InterpretAssignmentExpression(AssignmentExpression AssignmentExpression, ReturnType ReturnType) {
             Instance Right = await InterpretExpressionAsync(AssignmentExpression.Right);
-
             Instance Left = await InterpretExpressionAsync(AssignmentExpression.Left, ReturnType.HypotheticalVariable);
+
             if (Left is VariableReference LeftVariable) {
                 if (Right is Instance RightInstance) {
                     // LeftVariable = RightInstance
                     await AssignToVariable(LeftVariable, RightInstance);
-
                     // Return left variable reference or value
                     if (ReturnType == ReturnType.InterpretResult) {
                         return RightInstance;
@@ -1909,6 +1907,44 @@ namespace Embers
             else {
                 throw new RuntimeException($"{AssignmentExpression.Left.Location}: {Left.GetType()} cannot be the target of an assignment");
             }
+        }
+        async Task<Instance> InterpretMultipleAssignmentExpression(MultipleAssignmentExpression MultipleAssignmentExpression, ReturnType ReturnType) {
+            // Check if assigning variables from array (e.g. a, b = [c, d])
+            Instance FirstRight = await InterpretExpressionAsync(MultipleAssignmentExpression.Right[0]);
+            ArrayInstance? AssigningFromArray = null;
+            if (MultipleAssignmentExpression.Right.Count == 1 && FirstRight is ArrayInstance AssignmentValueArray) {
+                AssigningFromArray = AssignmentValueArray;
+            }
+            // Assign each variable to each value
+            List<Instance> AssignedValues = new();
+            for (int i = 0; i < MultipleAssignmentExpression.Left.Count; i++) {
+                Instance Right = AssigningFromArray == null
+                    ? i != 0 ? await InterpretExpressionAsync(MultipleAssignmentExpression.Right[i]) : FirstRight
+                    : await AssigningFromArray.TryCallInstanceMethod(this, "[]", new IntegerInstance(Interpreter.Integer, i));
+                Instance Left = await InterpretExpressionAsync(MultipleAssignmentExpression.Left[i], ReturnType.HypotheticalVariable);
+
+                if (Left is VariableReference LeftVariable) {
+                    if (Right is Instance RightInstance) {
+                        // LeftVariable = RightInstance
+                        await AssignToVariable(LeftVariable, RightInstance);
+                        // Return left variable reference or value
+                        if (ReturnType == ReturnType.InterpretResult) {
+                            AssignedValues.Add(RightInstance);
+                        }
+                        else {
+                            // AssignedValues.Add(Left);
+                            throw new InternalErrorException($"{MultipleAssignmentExpression.Location}: Cannot get variable reference from multiple assignment");
+                        }
+                    }
+                    else {
+                        throw new InternalErrorException($"{LeftVariable.Token.Location}: Assignment value should be an instance, but got {Right.GetType().Name}");
+                    }
+                }
+                else {
+                    throw new RuntimeException($"{MultipleAssignmentExpression.Left[i].Location}: {Left.GetType()} cannot be the target of an assignment");
+                }
+            }
+            return new ArrayInstance(Interpreter.Array, AssignedValues);
         }
         async Task<Instance> InterpretUndefineMethodStatement(UndefineMethodStatement UndefineMethodStatement) {
             string MethodName = UndefineMethodStatement.MethodName.Token.Value!;
@@ -2073,6 +2109,7 @@ namespace Embers
                 IfBranchesStatement IfBranchesStatement => await InterpretIfBranchesStatement(IfBranchesStatement),
                 BeginBranchesStatement BeginBranchesStatement => await InterpretBeginBranchesStatement(BeginBranchesStatement),
                 AssignmentExpression AssignmentExpression => await InterpretAssignmentExpression(AssignmentExpression, ReturnType),
+                MultipleAssignmentExpression MultipleAssignmentExpression => await InterpretMultipleAssignmentExpression(MultipleAssignmentExpression, ReturnType),
                 UndefineMethodStatement UndefineMethodStatement => await InterpretUndefineMethodStatement(UndefineMethodStatement),
                 DefinedExpression DefinedExpression => await InterpretDefinedExpression(DefinedExpression),
                 HashArgumentsExpression HashArgumentsExpression => await InterpretHashArgumentsExpression(HashArgumentsExpression),

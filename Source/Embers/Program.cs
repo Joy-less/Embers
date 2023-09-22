@@ -111,6 +111,17 @@ puts Math.method :sqrt
 puts 5.is_a? Integer
 puts Integer.is_a? Integer
 p Integer.methods
+
+for i, v in {:a => :b}
+    p i, v
+end
+
+c = (a, b = 1, 2)
+p a, b
+p c
+
+a, b = [5, 6]
+p a, b
                     ");
                 });
                 Script.WaitForThreads();

@@ -464,7 +464,12 @@ namespace Embers
                                     i++;
                                     if (NextCharactersAre("\n=end") || NextCharactersAre("\r=end")) {
                                         i += 4 + 1;
+                                        CurrentLine++;
+                                        IndexOfLastNewline = i;
                                         break;
+                                    }
+                                    else if (Code[i] is '\n' or '\r') {
+                                        CurrentLine++;
                                     }
                                 }
                             }
@@ -602,7 +607,8 @@ namespace Embers
                         case '#':
                             do {
                                 i++;
-                            } while (Code[i] != '\n' && Code[i] != '\r');
+                            } while (Code[i] is not ('\n' or '\r'));
+                            i--;
                             break;
                         case '!':
                             if (NextChara == '=') {
@@ -617,9 +623,6 @@ namespace Embers
                             AddToken(Phase1TokenType.StartCurly, "{");
                             break;
                         case '}':
-                            // Add EndOfStatement before }
-                            if (!LastTokenWas(Phase1TokenType.EndOfStatement))
-                                AddToken(Phase1TokenType.EndOfStatement, null);
                             // Add end curly bracket
                             AddToken(Phase1TokenType.EndCurly, "}");
                             break;

@@ -347,7 +347,7 @@ namespace Embers_Tests
                 class A
                     protected
                     def a
-                        puts 'Hi'
+                        'Hi'
                     end
                 end
                 class B < A
@@ -364,11 +364,28 @@ namespace Embers_Tests
                     def a
                         b = 0
                         sleep 0.1
-                        puts b
+                        b
                     end
                 end
                 A.new.a
             ");
+
+            // For
+            AssertEqual(@"
+                $a = nil
+                $b = nil
+                for i, v in {:a => :b}
+                    $a, $b = i, v
+                end
+                return $a, $b
+            ", new object[] {"a", "b"});
+
+            // Multiple assignment
+            AssertEqual(@"
+                $c = (a, b = 1, 2)
+                $d, $e = [5, 6]
+                return a, b, $c[0], $d, $e
+            ", new object[] {1L, 2L, 1L, 5L, 6L});
         }
 
 

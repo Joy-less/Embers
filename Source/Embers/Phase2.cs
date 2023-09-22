@@ -446,8 +446,44 @@ namespace Embers
                         string ArithmeticOperator = Operator[..^1];
                         Right = new MethodCallExpression(
                             new PathExpression(Left, new Phase2Token(Left.Location, Phase2TokenType.Operator, ArithmeticOperator)),
-                            new List<Expression>() { Right }
+                            new List<Expression>() {Right}
                         );
+                    }
+                    else {
+                        throw new InternalErrorException($"Unknown assigment operator: '{Operator}'");
+                    }
+                }
+            }
+            public override string Inspect() {
+                return Left.Inspect() + " " + Operator + " " + Right.Inspect();
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({Left.Serialise()}, \"{Operator}\", {Right.Serialise()})";
+            }
+        }
+        public class MultipleAssignmentExpression : Expression {
+            public List<ObjectTokenExpression> Left;
+            public List<Expression> Right;
+
+            readonly string Operator;
+
+            public MultipleAssignmentExpression(List<ObjectTokenExpression> left, string op, List<Expression> right) : base(left[0].Location) {
+                Left = left;
+                Operator = op;
+                Right = right;
+
+                // Compound assignment operators
+                if (Operator != "=") {
+                    if (Operator.Length >= 2) {
+                        if (Left.Count != Right.Count)
+                            throw new SyntaxErrorException($"{Left.Location()}: Compound assignment not valid when assigning to multiple variables");
+                        string ArithmeticOperator = Operator[..^1];
+                        for (int i = 0; i < Right.Count; i++) {
+                            Right[i] = new MethodCallExpression(
+                                new PathExpression(Left[i], new Phase2Token(Left[i].Location, Phase2TokenType.Operator, ArithmeticOperator)),
+                                new List<Expression>() {Right[i]}
+                            );
+                        }
                     }
                     else {
                         throw new InternalErrorException($"Unknown assigment operator: '{Operator}'");
@@ -724,24 +760,24 @@ namespace Embers
             }
         }
         public class ForStatement : Statement {
-            public readonly MethodArgumentExpression VariableName;
+            public readonly List<MethodArgumentExpression> VariableNames;
             public readonly Expression InExpression;
             public readonly List<Expression> BlockStatements;
 
             public readonly Method BlockStatementsMethod;
 
-            public ForStatement(DebugLocation location, MethodArgumentExpression variableName, Expression inExpression, List<Expression> blockStatements) : base(location) {
-                VariableName = variableName;
+            public ForStatement(DebugLocation location, List<MethodArgumentExpression> variableNames, Expression inExpression, List<Expression> blockStatements) : base(location) {
+                VariableNames = variableNames;
                 InExpression = inExpression;
                 BlockStatements = blockStatements;
 
                 BlockStatementsMethod = ToMethod();
             }
             public override string Inspect() {
-                return $"for {VariableName.Inspect()} in {InExpression.Inspect()} do {BlockStatements.Inspect()} end";
+                return $"for {VariableNames.Inspect()} in {InExpression.Inspect()} do {BlockStatements.Inspect()} end";
             }
             public override string Serialise() {
-                return $"new {PathToSelf}({Location.Serialise()}, {VariableName.Serialise()}, {InExpression.Serialise()}, {BlockStatements.Serialise()})";
+                return $"new {PathToSelf}({Location.Serialise()}, {VariableNames.Serialise()}, {InExpression.Serialise()}, {BlockStatements.Serialise()})";
             }
             Method ToMethod() {
                 return new Method(async Input => {
@@ -755,7 +791,7 @@ namespace Embers
                     catch (NextException) {
                         return Input.Interpreter.Nil;
                     }
-                }, null, new List<MethodArgumentExpression>() {VariableName});
+                }, null, VariableNames);
             }
         }
         
@@ -1029,6 +1065,39 @@ namespace Embers
                 }
             }
             return null;
+        }
+        static List<T> GetCommaSeparatedExpressions<T>(List<Phase2Object> Objects, ref int Index, bool Backwards = false) where T : Expression {
+            List<T> Expressions = new();
+            bool ExpectingVariable = true;
+            bool HandleObject(Phase2Object Object) {
+                if (Object is Phase2Token Token2 && Token2.Type == Phase2TokenType.Comma) {
+                    if (ExpectingVariable || Expressions.Count == 0) throw new SyntaxErrorException($"{Token2.Location}: Unexpected comma");
+                    ExpectingVariable = true;
+                }
+                else if (Object is T TargetExpression) {
+                    Expressions.Add(TargetExpression);
+                    ExpectingVariable = false;
+                }
+                else return true;
+                return false;
+            }
+            if (!Backwards) {
+                for (; Index < Objects.Count;) {
+                    if (HandleObject(Objects[Index])) break;
+                    Objects.RemoveAt(Index);
+                }
+            }
+            else {
+                for (; Index >= 0; Index--) {
+                    if (HandleObject(Objects[Index])) break;
+                    Objects.RemoveAt(Index);
+                }
+            }
+            if (ExpectingVariable) throw new SyntaxErrorException($"{Objects.Location()}: Expected expression");
+            return Expressions;
+        }
+        static List<Expression> GetCommaSeparatedExpressions(List<Phase2Object> Objects, ref int Index, bool Backwards = false) {
+            return GetCommaSeparatedExpressions<Expression>(Objects, ref Index, Backwards);
         }
         static ObjectTokenExpression GetMethodName(List<Phase2Object> Phase2Objects, ref int Index) {
             SelfExpression? StartsWithSelf = null;
@@ -1463,7 +1532,7 @@ namespace Embers
             }
             // End For Block
             else if (Block is BuildingFor ForBlock) {
-                return new ForStatement(ForBlock.Location, ForBlock.VariableName, ForBlock.InExpression, ForBlock.Statements);
+                return new ForStatement(ForBlock.Location, ForBlock.VariableNames, ForBlock.InExpression, ForBlock.Statements);
             }
             // End Unknown Block (internal error)
             else {
@@ -1579,26 +1648,41 @@ namespace Embers
             return new BuildingWhen(Location, ConditionExpression);
         }
         static BuildingFor ParseFor(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index) {
-            // Get variable name
-            if (Index < StatementTokens.Count && StatementTokens[Index].GetType() == typeof(ObjectTokenExpression)) {
-                MethodArgumentExpression VariableName = new(((ObjectTokenExpression)StatementTokens[Index]).Token);
-                // Eat in keyword
+            // Get for variables
+            List<MethodArgumentExpression> ForVariables = new();
+            bool ExpectingVariable = false;
+            for (; Index < StatementTokens.Count; Index++) {
+                Phase2Object Object = StatementTokens[Index];
+                if (Object is Phase2Token Token) {
+                    if (Token.Type == Phase2TokenType.Comma) {
+                        if (ExpectingVariable || ForVariables.Count == 0) throw new SyntaxErrorException($"{Location}: Unexpected comma");
+                        ExpectingVariable = true;
+                        continue;
+                    }
+                    else if (Token.Type == Phase2TokenType.In) {
+                        break;
+                    }
+                }
+                else if (Object.GetType() == typeof(ObjectTokenExpression)) {
+                    ForVariables.Add(new MethodArgumentExpression(((ObjectTokenExpression)Object).Token));
+                    ExpectingVariable = false;
+                    continue;
+                }
+                throw new SyntaxErrorException($"{Location}: Unexpected '{Object.Inspect()}' in for statement");
+            }
+            if (ExpectingVariable) throw new SyntaxErrorException($"{Location}: Expected identifier after comma");
+            if (ForVariables.Count == 0) throw new SyntaxErrorException($"{Location}: Expected variable name after 'for'");
+            // Eat in keyword
+            if (Index < StatementTokens.Count && StatementTokens[Index] is Phase2Token Tok && Tok.Type == Phase2TokenType.In) {
+                // Get in expression
                 Index++;
-                if (Index < StatementTokens.Count && StatementTokens[Index] is Phase2Token Tok && Tok.Type == Phase2TokenType.In) {
-                    // Get in expression
-                    Index++;
-                    List<Phase2Object> In = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type is Phase2TokenType.Do or Phase2TokenType.EndOfStatement));
-                    Expression InExpression = ObjectsToExpression(In);
-
-                    // Open for block
-                    return new BuildingFor(Location, VariableName, InExpression);
-                }
-                else {
-                    throw new SyntaxErrorException($"{Location}: Expected 'in' after 'for'");
-                }
+                List<Phase2Object> In = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type is Phase2TokenType.Do or Phase2TokenType.EndOfStatement));
+                Expression InExpression = ObjectsToExpression(In);
+                // Open for block
+                return new BuildingFor(Location, ForVariables, InExpression);
             }
             else {
-                throw new SyntaxErrorException($"{Location}: Expected variable name after 'for'");
+                throw new SyntaxErrorException($"{Location}: Expected 'in' after 'for'");
             }
         }
         static List<Phase2Object> GetBlocks(List<Phase2Object> ParsedObjects) {
@@ -1837,14 +1921,12 @@ namespace Embers
                         }
                         // {
                         case Phase2TokenType.StartCurly: {
-                            if (LastUnknownObject == null || (LastUnknownObject is not Expression || LastUnknownObject is Statement)) {
+                            if (LastUnknownObject is null or Statement or not Expression) {
                                 // {} is hash; handle later
                                 PushBlock(new BuildingHash(Location));
                                 break;
                             }
-
                             i++;
-
                             // Get do |arguments|
                             List<MethodArgumentExpression> DoArguments;
                             if (ParsedObjects[i] is Phase2Token Tok && Tok.Type == Phase2TokenType.Pipe) {
@@ -1854,7 +1936,6 @@ namespace Embers
                                 i--;
                                 DoArguments = new();
                             }
-
                             // Open do block
                             PushBlock(new BuildingDo(Location, DoArguments, true));
                             break;
@@ -2409,24 +2490,55 @@ namespace Embers
             for (int i = ParsedObjects.Count - 1; i >= 0; i--) {
                 Phase2Object UnknownObject = ParsedObjects[i];
                 Phase2Object? LastUnknownObject = i - 1 >= 0 ? ParsedObjects[i - 1] : null;
+                Phase2Object? LastLastUnknownObject = i - 2 >= 0 ? ParsedObjects[i - 2] : null;
                 Phase2Object? NextUnknownObject = i + 1 < ParsedObjects.Count ? ParsedObjects[i + 1] : null;
 
                 if (UnknownObject is Phase2Token Token) {
                     if (Token.Type == Phase2TokenType.AssignmentOperator) {
                         if (LastUnknownObject != null && NextUnknownObject != null && LastUnknownObject is ObjectTokenExpression LastExpression && NextUnknownObject is Expression NextExpression) {
-                            i--;
-                            ParsedObjects.RemoveRange(i, 3);
-
-                            ParsedObjects.Insert(i, new AssignmentExpression(
-                                LastExpression,
-                                Token.Value!,
-                                NextExpression
-                            ));
+                            // Check assignment is not multiple assignment
+                            if (LastLastUnknownObject == null || !(LastLastUnknownObject is Phase2Token LastLastToken && LastLastToken.Type == Phase2TokenType.Comma)) {
+                                // Remove objects
+                                i--;
+                                ParsedObjects.RemoveRange(i, 3);
+                                // Create assignment expression
+                                ParsedObjects.Insert(i, new AssignmentExpression(
+                                    LastExpression,
+                                    Token.Value!,
+                                    NextExpression
+                                ));
+                            }
                         }
                         else {
                             throw new SyntaxErrorException($"{Token.Location}: Assignment operator '{Token.Value}' must be between two expressions (got {(LastUnknownObject != null ? $"'{LastUnknownObject?.Inspect()}'" : "nothing")} and {(NextUnknownObject != null ? $"'{NextUnknownObject?.Inspect()}'" : "nothing")})");
                         }
                     }
+                }
+            }
+
+            // Multiple Assignment
+            for (int i = ParsedObjects.Count - 1; i >= 0; i--) {
+                Phase2Object UnknownObject = ParsedObjects[i];
+
+                if (UnknownObject is Phase2Token Token && Token.Type == Phase2TokenType.AssignmentOperator) {
+                    // Remove assignment operator token
+                    ParsedObjects.RemoveAt(i);
+                    // Get assignment variables
+                    i--;
+                    List<ObjectTokenExpression> AssignmentVariables = GetCommaSeparatedExpressions<ObjectTokenExpression>(ParsedObjects, ref i, Backwards: true);
+                    AssignmentVariables.Reverse();
+                    // Get assignment values
+                    i++;
+                    List<Expression> AssignmentValues = GetCommaSeparatedExpressions(ParsedObjects, ref i);
+                    // Check variables and values match up
+                    if (AssignmentVariables.Count != AssignmentValues.Count && !(AssignmentVariables.Count > 1 && AssignmentValues.Count == 1))
+                        throw new SyntaxErrorException($"{Token.Location}: Number of assignment variables is different to number of assignment values ({AssignmentVariables.Count} vs {AssignmentValues.Count})");
+                    // Create multiple assignment expression
+                    ParsedObjects.Insert(i, new MultipleAssignmentExpression(
+                        AssignmentVariables,
+                        Token.Value!,
+                        AssignmentValues
+                    ));
                 }
             }
             
@@ -2795,10 +2907,10 @@ namespace Embers
             }
         }
         class BuildingFor : BuildingBlock {
-            public readonly MethodArgumentExpression VariableName;
+            public readonly List<MethodArgumentExpression> VariableNames;
             public readonly Expression InExpression;
-            public BuildingFor(DebugLocation location, MethodArgumentExpression variableName, Expression inExpression) : base(location) {
-                VariableName = variableName;
+            public BuildingFor(DebugLocation location, List<MethodArgumentExpression> variableNames, Expression inExpression) : base(location) {
+                VariableNames = variableNames;
                 InExpression = inExpression;
             }
         }
