@@ -130,6 +130,15 @@ namespace Embers
                 Target[Pair.Key] = Pair.Value;
             }
         }
+        public static void CopyTo<T>(this Stack<T> Origin, Stack<T> Target) {
+            foreach (T Value in Origin) {
+                Target.Push(Value);
+            }
+        }
+        public static void ReplaceContentsWith<T>(this Stack<T> Stack, Stack<T> With) {
+            Stack.Clear();
+            With.CopyTo(Stack);
+        }
         public static Dictionary<T, T> ListAsHash<T>(this List<T> HashItemsList) where T : notnull {
             Dictionary<T, T> HashItems = new();
             for (int i2 = 0; i2 < HashItemsList.Count; i2 += 2) {

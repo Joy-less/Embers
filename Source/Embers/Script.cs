@@ -1156,8 +1156,8 @@ namespace Embers
                 Func<MethodInput, Task<Instance>> CurrentFunction = Current.Function;
                 Stack<object> OriginalSnapshot = new(CurrentObject);
                 Current.ChangeFunction(async Input => {
-                    Stack<object> TemporarySnapshot = Input.Script.CurrentObject;
-                    Input.Script.CurrentObject = OriginalSnapshot;
+                    Stack<object> TemporarySnapshot = new(Input.Script.CurrentObject);
+                    Input.Script.CurrentObject.ReplaceContentsWith(OriginalSnapshot);
                     try {
                         return await Input.Script.CreateTemporaryScope(async () => {
                             await Current.SetArgumentVariables(Input.Script.CurrentScope, Input);
@@ -1165,7 +1165,7 @@ namespace Embers
                         });
                     }
                     finally {
-                        Input.Script.CurrentObject = TemporarySnapshot;
+                        Input.Script.CurrentObject.ReplaceContentsWith(TemporarySnapshot);
                     }
                 });
             }
