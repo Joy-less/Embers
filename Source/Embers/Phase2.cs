@@ -94,7 +94,7 @@ namespace Embers
             {"yield", Phase2TokenType.Yield},
             {"__LINE__", Phase2TokenType.__LINE__},
         };
-        public readonly static string[][] OperatorPrecedence = new[] {
+        public readonly static string[][] NormalOperatorPrecedence = new[] {
             new[] {"**"},
             new[] {"!"},
             new[] {"*", "/", "%"},
@@ -107,6 +107,8 @@ namespace Embers
             new[] {"<=>", "==", "===", "!=", "=~", "!~"},
             new[] {"&&"},
             new[] {"||"},
+        };
+        public readonly static string[][] LowPriorityOperatorPrecedence = new[] {
             new[] {"not"},
             new[] {"or", "and"},
         };
@@ -2361,50 +2363,54 @@ namespace Embers
                 }
             }
 
-            // Operators
-            foreach (string[] Operators in OperatorPrecedence) {
-                for (int i = 0; i < ParsedObjects.Count; i++) {
-                    Phase2Object UnknownObject = ParsedObjects[i];
-                    Phase2Object? LastUnknownObject = i - 1 >= 0 ? ParsedObjects[i - 1] : null;
-                    Phase2Object? NextUnknownObject = i + 1 < ParsedObjects.Count ? ParsedObjects[i + 1] : null;
+            // Operators (any)
+            void HandleOperators(string[][] Precedence) {
+                foreach (string[] Operators in Precedence) {
+                    for (int i = 0; i < ParsedObjects.Count; i++) {
+                        Phase2Object UnknownObject = ParsedObjects[i];
+                        Phase2Object? LastUnknownObject = i - 1 >= 0 ? ParsedObjects[i - 1] : null;
+                        Phase2Object? NextUnknownObject = i + 1 < ParsedObjects.Count ? ParsedObjects[i + 1] : null;
 
-                    if (UnknownObject is Phase2Token Token) {
-                        if (Token.Type == Phase2TokenType.Operator && Operators.Contains(Token.Value!)) {
-                            if (Token.Value is "not" or "!") {
-                                if (NextUnknownObject is Expression NextExpression) {
-                                    ParsedObjects.RemoveRange(i, 2);
-                                    ParsedObjects.Insert(i, new NotExpression(Token.Location, NextExpression));
+                        if (UnknownObject is Phase2Token Token) {
+                            if (Token.Type == Phase2TokenType.Operator && Operators.Contains(Token.Value!)) {
+                                if (Token.Value is "not" or "!") {
+                                    if (NextUnknownObject is Expression NextExpression) {
+                                        ParsedObjects.RemoveRange(i, 2);
+                                        ParsedObjects.Insert(i, new NotExpression(Token.Location, NextExpression));
+                                    }
+                                    else {
+                                        throw new SyntaxErrorException($"{Token.Location}: Operator '{Token.Value!}' must be before an expression (got {NextUnknownObject?.Inspect()})");
+                                    }
+                                }
+                                else if (LastUnknownObject is Expression LastExpression && NextUnknownObject is Expression NextExpression) {
+                                    i--;
+                                    ParsedObjects.RemoveRange(i, 3);
+                                    if (NonMethodOperators.Contains(Token.Value!)) {
+                                        LogicalExpression.LogicalExpressionType LogicType = Token.Value! switch {
+                                            "and" or "&&" => LogicalExpression.LogicalExpressionType.And,
+                                            "or" or "||" => LogicalExpression.LogicalExpressionType.Or,
+                                            "^" => LogicalExpression.LogicalExpressionType.Xor,
+                                            _ => throw new InternalErrorException($"{Token.Location}: Unhandled logic expression type: '{Token.Value!}'")
+                                        };
+                                        ParsedObjects.Insert(i, new LogicalExpression(LastExpression.Location, LogicType, LastExpression, NextExpression));
+                                    }
+                                    else {
+                                        ParsedObjects.Insert(i, new MethodCallExpression(
+                                            new PathExpression(LastExpression, new Phase2Token(Token.Location, Phase2TokenType.LocalVariableOrMethod, Token.Value!)),
+                                            new List<Expression>() { NextExpression })
+                                        );
+                                    }
                                 }
                                 else {
-                                    throw new SyntaxErrorException($"{Token.Location}: Operator '{Token.Value!}' must be before an expression (got {NextUnknownObject?.Inspect()})");
+                                    throw new SyntaxErrorException($"{Token.Location}: Operator '{Token.Value!}' must be between two expressions (got {LastUnknownObject?.Inspect()} and {NextUnknownObject?.Inspect()})");
                                 }
-                            }
-                            else if (LastUnknownObject is Expression LastExpression && NextUnknownObject is Expression NextExpression) {
-                                i--;
-                                ParsedObjects.RemoveRange(i, 3);
-                                if (NonMethodOperators.Contains(Token.Value!)) {
-                                    LogicalExpression.LogicalExpressionType LogicType = Token.Value! switch {
-                                        "and" or "&&" => LogicalExpression.LogicalExpressionType.And,
-                                        "or" or "||" => LogicalExpression.LogicalExpressionType.Or,
-                                        "^" => LogicalExpression.LogicalExpressionType.Xor,
-                                        _ => throw new InternalErrorException($"{Token.Location}: Unhandled logic expression type: '{Token.Value!}'")
-                                    };
-                                    ParsedObjects.Insert(i, new LogicalExpression(LastExpression.Location, LogicType, LastExpression, NextExpression));
-                                }
-                                else {
-                                    ParsedObjects.Insert(i, new MethodCallExpression(
-                                        new PathExpression(LastExpression, new Phase2Token(Token.Location, Phase2TokenType.LocalVariableOrMethod, Token.Value!)),
-                                        new List<Expression>() { NextExpression })
-                                    );
-                                }
-                            }
-                            else {
-                                throw new SyntaxErrorException($"{Token.Location}: Operator '{Token.Value!}' must be between two expressions (got {LastUnknownObject?.Inspect()} and {NextUnknownObject?.Inspect()})");
                             }
                         }
                     }
                 }
             }
+            // Operators (normal priority)
+            HandleOperators(NormalOperatorPrecedence);
 
             // Alias
             for (int i = 0; i < ParsedObjects.Count; i++) {
@@ -2485,6 +2491,9 @@ namespace Embers
                     }
                 }
             }
+
+            // Operators (low priority)
+            HandleOperators(LowPriorityOperatorPrecedence);
 
             // Assignment
             for (int i = ParsedObjects.Count - 1; i >= 0; i--) {

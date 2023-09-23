@@ -910,8 +910,8 @@ namespace Embers
             }
             public TValue this[params TKey[] Keys] {
                 set {
+                    TrySetMethodName(Keys[0], value);
                     foreach (TKey Key in Keys) {
-                        TrySetMethodName(Key, value);
                         base[Key] = value;
                         SetEvent.Raise(Handler => Handler(Key, value));
                     }
@@ -2187,7 +2187,7 @@ namespace Embers
             List<Phase1.Phase1Token> Tokens = Phase1.GetPhase1Tokens(Code);
             List<Expression> Statements = ObjectsToExpressions(Tokens, ExpressionsType.Statements);
 
-            /*Console.WriteLine(Statements.Inspect());
+            /*Console.WriteLine(Statements.Inspect("\n"));
             Console.Write("Press enter to continue.");
             Console.ReadLine();*/
 

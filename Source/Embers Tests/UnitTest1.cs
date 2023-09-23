@@ -386,6 +386,15 @@ namespace Embers_Tests
                 $d, $e = [5, 6]
                 return a, b, $c[0], $d, $e
             ", new object[] {1L, 2L, 1L, 5L, 6L});
+
+            // Or & not priority
+            // This works differently in Ruby, but imo, it's better in Embers.
+            AssertEqual(@"
+                a = 5
+                b = a or 2
+                c = not 2 or 3
+                return b, c
+            ", new object[] {5L, 3L});
         }
 
 
