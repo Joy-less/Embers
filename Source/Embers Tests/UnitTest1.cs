@@ -86,7 +86,7 @@ namespace Embers_Tests
                     $result -= 100
                 end
                 
-                if false
+                if false and true
                     $result += 10
                 elsif 0
                     $result += 1

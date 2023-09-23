@@ -925,7 +925,7 @@ namespace Embers
                         Phase1TokenType.TernaryQuestion => Phase2TokenType.TernaryQuestion,
                         Phase1TokenType.TernaryElse => Phase2TokenType.TernaryElse,
                         Phase1TokenType.EndOfStatement => Phase2TokenType.EndOfStatement,
-                        _ => throw new InternalErrorException($"{Token.Location}: Conversion of {Token.Type} from phase 1 to phase 2 not supported")
+                        _ => throw new InternalErrorException($"{Token.Location}: Tried to convert {Token.Type} from phase 1 to phase 2")
                     }, Token.Value, Token));
                 }
             }

@@ -662,11 +662,16 @@ namespace Embers
                                 Tokens.RemoveAt(Tokens.Count - 1);
                                 Identifier = ":" + Identifier;
                             }
+                            // Parse "or", "and" and "not" as operators
+                            Phase1TokenType IdentifierType = Phase1TokenType.Identifier;
+                            if (Identifier is "or" or "and" or "not") {
+                                IdentifierType = Phase1TokenType.Operator;
+                            }
                             // Add EndOfStatement before end keyword
                             if (Identifier == "end" && !LastTokenWas(Phase1TokenType.EndOfStatement))
                                 AddToken(Phase1TokenType.EndOfStatement, null);
                             // Add identifier
-                            AddToken(Phase1TokenType.Identifier, Identifier);
+                            AddToken(IdentifierType, Identifier);
                             // Add EndOfStatement after else keyword
                             if (Identifier == "else")
                                 AddToken(Phase1TokenType.EndOfStatement, null);
@@ -676,13 +681,11 @@ namespace Embers
                     }
                 }
             }
-            // Parse "or", "and" and "not" as operators
-            for (int i = 0; i < Tokens.Count; i++) {
-                Phase1Token Token = Tokens[i];
-                if (Token.Type == Phase1TokenType.Identifier) {
-                    if (Token.Value is "or" or "and" or "not") {
-                        Token.Type = Phase1TokenType.Operator;
-                    }
+            // Certain tokens are invalid at this point
+            {
+                Phase1Token? FindColon = Tokens.Find(Tok => Tok.Type == Phase1TokenType.Colon);
+                if (FindColon != null) {
+                    throw new SyntaxErrorException($"{FindColon.Location}: Unexpected colon");
                 }
             }
             return Tokens;
