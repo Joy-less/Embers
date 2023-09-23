@@ -526,8 +526,14 @@ namespace Embers
             public ExceptionInstance(Class fromClass, string message) : base(fromClass) {
                 Value = new Exception(message);
             }
+            public ExceptionInstance(Class fromClass, Exception exception) : base(fromClass) {
+                Value = exception;
+            }
             public void SetValue(string message) {
                 Value = new Exception(message);
+            }
+            public void SetValue(Exception exception) {
+                Value = exception;
             }
         }
         public class TimeInstance : Instance {
@@ -1795,7 +1801,7 @@ namespace Embers
                     if (Branch is RescueStatement RescueStatement) {
                         // Get or create the exception to rescue
                         ExceptionsTable.TryGetValue(ExceptionToRescue, out ExceptionInstance? ExceptionInstance);
-                        ExceptionInstance ??= new(Interpreter.RuntimeError, ExceptionToRescue.Message);
+                        ExceptionInstance ??= new(Interpreter.RuntimeError, ExceptionToRescue);
                         // Get the rescuing exception type
                         Module RescuingExceptionModule = RescueStatement.Exception != null
                             ? (await InterpretExpressionAsync(RescueStatement.Exception)).Module!

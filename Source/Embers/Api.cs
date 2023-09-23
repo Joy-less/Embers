@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
+using System.Diagnostics;
 using static Embers.Script;
 
 #nullable enable
@@ -253,6 +254,7 @@ namespace Embers
             // Exception
             Interpreter.Exception.InstanceMethods["initialize"] = Script.CreateMethod(_Exception.initialize, 0..1);
             Interpreter.Exception.InstanceMethods["message"] = Script.CreateMethod(_Exception.message, 0);
+            Interpreter.Exception.InstanceMethods["backtrace"] = Script.CreateMethod(_Exception.backtrace, 0);
 
             // Thread
             Interpreter.Thread.InstanceMethods["initialize"] = Script.CreateMethod(_Thread.initialize, null);
@@ -340,18 +342,23 @@ namespace Embers
             if (Input.Arguments.Count == 1) {
                 Instance Argument = Input.Arguments[0];
                 if (Argument is ExceptionInstance ExceptionInstance) {
+                    // raise Exception.new("message")
                     Exception ExceptionToRaise = Argument.Exception;
                     Input.Script.ExceptionsTable.TryAdd(ExceptionToRaise, ExceptionInstance);
                     throw ExceptionToRaise;
                 }
                 else {
+                    // raise "message"
                     Exception NewExceptionToRaise = new RuntimeException(Argument.String);
                     Input.Script.ExceptionsTable.TryAdd(NewExceptionToRaise, new ExceptionInstance(Input.Interpreter.RuntimeError, Argument.String));
                     throw NewExceptionToRaise;
                 }
             }
             else {
-                throw new RuntimeException("");
+                // raise
+                Exception NewExceptionToRaise = new RuntimeException("");
+                Input.Script.ExceptionsTable.TryAdd(NewExceptionToRaise, new ExceptionInstance(Input.Interpreter.RuntimeError, ""));
+                throw NewExceptionToRaise;
             }
         }
         static async Task<Instance> @throw(MethodInput Input) {
@@ -402,14 +409,14 @@ namespace Embers
             string Command = Input.Arguments[0].String;
 
             // Start command line process
-            System.Diagnostics.ProcessStartInfo Info = new("cmd.exe") {
+            ProcessStartInfo Info = new("cmd.exe") {
                 RedirectStandardOutput = true,
                 RedirectStandardInput = true,
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 Arguments = "/c " + Command
             };
-            System.Diagnostics.Process Process = new() {
+            Process Process = new() {
                 StartInfo = Info
             };
             Process.Start();
@@ -919,6 +926,7 @@ namespace Embers
             }
             public static async Task<Instance> _Divide(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
+                if (Right.Float == 0) throw new DivideByZeroException();
                 return _GetResult(Input.Interpreter, Input.Instance.Integer / Right.Float, Right is IntegerInstance);
             }
             public static async Task<Instance> _Modulo(MethodInput Input) {
@@ -1933,6 +1941,13 @@ namespace Embers
             }
             public static async Task<Instance> message(MethodInput Input) {
                 return new StringInstance(Input.Interpreter.String, Input.Instance.Exception.Message);
+            }
+            public static async Task<Instance> backtrace(MethodInput Input) {
+                static string SimplifyStackTrace(string StackTrace) {
+                    const string Pattern = @"[A-Za-z]:[\\\/]\S+"; // Match file paths
+                    return System.Text.RegularExpressions.Regex.Replace(StackTrace, Pattern, FilePath => Path.GetFileName(FilePath.Value)); // Shorten file paths
+                }
+                return new StringInstance(Input.Interpreter.String, SimplifyStackTrace(Input.Instance.Exception.StackTrace ?? ""));
             }
         }
         static class _Thread {
