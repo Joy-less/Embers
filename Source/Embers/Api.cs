@@ -19,7 +19,7 @@ namespace Embers
     {
         public static void Setup(Script Script) {
             Interpreter Interpreter = Script.Interpreter;
-
+            
             // Object
             Interpreter.Object.InstanceMethods["=="] = Interpreter.Object.Methods["=="] = Script.CreateMethod(ClassInstance._Equals, 1);
             Interpreter.Object.InstanceMethods["==="] = Interpreter.Object.Methods["==="] = Script.CreateMethod(ClassInstance._Equals, 1);
@@ -34,6 +34,7 @@ namespace Embers
             Interpreter.Object.InstanceMethods["is_a?"] = Interpreter.Object.Methods["is_a?"] = Script.CreateMethod(ClassInstance.is_a7, 1);
             Interpreter.Object.InstanceMethods["instance_of?"] = Interpreter.Object.Methods["instance_of?"] = Script.CreateMethod(ClassInstance.instance_of7, 1);
             Interpreter.Object.InstanceMethods["in?"] = Interpreter.Object.Methods["in?"] = Script.CreateMethod(ClassInstance.in7, 1);
+            Interpreter.Object.InstanceMethods["clone"] = Interpreter.Object.Methods["clone"] = Script.CreateMethod(ClassInstance.clone, 0);
 
             Script.CurrentAccessModifier = AccessModifier.Protected;
             Interpreter.Object.InstanceMethods["puts"] = Interpreter.Object.Methods["puts"] = Script.CreateMethod(puts, null);
@@ -543,6 +544,9 @@ namespace Embers
                     }
                 }
                 return Input.Interpreter.False;
+            }
+            public static async Task<Instance> clone(MethodInput Input) {
+                return Input.Instance.Clone(Input.Interpreter);
             }
             public static async Task<Instance> attr_reader(MethodInput Input) {
                 string VariableName = Input.Arguments[0].String;

@@ -80,6 +80,9 @@ object.instance_of?(module)
 object.in?(array)
 	Returns true if the array contains the item.
 
+object.clone
+	Returns a shallow copy of the object.
+
 instance.attr_reader(instance_variable_name)
 	Creates an instance method called "{the given name}" which returns the given instance variable.
 

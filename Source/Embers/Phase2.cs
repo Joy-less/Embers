@@ -1183,7 +1183,7 @@ namespace Embers
                     StartLoopIndex++;
                     MethodNamePathExpression = new PathExpression(StartsWithSelf, MethodNamePath[0]);
                 }
-                for (int i = StartLoopIndex; i < MethodNamePath.Count - 1; i++) {
+                for (int i = StartLoopIndex; i < MethodNamePath.Count; i++) {
                     if (MethodNamePathExpression == null) {
                         MethodNamePathExpression = new ObjectTokenExpression(MethodNamePath[i]);
                     }
@@ -1432,7 +1432,7 @@ namespace Embers
                         StartLoopIndex++;
                         PathExpression = new PathExpression(StartsWithSelf, Tokens[0]);
                     }
-                    for (int i = StartLoopIndex; i < Tokens.Count - 1; i++) {
+                    for (int i = StartLoopIndex; i < Tokens.Count; i++) {
                         if (PathExpression == null) {
                             PathExpression = new ObjectTokenExpression(Tokens[i]);
                         }

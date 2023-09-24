@@ -156,9 +156,9 @@ namespace Embers
         }
         public class Instance {
             public readonly Module? Module; // Will be null if instance is a pseudoinstance
-            public readonly long ObjectId;
-            public virtual ReactiveDictionary<string, Instance> InstanceVariables { get; } = new();
-            public virtual ReactiveDictionary<string, Method> InstanceMethods { get; } = new();
+            public long ObjectId { get; private set; }
+            public virtual ReactiveDictionary<string, Instance> InstanceVariables { get; private set; } = new();
+            public virtual ReactiveDictionary<string, Method> InstanceMethods { get; private set; } = new();
             public bool IsTruthy => Object is not (null or false);
             public virtual object? Object { get { return null; } }
             public virtual bool Boolean { get { throw new RuntimeException("Instance is not a boolean"); } }
@@ -179,6 +179,19 @@ namespace Embers
             }
             public virtual string LightInspect() {
                 return Inspect();
+            }
+            public Instance Clone(Interpreter Interpreter) {
+                Instance Clone = (Instance)MemberwiseClone();
+                Clone.ObjectId = Interpreter.GenerateObjectId;
+                Clone.InstanceVariables = new();
+                foreach (KeyValuePair<string, Instance> KVP in InstanceVariables) {
+                    Clone.InstanceVariables[KVP.Key] = (Instance)KVP.Value.MemberwiseClone();
+                }
+                Clone.InstanceMethods = new();
+                foreach (KeyValuePair<string, Method> KVP in InstanceMethods) {
+                    Clone.InstanceMethods[KVP.Key] = KVP.Value.Clone();
+                }
+                return Clone;
             }
             public static async Task<Instance> CreateFromToken(Script Script, Phase2Token Token) {
                 if (Token.ProcessFormatting) {
@@ -551,12 +564,16 @@ namespace Embers
             }
         }
         public abstract class PseudoInstance : Instance {
-            public override ReactiveDictionary<string, Instance> InstanceVariables { get { throw new ApiException($"{GetType().Name} instance does not have instance variables"); } }
-            public override ReactiveDictionary<string, Method> InstanceMethods { get { throw new ApiException($"{GetType().Name} instance does not have instance methods"); } }
             public PseudoInstance(Module module) : base(module) { }
             public PseudoInstance(Interpreter interpreter) : base(interpreter) { }
         }
-        public class VariableReference : PseudoInstance {
+        public abstract class RealPseudoInstance : PseudoInstance {
+            public override ReactiveDictionary<string, Instance> InstanceVariables { get { throw new ApiException($"{GetType().Name} instance does not have instance variables"); } }
+            public override ReactiveDictionary<string, Method> InstanceMethods { get { throw new ApiException($"{GetType().Name} instance does not have instance methods"); } }
+            public RealPseudoInstance(Module module) : base(module) { }
+            public RealPseudoInstance(Interpreter interpreter) : base(interpreter) { }
+        }
+        public class VariableReference : RealPseudoInstance {
             public Block? Block;
             public Instance? Instance;
             public Phase2Token Token;
@@ -576,7 +593,7 @@ namespace Embers
                 Token = token;
             }
         }
-        public class ScopeReference : PseudoInstance {
+        public class ScopeReference : RealPseudoInstance {
             public Scope Scope;
             public override string Inspect() {
                 return Scope.GetType().Name;
@@ -586,8 +603,6 @@ namespace Embers
             }
         }
         public class ModuleReference : PseudoInstance {
-            public override ReactiveDictionary<string, Instance> InstanceVariables { get; } = new();
-            public override ReactiveDictionary<string, Method> InstanceMethods { get; } = new();
             public override object? Object { get { return Module; } }
             public override Module ModuleRef { get { return Module!; } }
             public override string Inspect() {
@@ -598,7 +613,7 @@ namespace Embers
             }
             public ModuleReference(Module module) : base(module) { }
         }
-        public class MethodReference : PseudoInstance {
+        public class MethodReference : RealPseudoInstance {
             readonly Method Method;
             public override object? Object { get { return Method; } }
             public override Method MethodRef { get { return Method; } }
@@ -706,6 +721,9 @@ namespace Embers
             }
             public void ChangeFunction(Func<MethodInput, Task<Instance>> function) {
                 Function = function;
+            }
+            public Method Clone() {
+                return (Method)MemberwiseClone();
             }
             public async Task SetArgumentVariables(Scope Scope, MethodInput Input) {
                 Instances Arguments = Input.Arguments;
@@ -1614,7 +1632,16 @@ namespace Embers
                         throw new RuntimeException($"{DefineMethodStatement.Location}: The instance method '{MethodName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
                     }
                     // Create or overwrite instance method
-                    MethodInstance.AddOrUpdateInstanceMethod(MethodName, DefineMethodStatement.MethodExpression.ToMethod(CurrentAccessModifier, CurrentModule));
+                    Method NewInstanceMethod = DefineMethodStatement.MethodExpression.ToMethod(CurrentAccessModifier, CurrentModule);
+                    if (MethodNameRef.Instance != null) {
+                        // Define method for a specific instance
+                        lock (MethodInstance.InstanceMethods)
+                            MethodInstance.InstanceMethods[MethodName] = NewInstanceMethod;
+                    }
+                    else {
+                        // Define method for all instances of a class
+                        MethodInstance.AddOrUpdateInstanceMethod(MethodName, NewInstanceMethod);
+                    }
                 }
             }
             else {

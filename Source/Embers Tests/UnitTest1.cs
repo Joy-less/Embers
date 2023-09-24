@@ -395,6 +395,13 @@ namespace Embers_Tests
                 c = not 2 or 3
                 return b, c
             ", new object[] {5L, 3L});
+
+            // Clone
+            AssertEqual(@"
+                a = 5
+                b = a.clone
+                a.object_id == b.object_id
+            ", false);
         }
 
 
