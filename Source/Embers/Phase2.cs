@@ -2167,8 +2167,6 @@ namespace Embers
                                             new PathExpression(IsIndexer, new Phase2Token(ParsedObjects[OpenBracketIndex - 1].Location, Phase2TokenType.LocalVariableOrMethod, "[]=")),
                                             new List<Expression>() { Index, IsIndexEquals }
                                         ));
-                                        // Remove object before []
-                                        ParsedObjects.RemoveAt(OpenBracketIndex - 1);
                                     }
                                     // []
                                     else {
@@ -2177,9 +2175,10 @@ namespace Embers
                                             new PathExpression(IsIndexer, new Phase2Token(ParsedObjects[OpenBracketIndex - 1].Location, Phase2TokenType.LocalVariableOrMethod, "[]")),
                                             new List<Expression>() { Index }
                                         ));
-                                        // Remove object before []
-                                        ParsedObjects.RemoveAt(OpenBracketIndex - 1);
                                     }
+                                    // Remove object before []
+                                    ParsedObjects.RemoveAt(OpenBracketIndex - 1);
+                                    OpenBracketIndex--;
                                 }
                                 // Array
                                 else {
