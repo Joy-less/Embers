@@ -258,6 +258,9 @@ namespace Embers
                 ArgumentName = argumentName;
                 DefaultValue = defaultValue;
                 SplatType = splatType;
+                if (ArgumentName.Type != Phase2TokenType.LocalVariableOrMethod) {
+                    throw new SyntaxErrorException($"{ArgumentName.Location}: Argument name ('{ArgumentName.Value}') must not be {ArgumentName.Type}");
+                }
             }
             public override string Inspect() {
                 if (DefaultValue == null) {

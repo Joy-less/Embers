@@ -14,6 +14,10 @@ namespace Embers
                     Script.Evaluate(@"
 a = [1, 2]
 p [a[0], a[1]]
+
+5.times do |n|
+    puts n
+end
                     ")
                 );
                 Console.ReadLine();
