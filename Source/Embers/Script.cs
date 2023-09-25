@@ -886,9 +886,9 @@ namespace Embers
             }
         }
         public readonly struct Integer {
-            private readonly long Long;
-            private readonly BigInteger BigInteger;
-            private readonly bool IsLong;
+            public readonly long Long;
+            public readonly BigInteger BigInteger;
+            public readonly bool IsLong;
             public Integer(long Long) {
                 this.Long = Long;
                 BigInteger = default;
@@ -921,7 +921,7 @@ namespace Embers
                     else return Left.Long * Right.BigInteger;
                 else
                     if (Right.IsLong) return Left.BigInteger * Right.Long;
-                else return Left.BigInteger * Right.BigInteger;
+                    else return Left.BigInteger * Right.BigInteger;
             }
             public static Integer operator /(Integer Left, Integer Right) {
                 if (Left.IsLong)
@@ -929,7 +929,15 @@ namespace Embers
                     else return Left.Long / Right.BigInteger;
                 else
                     if (Right.IsLong) return Left.BigInteger / Right.Long;
-                else return Left.BigInteger / Right.BigInteger;
+                    else return Left.BigInteger / Right.BigInteger;
+            }
+            public static Integer operator %(Integer Left, Integer Right) {
+                if (Left.IsLong)
+                    if (Right.IsLong) return Left.Long % Right.Long;
+                    else return Left.Long % Right.BigInteger;
+                else
+                    if (Right.IsLong) return Left.BigInteger % Right.Long;
+                    else return Left.BigInteger % Right.BigInteger;
             }
             public static implicit operator Integer(long Value) {
                 return new Integer(Value);
@@ -943,24 +951,21 @@ namespace Embers
             public static implicit operator BigInteger(Integer Value) {
                 return Value.IsLong ? Value.Long : Value.BigInteger;
             }
-            public static implicit operator Float(Integer Value) {
-                return new Float(Value);
-            }
             public override string ToString() {
                 return IsLong ? Long.ToString() : BigInteger.ToString();
             }
         }
         public readonly struct Float {
-            private readonly double Double;
-            private readonly BigFloat BigFloat;
-            private readonly bool IsDouble;
-            public Float(long Long) {
-                Double = Long;
+            public readonly double Double;
+            public readonly BigFloat BigFloat;
+            public readonly bool IsDouble;
+            public Float(double Double) {
+                this.Double = Double;
                 BigFloat = default;
                 IsDouble = true;
             }
-            public Float(double Double) {
-                this.Double = Double;
+            public Float(long Long) {
+                Double = Long;
                 BigFloat = default;
                 IsDouble = true;
             }
@@ -968,6 +973,11 @@ namespace Embers
                 this.BigFloat = BigFloat;
                 Double = default;
                 IsDouble = false;
+            }
+            public Float(Integer Integer) {
+                BigFloat = Integer.IsLong ? default : new BigFloat(Integer.BigInteger);
+                Double = Integer.IsLong ? Integer.Long : default;
+                IsDouble = Integer.IsLong;
             }
             public static Float operator +(Float Left, Float Right) {
                 if (Left.IsDouble)
@@ -991,7 +1001,7 @@ namespace Embers
                     else return Left.Double * Right.BigFloat;
                 else
                     if (Right.IsDouble) return Left.BigFloat * Right.Double;
-                else return Left.BigFloat * Right.BigFloat;
+                    else return Left.BigFloat * Right.BigFloat;
             }
             public static Float operator /(Float Left, Float Right) {
                 if (Left.IsDouble)
@@ -999,7 +1009,15 @@ namespace Embers
                     else return Left.Double / Right.BigFloat;
                 else
                     if (Right.IsDouble) return Left.BigFloat / Right.Double;
-                else return Left.BigFloat / Right.BigFloat;
+                    else return Left.BigFloat / Right.BigFloat;
+            }
+            public static Float operator %(Float Left, Float Right) {
+                if (Left.IsDouble)
+                    if (Right.IsDouble) return Left.Double % Right.Double;
+                    else return Left.Double % Right.BigFloat;
+                else
+                    if (Right.IsDouble) return Left.BigFloat % Right.Double;
+                    else return Left.BigFloat % Right.BigFloat;
             }
             public static Float operator +(Integer Left, Float Right) {
                 return (Float)Left + Right;
@@ -1013,7 +1031,13 @@ namespace Embers
             public static Float operator /(Integer Left, Float Right) {
                 return (Float)Left / Right;
             }
+            public static Float operator %(Integer Left, Float Right) {
+                return (Float)Left % Right;
+            }
             public static implicit operator Float(double Value) {
+                return new Float(Value);
+            }
+            public static implicit operator Float(Integer Value) {
                 return new Float(Value);
             }
             public static implicit operator Float(BigFloat Value) {
@@ -1026,7 +1050,12 @@ namespace Embers
                 return Value.IsDouble ? Value.Double : Value.BigFloat;
             }
             public static implicit operator Integer(Float Value) {
-                return new Integer((long)Value);
+                if (Value.IsDouble) {
+                    return new Integer((long)Value.Double);
+                }
+                else {
+                    return new Integer((BigInteger)Value.BigFloat);
+                }
             }
             public override string ToString() {
                 return IsDouble ? Double.ToString() : BigFloat.ToString();

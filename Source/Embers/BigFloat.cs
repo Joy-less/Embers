@@ -282,14 +282,12 @@ namespace Embers
             Factor();
             return Numerator + " / " + Denominator;
         }
-        public readonly int CompareTo(BigFloat? Other) {
-            if (!Other.HasValue)
-                throw new ArgumentNullException(nameof(Other));
+        public readonly int CompareTo(BigFloat Other) {
             // Make copies
             BigInteger One = Numerator;
-            BigInteger Two = Other.Value.Numerator;
+            BigInteger Two = Other.Numerator;
             // Cross multiply
-            One *= Other.Value.Denominator;
+            One *= Other.Denominator;
             Two *= Denominator;
             // Test
             return BigInteger.Compare(One, Two);
@@ -326,11 +324,6 @@ namespace Embers
         }
         public override readonly int GetHashCode() {
             return base.GetHashCode();
-        }
-        public readonly int CompareTo(BigFloat Other) {
-            if (this < Other) return -1;
-            else if (Other > this) return 1;
-            else return 0;
         }
 
         public static BigFloat Inverse(BigFloat value) {
@@ -569,8 +562,12 @@ namespace Embers
             return new BigFloat(value);
         }
 
+        public static explicit operator BigInteger(BigFloat value) {
+            return value.Factor().Numerator;
+        }
+
         private BigFloat Factor() {
-            // Factoring can be very slow. So use only when neccessary (ToString, and comparisons)
+            // Factoring can be very slow. So use only when necessary (ToString and comparisons)
 
             if (Denominator == 1)
                 return this;

@@ -908,9 +908,9 @@ namespace Embers
             public static async Task<Instance> gsub1(MethodInput Input) => await _gsub(Input, true);
         }
         static class Integer {
-            private static Instance _GetResult(Interpreter Interpreter, double Result, bool RightIsInteger) {
+            private static Instance _GetResult(Interpreter Interpreter, Script.Float Result, bool RightIsInteger) {
                 if (RightIsInteger) {
-                    return new IntegerInstance(Interpreter.Integer, (long)Result);
+                    return new IntegerInstance(Interpreter.Integer, Result);
                 }
                 else {
                     return new FloatInstance(Interpreter.Float, Result);
