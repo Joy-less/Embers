@@ -11,8 +11,8 @@ namespace Embers_Tests
         public void Test1() {
             // Basic tests
             AssertEqualToNull("");
-            AssertEqual("4", 4L);
-            AssertEqual("4.0", 4.0d);
+            AssertEqual("4", new Integer(4));
+            AssertEqual("4.0", new Float(4.0));
 
             // Global variables
             AssertEqual(@"
@@ -45,7 +45,7 @@ namespace Embers_Tests
                 }
 
                 return $result
-            ", 5L);
+            ", new Integer(5));
             AssertErrors<RuntimeException>(@"
                 $result = 0
 
@@ -76,7 +76,7 @@ namespace Embers_Tests
                 a = (b = 2)
                 c = d = 3.0
                 return a, b, c, d
-            ", new object[] {2L, 2L, 3.0d, 3.0d});
+            ", new object[] {new Integer(2), new Integer(2), new Float(3.0d), new Float(3.0d)});
 
             // If statements
             AssertEqual(@"
@@ -94,7 +94,7 @@ namespace Embers_Tests
                     $result += 20
                 end
                 # should return $result implicitly
-            ", -99L);
+            ", new Integer(-99));
 
             // Unless
             AssertEqual(@"
@@ -104,7 +104,7 @@ namespace Embers_Tests
                     $result = 0
                 end
                 $result
-            ", 1L);
+            ", new Integer(1));
 
             // One-line conditions
             AssertEqual(@"
@@ -112,7 +112,7 @@ namespace Embers_Tests
                 $value += 1 until true
                 $value -= 30 if true
                 $value
-            ", -30L);
+            ", new Integer(-30));
 
             // Lambdas & always return last expression
             AssertEqual(@"
@@ -136,7 +136,7 @@ namespace Embers_Tests
                 end
                 my_instance = MyClass.new
                 my_instance.a + my_instance.b
-            ", 11L);
+            ", new Integer(11));
 
             // Unsafe API
             {
@@ -173,7 +173,7 @@ namespace Embers_Tests
                     $return_val -= 10000
                 end
                 $return_val
-            ", 13L);
+            ", new Integer(13));
             AssertErrors<SyntaxErrorException>(@"
                 break
             ");
@@ -204,7 +204,7 @@ namespace Embers_Tests
                 c = A.new
                 c.a
                 return c.b
-            ", 5L);
+            ", new Integer(5));
 
             // system
             AssertEqual(@"
@@ -215,12 +215,12 @@ namespace Embers_Tests
             AssertEqual(@"
                 a = [4, 7]
                 return a[1], a.count
-            ", new object[] {7L, 2L});
+            ", new object[] {new Integer(7), new Integer(2)});
             AssertEqual(@"
                 arr = [1, 2, 3, 4, 5]
                 arr.map {|a| 2*a}
             ", Obj => Obj is ArrayInstance Arr && Arr.Array.Count == 5 && Arr.Array[0].Integer == 2L && Arr.Array[1].Integer == 4L && Arr.Array[2].Integer == 6L
-                && Arr.Array[3].Integer == 8L && Arr.Array[4].Integer == 10L);
+                && Arr.Array[3].Integer == new Integer(8) && Arr.Array[4].Integer == new Integer(10));
 
             // Unary
             AssertEqual(@"
@@ -228,13 +228,13 @@ namespace Embers_Tests
                 b = - 2
                 c = (- 3.4)
                 return a, b, c
-            ", new object[] {-1L, -2L, -3.4d});
+            ", new object[] {new Integer(-1L), new Integer(-2L), new Float(-3.4d)});
 
             // Hashes
             AssertEqual(@"
                 a = {:hi => 56.1}
                 return a[:hi]
-            ", 56.1d);
+            ", new Float(56.1d));
 
             // Splat Arguments
             AssertEqual(@"
@@ -245,13 +245,13 @@ namespace Embers_Tests
 
                 a true, 5, 8, ""hi"" => 2.4, ""hey"" => :test
                 return $b, $c
-            ", Obj => Obj is ArrayInstance Objs && Objs.Array.Count == 2 && Objs.Array[0] is ArrayInstance Arr && Arr.Array[0].Boolean == true && Arr.Array[1].Integer == 5L
-                && Arr.Array[2].Integer == 8L && Objs.Array[1] is HashInstance Hash && Hash.Hash.Count == 2);
+            ", Obj => Obj is ArrayInstance Objs && Objs.Array.Count == 2 && Objs.Array[0] is ArrayInstance Arr && Arr.Array[0].Boolean == true && Arr.Array[1].Integer == new Integer(5)
+                && Arr.Array[2].Integer == new Integer(8) && Objs.Array[1] is HashInstance Hash && Hash.Hash.Count == 2);
 
             // Ranges
             AssertEqual(@"
                 return (5..7).max, (5...7).max
-            ", new object[] {7L, 6L});
+            ", new object[] {new Integer(7), new Integer(6L)});
             AssertEqual(@"
                 return 'Hi there'[2..10]
             ", " there");
@@ -385,7 +385,7 @@ namespace Embers_Tests
                 $c = (a, b = 1, 2)
                 $d, $e = [5, 6]
                 return a, b, $c[0], $d, $e
-            ", new object[] {1L, 2L, 1L, 5L, 6L});
+            ", new object[] {new Integer(1L), new Integer(2L), new Integer(1L), new Integer(5L), new Integer(6L)});
 
             // Or & not priority
             // This works differently in Ruby, but imo, it's better in Embers.
@@ -394,7 +394,7 @@ namespace Embers_Tests
                 b = a or 2
                 c = not 2 or 3
                 return b, c
-            ", new object[] {5L, 3L});
+            ", new object[] {new Integer(5), new Integer(3)});
 
             // Clone
             AssertEqual(@"

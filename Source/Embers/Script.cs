@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
+using System.Numerics;
 using static Embers.Phase2;
 
 #nullable enable
@@ -163,8 +164,8 @@ namespace Embers
             public virtual object? Object { get { return null; } }
             public virtual bool Boolean { get { throw new RuntimeException("Instance is not a boolean"); } }
             public virtual string String { get { throw new RuntimeException("Instance is not a string"); } }
-            public virtual long Integer { get { throw new RuntimeException("Instance is not an integer"); } }
-            public virtual double Float { get { throw new RuntimeException("Instance is not a float"); } }
+            public virtual Integer Integer { get { throw new RuntimeException("Instance is not an integer"); } }
+            public virtual Float Float { get { throw new RuntimeException("Instance is not a float"); } }
             public virtual Method Proc { get { throw new RuntimeException("Instance is not a proc"); } }
             public virtual ScriptThread? Thread { get { throw new RuntimeException("Instance is not a thread"); } }
             public virtual LongRange Range { get { throw new RuntimeException("Instance is not a range"); } }
@@ -225,8 +226,8 @@ namespace Embers
                     Phase2TokenType.True => Script.Interpreter.True,
                     Phase2TokenType.False => Script.Interpreter.False,
                     Phase2TokenType.String => new StringInstance(Script.Interpreter.String, Token.Value!),
-                    Phase2TokenType.Integer => new IntegerInstance(Script.Interpreter.Integer, Token.ValueAsLong),
-                    Phase2TokenType.Float => new FloatInstance(Script.Interpreter.Float, Token.ValueAsDouble),
+                    Phase2TokenType.Integer => new IntegerInstance(Script.Interpreter.Integer, Token.ValueAsInteger),
+                    Phase2TokenType.Float => new FloatInstance(Script.Interpreter.Float, Token.ValueAsFloat),
                     _ => throw new InternalErrorException($"{Token.Location}: Cannot create new object from token type {Token.Type}")
                 };
             }
@@ -340,25 +341,25 @@ namespace Embers
             }
         }
         public class IntegerInstance : Instance {
-            long Value;
+            Integer Value;
             public override object? Object { get { return Value; } }
-            public override long Integer { get { return Value; } }
-            public override double Float { get { return Value; } }
+            public override Integer Integer { get { return Value; } }
+            public override Float Float { get { return Value; } }
             public override string Inspect() {
                 return Value.ToString();
             }
-            public IntegerInstance(Class fromClass, long value) : base(fromClass) {
+            public IntegerInstance(Class fromClass, Integer value) : base(fromClass) {
                 Value = value;
             }
-            public void SetValue(long value) {
+            public void SetValue(Integer value) {
                 Value = value;
             }
         }
         public class FloatInstance : Instance {
-            double Value;
+            Float Value;
             public override object? Object { get { return Value; } }
-            public override double Float { get { return Value; } }
-            public override long Integer { get { return (long)Value; } }
+            public override Float Float { get { return Value; } }
+            public override Integer Integer { get { return (Integer)Value; } }
             public override string Inspect() {
                 if (double.IsPositiveInfinity(Value))
                     return "Infinity";
@@ -370,10 +371,10 @@ namespace Embers
                     FloatString += ".0";
                 return FloatString;
             }
-            public FloatInstance(Class fromClass, double value) : base(fromClass) {
+            public FloatInstance(Class fromClass, Float value) : base(fromClass) {
                 Value = value;
             }
-            public void SetValue(double value) {
+            public void SetValue(Float value) {
                 Value = value;
             }
         }
@@ -882,6 +883,153 @@ namespace Embers
             }
             public string Serialise() {
                 return $"new {typeof(LongRange).PathTo()}({(Min != null ? Min : "null")}, {(Max != null ? Max : "null")})";
+            }
+        }
+        public readonly struct Integer {
+            private readonly long Long;
+            private readonly BigInteger BigInteger;
+            private readonly bool IsLong;
+            public Integer(long Long) {
+                this.Long = Long;
+                BigInteger = default;
+                IsLong = true;
+            }
+            public Integer(BigInteger BigInteger) {
+                this.BigInteger = BigInteger;
+                Long = default;
+                IsLong = false;
+            }
+            public static Integer operator +(Integer Left, Integer Right) {
+                if (Left.IsLong)
+                    if (Right.IsLong) return Left.Long + Right.Long;
+                    else return Left.Long + Right.BigInteger;
+                else
+                    if (Right.IsLong) return Left.BigInteger + Right.Long;
+                    else return Left.BigInteger + Right.BigInteger;
+            }
+            public static Integer operator -(Integer Left, Integer Right) {
+                if (Left.IsLong)
+                    if (Right.IsLong) return Left.Long - Right.Long;
+                    else return Left.Long - Right.BigInteger;
+                else
+                    if (Right.IsLong) return Left.BigInteger - Right.Long;
+                    else return Left.BigInteger - Right.BigInteger;
+            }
+            public static Integer operator *(Integer Left, Integer Right) {
+                if (Left.IsLong)
+                    if (Right.IsLong) return Left.Long * Right.Long;
+                    else return Left.Long * Right.BigInteger;
+                else
+                    if (Right.IsLong) return Left.BigInteger * Right.Long;
+                else return Left.BigInteger * Right.BigInteger;
+            }
+            public static Integer operator /(Integer Left, Integer Right) {
+                if (Left.IsLong)
+                    if (Right.IsLong) return Left.Long / Right.Long;
+                    else return Left.Long / Right.BigInteger;
+                else
+                    if (Right.IsLong) return Left.BigInteger / Right.Long;
+                else return Left.BigInteger / Right.BigInteger;
+            }
+            public static implicit operator Integer(long Value) {
+                return new Integer(Value);
+            }
+            public static implicit operator Integer(BigInteger Value) {
+                return new Integer(Value);
+            }
+            public static implicit operator long(Integer Value) {
+                return Value.IsLong ? Value.Long : (long)Value.BigInteger;
+            }
+            public static implicit operator BigInteger(Integer Value) {
+                return Value.IsLong ? Value.Long : Value.BigInteger;
+            }
+            public static implicit operator Float(Integer Value) {
+                return new Float(Value);
+            }
+            public override string ToString() {
+                return IsLong ? Long.ToString() : BigInteger.ToString();
+            }
+        }
+        public readonly struct Float {
+            private readonly double Double;
+            private readonly BigFloat BigFloat;
+            private readonly bool IsDouble;
+            public Float(long Long) {
+                Double = Long;
+                BigFloat = default;
+                IsDouble = true;
+            }
+            public Float(double Double) {
+                this.Double = Double;
+                BigFloat = default;
+                IsDouble = true;
+            }
+            public Float(BigFloat BigFloat) {
+                this.BigFloat = BigFloat;
+                Double = default;
+                IsDouble = false;
+            }
+            public static Float operator +(Float Left, Float Right) {
+                if (Left.IsDouble)
+                    if (Right.IsDouble) return Left.Double + Right.Double;
+                    else return Left.Double + Right.BigFloat;
+                else
+                    if (Right.IsDouble) return Left.BigFloat + Right.Double;
+                    else return Left.BigFloat + Right.BigFloat;
+            }
+            public static Float operator -(Float Left, Float Right) {
+                if (Left.IsDouble)
+                    if (Right.IsDouble) return Left.Double - Right.Double;
+                    else return Left.Double - Right.BigFloat;
+                else
+                    if (Right.IsDouble) return Left.BigFloat - Right.Double;
+                    else return Left.BigFloat - Right.BigFloat;
+            }
+            public static Float operator *(Float Left, Float Right) {
+                if (Left.IsDouble)
+                    if (Right.IsDouble) return Left.Double * Right.Double;
+                    else return Left.Double * Right.BigFloat;
+                else
+                    if (Right.IsDouble) return Left.BigFloat * Right.Double;
+                else return Left.BigFloat * Right.BigFloat;
+            }
+            public static Float operator /(Float Left, Float Right) {
+                if (Left.IsDouble)
+                    if (Right.IsDouble) return Left.Double / Right.Double;
+                    else return Left.Double / Right.BigFloat;
+                else
+                    if (Right.IsDouble) return Left.BigFloat / Right.Double;
+                else return Left.BigFloat / Right.BigFloat;
+            }
+            public static Float operator +(Integer Left, Float Right) {
+                return (Float)Left + Right;
+            }
+            public static Float operator -(Integer Left, Float Right) {
+                return (Float)Left - Right;
+            }
+            public static Float operator *(Integer Left, Float Right) {
+                return (Float)Left * Right;
+            }
+            public static Float operator /(Integer Left, Float Right) {
+                return (Float)Left / Right;
+            }
+            public static implicit operator Float(double Value) {
+                return new Float(Value);
+            }
+            public static implicit operator Float(BigFloat Value) {
+                return new Float(Value);
+            }
+            public static implicit operator double(Float Value) {
+                return Value.IsDouble ? Value.Double : (double)Value.BigFloat;
+            }
+            public static implicit operator BigFloat(Float Value) {
+                return Value.IsDouble ? Value.Double : Value.BigFloat;
+            }
+            public static implicit operator Integer(Float Value) {
+                return new Integer((long)Value);
+            }
+            public override string ToString() {
+                return IsDouble ? Double.ToString() : BigFloat.ToString();
             }
         }
         public class WeakEvent<TDelegate> where TDelegate : class {

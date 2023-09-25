@@ -296,7 +296,7 @@ namespace Embers
                 // Integer
                 if (Chara.IsAsciiDigit()) {
                     // Build integer
-                    string Number = BuildWhile(c => c.IsAsciiDigit() || c is '_' or 'e' or 'E' or 'x' or 'X');
+                    string Number = BuildWhile(c => c.IsAsciiDigit() || c is '_' or 'e' or 'E' or 'x' or 'X' || c >= 'A' && c <= 'F' || c >= 'a' && c <= 'f');
                     if (Number.EndsWith('e') || Number.EndsWith('E')) {
                         if (Code[i] is '+' or '-') {
                             Number += Code[i];
@@ -314,7 +314,7 @@ namespace Embers
                     // Hexadecimal notation
                     if (Number.StartsWith("0x")) {
                         if (Number.Length == 2) throw new SyntaxErrorException($"{Location}: '0x' is not a valid number");
-                        Number = Number[2..].ParseHexLong().ToString();
+                        Number = Number[2..].ParseHexInteger().ToString();
                     }
                     // Add integer to tokens
                     Tokens.Add(new(Location, Phase1TokenType.Integer, Number, FollowsWhitespace, FollowedByWhitespace));

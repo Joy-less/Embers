@@ -755,7 +755,7 @@ namespace Embers
                     }
                 }
                 if (IntegerString.Length == 0) return new IntegerInstance(Input.Interpreter.Integer, 0);
-                return new IntegerInstance(Input.Interpreter.Integer, IntegerString.ToString().ParseLong());
+                return new IntegerInstance(Input.Interpreter.Integer, IntegerString.ToString().ParseInteger());
             }
             public static async Task<Instance> to_f(MethodInput Input) {
                 string FloatAsString = Input.Instance.LightInspect();
@@ -778,7 +778,7 @@ namespace Embers
                 }
                 if (FloatString.Length == 0) return new FloatInstance(Input.Interpreter.Float, 0);
                 if (!SeenDot) FloatString.Append(".0");
-                return new FloatInstance(Input.Interpreter.Float, FloatString.ToString().ParseDouble());
+                return new FloatInstance(Input.Interpreter.Float, FloatString.ToString().ParseFloat());
             }
             public static async Task<Instance> to_sym(MethodInput Input) {
                 return Input.Script.GetSymbol(Input.Instance.String);

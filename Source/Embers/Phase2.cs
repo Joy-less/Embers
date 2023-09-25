@@ -124,8 +124,8 @@ namespace Embers
             public readonly bool ProcessFormatting;
 
             public readonly bool IsObjectToken;
-            public readonly long ValueAsLong;
-            public readonly double ValueAsDouble;
+            public readonly Integer ValueAsInteger;
+            public readonly Float ValueAsFloat;
 
             private readonly Phase1Token? FromPhase1Token;
 
@@ -140,8 +140,8 @@ namespace Embers
                 }
 
                 IsObjectToken = IsObjectToken(this);
-                if (Type == Phase2TokenType.Integer) ValueAsLong = Value!.ParseLong();
-                if (Type == Phase2TokenType.Float) ValueAsDouble = Value!.ParseDouble();
+                if (Type == Phase2TokenType.Integer) ValueAsInteger = Value!.ParseInteger();
+                if (Type == Phase2TokenType.Float) ValueAsFloat = Value!.ParseFloat();
             }
             public override string Inspect() {
                 return Type + (Value != null ? ":" : "") + Value;

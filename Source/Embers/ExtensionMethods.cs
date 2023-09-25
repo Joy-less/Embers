@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Diagnostics;
+using System.Numerics;
 using static Embers.Phase2;
 using static Embers.Script;
 
@@ -161,14 +162,29 @@ namespace Embers
         public static bool IsAsciiLetterUpper(this char Chara) {
             return Chara >= 'A' && Chara <= 'Z';
         }
-        public static long ParseLong(this string String) {
-            return long.Parse(String.ToString());
+        public static Integer ParseInteger(this string String) {
+            if (long.TryParse(String, out long Result)) {
+                return new Integer(Result);
+            }
+            else {
+                return new Integer(BigInteger.Parse(String));
+            }
         }
-        public static double ParseDouble(this string String) {
-            return double.Parse(String.ToString());
+        public static Float ParseFloat(this string String) {
+            if (double.TryParse(String, out double Result)) {
+                return new Float(Result);
+            }
+            else {
+                return new Float(BigFloat.Parse(String));
+            }
         }
-        public static long ParseHexLong(this string String) {
-            return long.Parse(String.ToString(), System.Globalization.NumberStyles.HexNumber);
+        public static Integer ParseHexInteger(this string String) {
+            if (long.TryParse(String, System.Globalization.NumberStyles.HexNumber, null, out long Result)) {
+                return new Integer(Result);
+            }
+            else {
+                return new Integer(BigInteger.Parse(String, System.Globalization.NumberStyles.HexNumber));
+            }
         }
         public static long ToUnixTimeSeconds(this DateTimeOffset DateTimeOffset) {
             return DateTimeOffset.ToUnixTimeSeconds();
