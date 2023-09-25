@@ -168,6 +168,12 @@ namespace Embers
         public static bool IsSmall(this double Double) {
             return long.MinValue / 2.0 < Double && Double < long.MaxValue / 2.0;
         }
+        public static bool IsSmall(this BigInteger BigInteger) {
+            return (BigFloat)(long.MinValue / 2.0) < BigInteger && BigInteger < (BigFloat)(long.MaxValue / 2.0);
+        }
+        public static bool IsSmall(this BigFloat BigFloat) {
+            return (BigFloat)(long.MinValue / 2.0) < BigFloat && BigFloat < (BigFloat)(long.MaxValue / 2.0);
+        }
         public static Integer ParseInteger(this string String) {
             if (long.TryParse(String, out long Result) && Result.IsSmall()) {
                 return new Integer(Result);

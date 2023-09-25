@@ -900,84 +900,69 @@ namespace Embers
                 IsLong = false;
             }
             public static Integer operator +(Integer Left, Integer Right) {
-                if (Left.IsLong)
-                    if (Right.IsLong) {
-                        long SmallResult = Left.Long + Right.Long;
-                        if (SmallResult.IsSmall()) {
-                            return SmallResult;
-                        }
-                        else {
-                            return (BigInteger)Left.Long + (BigInteger)Right.Long;
-                        }
-                    }
-                    else return Left.Long + Right.BigInteger;
-                else
-                    if (Right.IsLong) return Left.BigInteger + Right.Long;
-                else return Left.BigInteger + Right.BigInteger;
+                if (Left.IsLong && Right.IsLong) {
+                    long SmallResult = Left.Long + Right.Long;
+                    if (SmallResult.IsSmall()) return SmallResult;
+                }
+
+                BigInteger BigLeft = Left.IsLong ? Left.Long : Left.BigInteger;
+                BigInteger BigRight = Right.IsLong ? Right.Long : Right.BigInteger;
+
+                BigInteger Result = BigLeft + BigRight;
+                if (Result.IsSmall()) return (long)Result;
+                else return Result;
             }
             public static Integer operator -(Integer Left, Integer Right) {
-                if (Left.IsLong)
-                    if (Right.IsLong) {
-                        long SmallResult = Left.Long - Right.Long;
-                        if (SmallResult.IsSmall()) {
-                            return SmallResult;
-                        }
-                        else {
-                            return (BigInteger)Left.Long - (BigInteger)Right.Long;
-                        }
-                    }
-                    else return Left.Long - Right.BigInteger;
-                else
-                    if (Right.IsLong) return Left.BigInteger - Right.Long;
-                else return Left.BigInteger - Right.BigInteger;
+                if (Left.IsLong && Right.IsLong) {
+                    long SmallResult = Left.Long - Right.Long;
+                    if (SmallResult.IsSmall()) return SmallResult;
+                }
+
+                BigInteger BigLeft = Left.IsLong ? Left.Long : Left.BigInteger;
+                BigInteger BigRight = Right.IsLong ? Right.Long : Right.BigInteger;
+
+                BigInteger Result = BigLeft - BigRight;
+                if (Result.IsSmall()) return (long)Result;
+                else return Result;
             }
             public static Integer operator *(Integer Left, Integer Right) {
-                if (Left.IsLong)
-                    if (Right.IsLong) {
-                        long SmallResult = Left.Long * Right.Long;
-                        if (SmallResult.IsSmall()) {
-                            return SmallResult;
-                        }
-                        else {
-                            return (BigInteger)Left.Long * (BigInteger)Right.Long;
-                        }
-                    }
-                    else return Left.Long * Right.BigInteger;
-                else
-                    if (Right.IsLong) return Left.BigInteger * Right.Long;
-                else return Left.BigInteger * Right.BigInteger;
+                if (Left.IsLong && Right.IsLong) {
+                    long SmallResult = Left.Long * Right.Long;
+                    if (SmallResult.IsSmall()) return SmallResult;
+                }
+
+                BigInteger BigLeft = Left.IsLong ? Left.Long : Left.BigInteger;
+                BigInteger BigRight = Right.IsLong ? Right.Long : Right.BigInteger;
+
+                BigInteger Result = BigLeft * BigRight;
+                if (Result.IsSmall()) return (long)Result;
+                else return Result;
             }
             public static Integer operator /(Integer Left, Integer Right) {
-                if (Left.IsLong)
-                    if (Right.IsLong) {
-                        long SmallResult = Left.Long / Right.Long;
-                        if (SmallResult.IsSmall()) {
-                            return SmallResult;
-                        }
-                        else {
-                            return (BigInteger)Left.Long / (BigInteger)Right.Long;
-                        }
-                    }
-                    else return Left.Long / Right.BigInteger;
-                else
-                    if (Right.IsLong) return Left.BigInteger / Right.Long;
-                else return Left.BigInteger / Right.BigInteger;
+                if (Left.IsLong && Right.IsLong) {
+                    long SmallResult = Left.Long / Right.Long;
+                    if (SmallResult.IsSmall()) return SmallResult;
+                }
+
+                BigInteger BigLeft = Left.IsLong ? Left.Long : Left.BigInteger;
+                BigInteger BigRight = Right.IsLong ? Right.Long : Right.BigInteger;
+
+                BigInteger Result = BigLeft / BigRight;
+                if (Result.IsSmall()) return (long)Result;
+                else return Result;
             }
             public static Integer operator %(Integer Left, Integer Right) {
-                if (Left.IsLong)
-                    if (Right.IsLong) {
-                        long SmallResult = Left.Long % Right.Long;
-                        if (SmallResult.IsSmall()) {
-                            return SmallResult;
-                        }
-                        else {
-                            return (BigInteger)Left.Long % (BigInteger)Right.Long;
-                        }
-                    }
-                    else return Left.Long % Right.BigInteger;
-                else
-                    if (Right.IsLong) return Left.BigInteger % Right.Long;
-                else return Left.BigInteger % Right.BigInteger;
+                if (Left.IsLong && Right.IsLong) {
+                    long SmallResult = Left.Long % Right.Long;
+                    if (SmallResult.IsSmall()) return SmallResult;
+                }
+
+                BigInteger BigLeft = Left.IsLong ? Left.Long : Left.BigInteger;
+                BigInteger BigRight = Right.IsLong ? Right.Long : Right.BigInteger;
+
+                BigInteger Result = BigLeft % BigRight;
+                if (Result.IsSmall()) return (long)Result;
+                else return Result;
             }
             public static implicit operator Integer(long Value) {
                 return new Integer(Value);
@@ -1020,84 +1005,69 @@ namespace Embers
                 IsDouble = Integer.IsLong;
             }
             public static Float operator +(Float Left, Float Right) {
-                if (Left.IsDouble)
-                    if (Right.IsDouble) {
-                        double SmallResult = Left.Double + Right.Double;
-                        if (SmallResult.IsSmall()) {
-                            return SmallResult;
-                        }
-                        else {
-                            return (BigFloat)Left.Double + (BigFloat)Right.Double;
-                        }
-                    }
-                    else return Left.Double + Right.BigFloat;
-                else
-                    if (Right.IsDouble) return Left.BigFloat + Right.Double;
-                else return Left.BigFloat + Right.BigFloat;
+                if (Left.IsDouble && Right.IsDouble) {
+                    double SmallResult = Left.Double + Right.Double;
+                    if (SmallResult.IsSmall()) return SmallResult;
+                }
+
+                BigFloat BigLeft = Left.IsDouble ? Left.Double : Left.BigFloat;
+                BigFloat BigRight = Right.IsDouble ? Right.Double : Right.BigFloat;
+
+                BigFloat Result = BigLeft + BigRight;
+                if (Result.IsSmall()) return (double)Result;
+                else return Result;
             }
             public static Float operator -(Float Left, Float Right) {
-                if (Left.IsDouble)
-                    if (Right.IsDouble) {
-                        double SmallResult = Left.Double - Right.Double;
-                        if (SmallResult.IsSmall()) {
-                            return SmallResult;
-                        }
-                        else {
-                            return (BigFloat)Left.Double - (BigFloat)Right.Double;
-                        }
-                    }
-                    else return Left.Double - Right.BigFloat;
-                else
-                    if (Right.IsDouble) return Left.BigFloat - Right.Double;
-                else return Left.BigFloat - Right.BigFloat;
+                if (Left.IsDouble && Right.IsDouble) {
+                    double SmallResult = Left.Double - Right.Double;
+                    if (SmallResult.IsSmall()) return SmallResult;
+                }
+
+                BigFloat BigLeft = Left.IsDouble ? Left.Double : Left.BigFloat;
+                BigFloat BigRight = Right.IsDouble ? Right.Double : Right.BigFloat;
+
+                BigFloat Result = BigLeft - BigRight;
+                if (Result.IsSmall()) return (double)Result;
+                else return Result;
             }
             public static Float operator *(Float Left, Float Right) {
-                if (Left.IsDouble)
-                    if (Right.IsDouble) {
-                        double SmallResult = Left.Double * Right.Double;
-                        if (SmallResult.IsSmall()) {
-                            return SmallResult;
-                        }
-                        else {
-                            return (BigFloat)Left.Double * (BigFloat)Right.Double;
-                        }
-                    }
-                    else return Left.Double * Right.BigFloat;
-                else
-                    if (Right.IsDouble) return Left.BigFloat * Right.Double;
-                else return Left.BigFloat * Right.BigFloat;
+                if (Left.IsDouble && Right.IsDouble) {
+                    double SmallResult = Left.Double * Right.Double;
+                    if (SmallResult.IsSmall()) return SmallResult;
+                }
+
+                BigFloat BigLeft = Left.IsDouble ? Left.Double : Left.BigFloat;
+                BigFloat BigRight = Right.IsDouble ? Right.Double : Right.BigFloat;
+
+                BigFloat Result = BigLeft * BigRight;
+                if (Result.IsSmall()) return (double)Result;
+                else return Result;
             }
             public static Float operator /(Float Left, Float Right) {
-                if (Left.IsDouble)
-                    if (Right.IsDouble) {
-                        double SmallResult = Left.Double / Right.Double;
-                        if (SmallResult.IsSmall()) {
-                            return SmallResult;
-                        }
-                        else {
-                            return (BigFloat)Left.Double / (BigFloat)Right.Double;
-                        }
-                    }
-                    else return Left.Double / Right.BigFloat;
-                else
-                    if (Right.IsDouble) return Left.BigFloat / Right.Double;
-                else return Left.BigFloat / Right.BigFloat;
+                if (Left.IsDouble && Right.IsDouble) {
+                    double SmallResult = Left.Double / Right.Double;
+                    if (SmallResult.IsSmall()) return SmallResult;
+                }
+
+                BigFloat BigLeft = Left.IsDouble ? Left.Double : Left.BigFloat;
+                BigFloat BigRight = Right.IsDouble ? Right.Double : Right.BigFloat;
+
+                BigFloat Result = BigLeft / BigRight;
+                if (Result.IsSmall()) return (double)Result;
+                else return Result;
             }
             public static Float operator %(Float Left, Float Right) {
-                if (Left.IsDouble)
-                    if (Right.IsDouble) {
-                        double SmallResult = Left.Double % Right.Double;
-                        if (SmallResult.IsSmall()) {
-                            return SmallResult;
-                        }
-                        else {
-                            return (BigFloat)Left.Double % (BigFloat)Right.Double;
-                        }
-                    }
-                    else return Left.Double % Right.BigFloat;
-                else
-                    if (Right.IsDouble) return Left.BigFloat % Right.Double;
-                else return Left.BigFloat % Right.BigFloat;
+                if (Left.IsDouble && Right.IsDouble) {
+                    double SmallResult = Left.Double % Right.Double;
+                    if (SmallResult.IsSmall()) return SmallResult;
+                }
+
+                BigFloat BigLeft = Left.IsDouble ? Left.Double : Left.BigFloat;
+                BigFloat BigRight = Right.IsDouble ? Right.Double : Right.BigFloat;
+
+                BigFloat Result = BigLeft % BigRight;
+                if (Result.IsSmall()) return (double)Result;
+                else return Result;
             }
             public static Float operator +(Integer Left, Float Right) {
                 return (Float)Left + Right;
