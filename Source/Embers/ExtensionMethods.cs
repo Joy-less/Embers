@@ -162,8 +162,14 @@ namespace Embers
         public static bool IsAsciiLetterUpper(this char Chara) {
             return Chara >= 'A' && Chara <= 'Z';
         }
+        public static bool IsSmall(this long Long) {
+            return long.MinValue / 2.0 < Long && Long < long.MaxValue / 2.0;
+        }
+        public static bool IsSmall(this double Double) {
+            return long.MinValue / 2.0 < Double && Double < long.MaxValue / 2.0;
+        }
         public static Integer ParseInteger(this string String) {
-            if (long.TryParse(String, out long Result)) {
+            if (long.TryParse(String, out long Result) && Result.IsSmall()) {
                 return new Integer(Result);
             }
             else {
@@ -171,7 +177,7 @@ namespace Embers
             }
         }
         public static Float ParseFloat(this string String) {
-            if (double.TryParse(String, out double Result)) {
+            if (double.TryParse(String, out double Result) && Result.IsSmall()) {
                 return new Float(Result);
             }
             else {

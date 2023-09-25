@@ -683,7 +683,7 @@ namespace Embers
             public static async Task<Instance> _LessThan(MethodInput Input) {
                 Instance Left = Input.Instance;
                 Instance Right = Input.Arguments[0];
-                if ((Right is StringInstance) && string.Compare(Left.String, Right.String) < 0) {
+                if (Right is StringInstance && string.Compare(Left.String, Right.String) < 0) {
                     return Input.Interpreter.True;
                 }
                 else {
@@ -693,7 +693,7 @@ namespace Embers
             public static async Task<Instance> _GreaterThan(MethodInput Input) {
                 Instance Left = Input.Instance;
                 Instance Right = Input.Arguments[0];
-                if ((Right is StringInstance) && string.Compare(Left.String, Right.String) > 0) {
+                if (Right is StringInstance && string.Compare(Left.String, Right.String) > 0) {
                     return Input.Interpreter.True;
                 }
                 else {
@@ -703,7 +703,7 @@ namespace Embers
             public static async Task<Instance> _LessThanOrEqualTo(MethodInput Input) {
                 Instance Left = Input.Instance;
                 Instance Right = Input.Arguments[0];
-                if ((Right is StringInstance) && string.Compare(Left.String, Right.String) <= 0) {
+                if (Right is StringInstance && string.Compare(Left.String, Right.String) <= 0) {
                     return Input.Interpreter.True;
                 }
                 else {
@@ -713,7 +713,7 @@ namespace Embers
             public static async Task<Instance> _GreaterThanOrEqualTo(MethodInput Input) {
                 Instance Left = Input.Instance;
                 Instance Right = Input.Arguments[0];
-                if ((Right is StringInstance) && string.Compare(Left.String, Right.String) >= 0) {
+                if (Right is StringInstance && string.Compare(Left.String, Right.String) >= 0) {
                     return Input.Interpreter.True;
                 }
                 else {
