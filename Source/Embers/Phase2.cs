@@ -2753,13 +2753,15 @@ namespace Embers
                             AcceptComma = false;
                             CommaLocation = ParsedToken.Location;
                         }
+                        else if (ParsedObject is Phase2Token OtherParsedToken && OtherParsedToken.Type == Phase2TokenType.EndOfStatement) {
+                        }
                         else {
                             throw new SyntaxErrorException($"{ParsedObject.Location}: Unexpected '{ParsedObject.Inspect()}'");
                         }
                     }
                     
-                    if (AcceptComma == false && Expressions.Count != 0) {
-                        throw new SyntaxErrorException($"{CommaLocation}: Expected expression after comma");
+                    if (CommaLocation != null && Expressions.Count == 0) {
+                        throw new SyntaxErrorException($"{CommaLocation}: Expected expression before comma");
                     }
                 }
 
