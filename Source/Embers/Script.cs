@@ -105,16 +105,20 @@ namespace Embers
                     SuperModule.InstanceMethods.CopyTo(InstanceMethods);
                     // Inherit changes later
                     SuperModule.Methods.Set += (string Key, Method NewValue) => {
-                        Methods[Key] = NewValue;
+                        lock (Methods)
+                            Methods[Key] = NewValue;
                     };
                     SuperModule.InstanceMethods.Set += (string Key, Method NewValue) => {
-                        InstanceMethods[Key] = NewValue;
+                        lock (InstanceMethods)
+                            InstanceMethods[Key] = NewValue;
                     };
                     SuperModule.Methods.Removed += (string Key) => {
-                        Methods.Remove(Key);
+                        lock (Methods)
+                            Methods.Remove(Key);
                     };
                     SuperModule.InstanceMethods.Removed += (string Key) => {
-                        InstanceMethods.Remove(Key);
+                        lock (InstanceMethods)
+                            InstanceMethods.Remove(Key);
                     };
                 }
             }
@@ -242,33 +246,35 @@ namespace Embers
                 Setup();
             }
             void Setup() {
-                if (this is not PseudoInstance && Module != null) {
+                if (this is not RealPseudoInstance && Module != null) {
                     // Copy instance methods
                     Module.InstanceMethods.CopyTo(InstanceMethods);
-                    // Inherit changes later
+                    // Copy future changes
                     Module.InstanceMethods.Set += (string Key, Method NewValue) => {
-                        InstanceMethods[Key] = NewValue;
+                        lock (InstanceMethods)
+                            InstanceMethods[Key] = NewValue;
                     };
                     Module.InstanceMethods.Removed += (string Key) => {
-                        InstanceMethods.Remove(Key);
+                        lock (InstanceMethods)
+                            InstanceMethods.Remove(Key);
                     };
                 }
             }
             public void AddOrUpdateInstanceMethod(string Name, Method Method) {
-                lock (InstanceMethods) lock (Module!.InstanceMethods)
-                    InstanceMethods[Name] =
+                lock (Module!.InstanceMethods)
                     Module.InstanceMethods[Name] = Method;
+                    // Change will be automatically copied to this instance
             }
             public async Task<Instance> TryCallInstanceMethod(Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
                 // Found
                 if (InstanceMethods.TryGetValue(MethodName, out Method? FindMethod)) {
-                    return await Script.CreateTemporaryClassScope(Module!, async () =>
+                    return await Script.CreateTemporaryInstanceScope(this, async () =>
                         await FindMethod.Call(Script, this, Arguments, OnYield)
                     );
                 }
                 // Error
                 else {
-                    throw new RuntimeException($"{Script.ApproximateLocation}: Undefined method '{MethodName}' for {Module?.Name}");
+                    throw new RuntimeException($"{Script.ApproximateLocation}: Undefined method '{MethodName}' for {LightInspect()}");
                 }
             }
         }
@@ -575,15 +581,13 @@ namespace Embers
             public RealPseudoInstance(Interpreter interpreter) : base(interpreter) { }
         }
         public class VariableReference : RealPseudoInstance {
-            public Block? Block;
             public Instance? Instance;
             public Phase2Token Token;
-            public bool IsLocalReference => Block == null && Instance == null;
+            public bool IsLocalReference => Module == null && Instance == null;
             public override string Inspect() {
-                return $"{(Block != null ? Block.GetType().Name : (Instance != null ? Instance.Inspect() : Token.Inspect()))} var ref in {Token.Inspect()}";
+                return $"{(Module != null ? Module.GetType().Name : (Instance != null ? Instance.Inspect() : Token.Inspect()))} var ref in {Token.Inspect()}";
             }
             public VariableReference(Module module, Phase2Token token) : base(module) {
-                Block = module;
                 Token = token;
             }
             public VariableReference(Instance instance, Phase2Token token) : base(instance.Module!.Interpreter) {
@@ -1111,21 +1115,23 @@ namespace Embers
                 return IsDouble ? Double.ToString() : BigFloat.ToString();
             }
         }
-        public class WeakEvent<TDelegate> where TDelegate : class {
+        public class WeakEvent<TDelegate> where TDelegate : Delegate {
             readonly List<WeakReference> Subscribers = new();
 
             public void Add(TDelegate Handler) {
-                // Remove any dead references
-                Subscribers.RemoveAll(WeakRef => !WeakRef.IsAlive);
-                // Add the new handler as a weak reference
-                Subscribers.Add(new WeakReference(Handler));
+                lock (Subscribers) {
+                    // Remove any dead references
+                    Subscribers.RemoveAll(WeakRef => !WeakRef.IsAlive);
+                    // Add the new handler as a weak reference
+                    Subscribers.Add(new WeakReference(Handler));
+                }
             }
-
             public void Remove(TDelegate Handler) {
-                // Remove the handler from the list
-                Subscribers.RemoveAll(WeakRef => WeakRef.Target == Handler);
+                lock (Subscribers) {
+                    // Remove the handler from the list
+                    Subscribers.RemoveAll(WeakRef => WeakRef.Target == Handler);
+                }
             }
-
             public void Raise(Action<TDelegate> Action) {
                 // Invoke the action for each subscriber that is still alive
                 foreach (WeakReference WeakRef in Subscribers) {
@@ -1159,12 +1165,12 @@ namespace Embers
                     SetEvent.Raise(Handler => Handler(Key, value));
                 }
             }
-            public TValue this[params TKey[] Keys] {
+            public TValue this[TKey FirstKey, params TKey[] Keys] {
                 set {
-                    TrySetMethodName(Keys[0], value);
+                    TrySetMethodName(FirstKey, value);
+                    this[FirstKey] = value;
                     foreach (TKey Key in Keys) {
-                        base[Key] = value;
-                        SetEvent.Raise(Handler => Handler(Key, value));
+                        this[Key] = value;
                     }
                 }
             }
@@ -1391,7 +1397,7 @@ namespace Embers
         }
         public bool TryGetLocalInstanceMethod(string Name, out Method? LocalInstanceMethod) {
             foreach (object Object in CurrentObject) {
-                if (Object is Instance Instance && (Instance is PseudoInstance ? Instance.Module!.InstanceMethods : Instance.InstanceMethods).TryGetValue(Name, out Method? FindLocalInstanceMethod)) {
+                if (Object is Instance Instance && (Instance is RealPseudoInstance ? Instance.Module!.InstanceMethods : Instance.InstanceMethods).TryGetValue(Name, out Method? FindLocalInstanceMethod)) {
                     LocalInstanceMethod = FindLocalInstanceMethod;
                     return true;
                 }
@@ -1427,9 +1433,9 @@ namespace Embers
             Instance MethodPath = await InterpretExpressionAsync(MethodCallExpression.MethodPath, ReturnType.FoundVariable);
             if (MethodPath is VariableReference MethodReference) {
                 // Static method
-                if (MethodReference.Block != null) {
+                if (MethodReference.Module != null) {
                     // Get class/module which owns method
-                    Module MethodModule = MethodReference.Block as Module ?? CurrentModule;
+                    Module MethodModule = MethodReference.Module;
                     // Get instance of the class/module which owns method
                     Instance MethodOwner;
                     if (MethodCallExpression.MethodPath is PathExpression MethodCallPathExpression) {
@@ -1841,8 +1847,8 @@ namespace Embers
             if (MethodNameObject is VariableReference MethodNameRef) {
                 string MethodName = MethodNameRef.Token.Value!;
                 // Define static method
-                if (MethodNameRef.Block != null) {
-                    Module MethodModule = (Module)MethodNameRef.Block;
+                if (MethodNameRef.Module != null) {
+                    Module MethodModule = MethodNameRef.Module;
                     // Prevent redefining unsafe API methods
                     if (!AllowUnsafeApi && MethodModule.Methods.TryGetValue(MethodName, out Method? ExistingMethod) && ExistingMethod.Unsafe) {
                         throw new RuntimeException($"{DefineMethodStatement.Location}: The static method '{MethodName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
@@ -1885,7 +1891,9 @@ namespace Embers
                 // Create or patch class
                 Module NewModule;
                 // Patch class
-                if (CurrentModule.Constants.TryGetValue(ClassName, out Instance? ConstantValue) && ConstantValue is ModuleReference ModuleReference) {
+                if ((ClassNameRef.Module != null && ClassNameRef.Module.Constants.TryGetValue(ClassName, out Instance? ConstantValue) || ClassNameRef.Module == null && CurrentModule.Constants.TryGetValue(ClassName, out ConstantValue))
+                    && ConstantValue is ModuleReference ModuleReference)
+                {
                     if (InheritsFrom != null) {
                         throw new SyntaxErrorException($"{DefineClassStatement.Location}: Patch for already defined class/module cannot inherit");
                     }
@@ -1924,8 +1932,8 @@ namespace Embers
                 // Store class/module constant
                 Module Module;
                 // Path
-                if (ClassNameRef.Block != null)
-                    Module = (Module)ClassNameRef.Block;
+                if (ClassNameRef.Module != null)
+                    Module = ClassNameRef.Module;
                 // Local
                 else
                     Module = (ClassNameRef.Instance ?? CurrentInstance).Module!;
@@ -1976,8 +1984,8 @@ namespace Embers
                 if (MethodToAliasRef.Instance != null) {
                     Methods = MethodToAliasRef.Instance!.InstanceMethods;
                 }
-                else if (MethodToAliasRef.Block != null) {
-                    Methods = ((Module)MethodToAliasRef.Block!).Methods;
+                else if (MethodToAliasRef.Module != null) {
+                    Methods = MethodToAliasRef.Module!.Methods;
                 }
                 else {
                     Methods = CurrentInstance.InstanceMethods;

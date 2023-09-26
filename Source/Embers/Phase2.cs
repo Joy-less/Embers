@@ -2146,16 +2146,61 @@ namespace Embers
                 }
             }
 
-            // Arrays
+            // Paths, Arrays & Indexers
             {
                 Stack<int> SquareBracketsStack = new();
                 for (int i = 0; i < ParsedObjects.Count; i++) {
+                    Phase2Object? LastObject = i - 1 >= 0 ? ParsedObjects[i - 1] : null;
                     Phase2Object Object = ParsedObjects[i];
                     Phase2Object? NextObject = i + 1 < ParsedObjects.Count ? ParsedObjects[i + 1] : null;
                     Phase2Object? NextNextObject = i + 2 < ParsedObjects.Count ? ParsedObjects[i + 2] : null;
 
                     if (Object is Phase2Token Token) {
-                        if (Token.Type == Phase2TokenType.StartSquare) {
+                        // Path or Constant Path
+                        if (Token.Type is Phase2TokenType.Dot or Phase2TokenType.DoubleColon) {
+                            if (LastObject != null) {
+                                // e.g. A + . + b = A.b
+                                if (LastObject is Expression LastExpression && NextObject is ObjectTokenExpression NextToken) {
+                                    if (!(NextToken.Token.Type == Phase2TokenType.ConstantOrMethod
+                                        || (Token.Type == Phase2TokenType.Dot && NextToken.Token.Type == Phase2TokenType.LocalVariableOrMethod)))
+                                    {
+                                        throw new SyntaxErrorException($"{NextToken.Location}: Expected identifier after '.', got {NextToken.Inspect()}");
+                                    }
+
+                                    ParsedObjects.RemoveRange(i - 1, 3);
+                                    ParsedObjects.Insert(i - 1, Token.Type == Phase2TokenType.Dot
+                                        ? new PathExpression(LastExpression, NextToken.Token)
+                                        : new ConstantPathExpression(LastExpression, NextToken.Token));
+                                    i -= 2;
+                                }
+                                // e.g. A + . + b() = A.b()
+                                else if (LastObject is Expression LastObjectExpression && NextObject is MethodCallExpression NextMethodCall) {
+                                    if (NextMethodCall.MethodPath is PathExpression) {
+                                        throw new InternalErrorException($"{NextMethodCall.MethodPath.Location}: Method call name following '.' should not be path expression (got {NextMethodCall.MethodPath.Inspect()})");
+                                    }
+                                    else if (NextMethodCall.MethodPath is not ObjectTokenExpression) {
+                                        throw new RuntimeException($"{NextMethodCall.MethodPath.Location}: Method call name following '.' should be object token expression (got {NextMethodCall.MethodPath.Inspect()})");
+                                    }
+                                    ParsedObjects.RemoveRange(i - 1, 2);
+                                    NextMethodCall.MethodPath = new PathExpression(LastObjectExpression, ((ObjectTokenExpression)NextMethodCall.MethodPath).Token);
+                                    i -= 2;
+                                }
+                                else {
+                                    if (LastObject is not Expression) {
+                                        throw new SyntaxErrorException($"{Token.Location}: Expected expression before '{Token.Value!}' (got {LastObject.Inspect()})");
+                                    }
+                                    else {
+                                        throw new SyntaxErrorException($"{Token.Location}: Expected identifier after '{Token.Value!}' (got {(NextObject != null ? NextObject.Inspect() : "nothing")})");
+                                    }
+                                }
+                            }
+                            else {
+                                throw new SyntaxErrorException($"{Token.Location}: Expected a value before '{Token.Value!}'");
+                            }
+                        }
+
+                        // Arrays & Indexers
+                        else if (Token.Type == Phase2TokenType.StartSquare) {
                             SquareBracketsStack.Push(i);
                         }
                         else if (Token.Type == Phase2TokenType.EndSquare) {
@@ -2172,7 +2217,7 @@ namespace Embers
                                 }
                                 // Check whether [] is []=
                                 Expression? IsIndexEquals = null;
-                                if (NextObject is Phase2Token NextToken && NextToken.Type == Phase2TokenType.AssignmentOperator && NextToken.Value == "=") {
+                                if (IsIndexer != null && NextObject is Phase2Token NextToken && NextToken.Type == Phase2TokenType.AssignmentOperator && NextToken.Value == "=") {
                                     if (NextNextObject is Expression IndexAssignmentValue) {
                                         IsIndexEquals = IndexAssignmentValue;
                                         // Remove equals and value
@@ -2191,13 +2236,14 @@ namespace Embers
                                 // Indexer
                                 if (IsIndexer != null) {
                                     // Get index
-                                    Expression Index = ObjectsToExpression(EnclosedObjects);
+                                    List<Expression> Index = ObjectsToExpressions(EnclosedObjects, ExpressionsType.CommaSeparatedExpressions);
                                     // []=
                                     if (IsIndexEquals != null) {
                                         // Create index equals expression
+                                        Index.Add(IsIndexEquals);
                                         ParsedObjects.Insert(OpenBracketIndex, new MethodCallExpression(
                                             new PathExpression(IsIndexer, new Phase2Token(ParsedObjects[OpenBracketIndex - 1].Location, Phase2TokenType.LocalVariableOrMethod, "[]=")),
-                                            new List<Expression>() { Index, IsIndexEquals }
+                                            Index
                                         ));
                                     }
                                     // []
@@ -2205,7 +2251,7 @@ namespace Embers
                                         // Create indexer expression
                                         ParsedObjects.Insert(OpenBracketIndex, new MethodCallExpression(
                                             new PathExpression(IsIndexer, new Phase2Token(ParsedObjects[OpenBracketIndex - 1].Location, Phase2TokenType.LocalVariableOrMethod, "[]")),
-                                            new List<Expression>() { Index }
+                                            Index
                                         ));
                                     }
                                     // Remove object before []
@@ -2232,60 +2278,9 @@ namespace Embers
                         }
                     }
                 }
+                // Check for unclosed arrays/indexers
                 if (SquareBracketsStack.TryPop(out int RemainingOpenBracketIndex)) {
                     throw new SyntaxErrorException($"{ParsedObjects[RemainingOpenBracketIndex].Location}: Unclosed square bracket");
-                }
-            }
-
-            // Paths
-            for (int i = 0; i < ParsedObjects.Count; i++) {
-                Phase2Object? LastObject = i - 1 >= 0 ? ParsedObjects[i - 1] : null;
-                Phase2Object Object = ParsedObjects[i];
-                Phase2Object? NextObject = i + 1 < ParsedObjects.Count ? ParsedObjects[i + 1] : null;
-
-                if (Object is Phase2Token Token) {
-                    // Path or Constant Path
-                    if (Token.Type is Phase2TokenType.Dot or Phase2TokenType.DoubleColon) {
-                        if (LastObject != null) {
-                            // e.g. A + . + b = A.b
-                            if (LastObject is Expression LastExpression && NextObject is ObjectTokenExpression NextToken) {
-                                if (!(NextToken.Token.Type == Phase2TokenType.ConstantOrMethod
-                                    || (Token.Type == Phase2TokenType.Dot && NextToken.Token.Type == Phase2TokenType.LocalVariableOrMethod)))
-                                {
-                                    throw new SyntaxErrorException($"{NextToken.Location}: Expected identifier after '.', got {NextToken.Inspect()}");
-                                }
-
-                                ParsedObjects.RemoveRange(i - 1, 3);
-                                ParsedObjects.Insert(i - 1, Token.Type == Phase2TokenType.Dot
-                                    ? new PathExpression(LastExpression, NextToken.Token)
-                                    : new ConstantPathExpression(LastExpression, NextToken.Token));
-                                i -= 2;
-                            }
-                            // e.g. A + . + b() = A.b()
-                            else if (LastObject is Expression LastObjectExpression && NextObject is MethodCallExpression NextMethodCall) {
-                                if (NextMethodCall.MethodPath is PathExpression) {
-                                    throw new InternalErrorException($"{NextMethodCall.MethodPath.Location}: Method call name following '.' should not be path expression (got {NextMethodCall.MethodPath.Inspect()})");
-                                }
-                                else if (NextMethodCall.MethodPath is not ObjectTokenExpression) {
-                                    throw new RuntimeException($"{NextMethodCall.MethodPath.Location}: Method call name following '.' should be object token expression (got {NextMethodCall.MethodPath.Inspect()})");
-                                }
-                                ParsedObjects.RemoveRange(i - 1, 2);
-                                NextMethodCall.MethodPath = new PathExpression(LastObjectExpression, ((ObjectTokenExpression)NextMethodCall.MethodPath).Token);
-                                i -= 2;
-                            }
-                            else {
-                                if (LastObject is not Expression) {
-                                    throw new SyntaxErrorException($"{Token.Location}: Expected expression before '{Token.Value!}' (got {LastObject.Inspect()})");
-                                }
-                                else {
-                                    throw new SyntaxErrorException($"{Token.Location}: Expected identifier after '{Token.Value!}' (got {(NextObject != null ? NextObject.Inspect() : "nothing")})");
-                                }
-                            }
-                        }
-                        else {
-                            throw new SyntaxErrorException($"{Token.Location}: Expected a value before '{Token.Value!}'");
-                        }
-                    }
                 }
             }
 
