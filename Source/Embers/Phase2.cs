@@ -115,6 +115,12 @@ namespace Embers
         public readonly static string[] NonMethodOperators = new[] {
             "or", "and", "&&", "||", "!", "not"
         };
+        public readonly static Phase2TokenType[] StartParenthesesTokens = new[] {
+            Phase2TokenType.OpenBracket, Phase2TokenType.StartSquare, Phase2TokenType.StartCurly, Phase2TokenType.Pipe
+        };
+        public readonly static Phase2TokenType[] EndParenthesesTokens = new[] {
+            Phase2TokenType.CloseBracket, Phase2TokenType.EndSquare, Phase2TokenType.EndCurly, Phase2TokenType.Pipe
+        };
 
         public class Phase2Token : Phase2Object {
             public readonly Phase2TokenType Type;
@@ -1104,6 +1110,25 @@ namespace Embers
         static List<Expression> GetCommaSeparatedExpressions(List<Phase2Object> Objects, ref int Index, bool Backwards = false) {
             return GetCommaSeparatedExpressions<Expression>(Objects, ref Index, Backwards);
         }
+        static List<Phase2Object> SkipParentheses(List<Phase2Object> Phase2Objects, ref int Index) {
+            List<Phase2Object> Bite = new();
+            int ParenthesesStack = 0;
+            for (; Index < Phase2Objects.Count; Index++) {
+                Phase2Object UnknownObject = Phase2Objects[Index];
+                Phase2TokenType? TokenType = UnknownObject is Phase2Token Token ? Token.Type : null;
+                if (TokenType != null) {
+                    if (StartParenthesesTokens.Contains(TokenType.Value)) {
+                        ParenthesesStack++;
+                    }
+                    else if (EndParenthesesTokens.Contains(TokenType.Value)) {
+                        ParenthesesStack--;
+                    }
+                }
+                Bite.Add(UnknownObject);
+                if (ParenthesesStack == 0) break;
+            }
+            return Bite;
+        }
         static ObjectTokenExpression GetMethodName(List<Phase2Object> Phase2Objects, ref int Index) {
             SelfExpression? StartsWithSelf = null;
             bool NextTokenCanBeVariable = true;
@@ -1234,15 +1259,19 @@ namespace Embers
                         }
                         List<Phase2Object> DefaultValueObjects = new();
                         for (Index++; Index < Phase2Objects.Count; Index++) {
-                            if (Phase2Objects[Index] is Phase2Token Tok
-                                && (Tok.Type is Phase2TokenType.Comma or Phase2TokenType.CloseBracket or Phase2TokenType.Pipe or Phase2TokenType.EndOfStatement))
-                            {
-                                Index--;
-                                break;
+                            Phase2Object Obj = Phase2Objects[Index];
+                            if (Obj is Phase2Token Tok) {
+                                if (Tok.Type is Phase2TokenType.Comma or Phase2TokenType.CloseBracket or Phase2TokenType.Pipe or Phase2TokenType.EndOfStatement) {
+                                    Index--;
+                                    break;
+                                }
+                                else if (StartParenthesesTokens.Contains(Tok.Type)) {
+                                    // Skip nested parentheses
+                                    DefaultValueObjects.AddRange(SkipParentheses(Phase2Objects, ref Index));
+                                    continue;
+                                }
                             }
-                            else {
-                                DefaultValueObjects.Add(Phase2Objects[Index]);
-                            }
+                            DefaultValueObjects.Add(Obj);
                         }
                         if (DefaultValueObjects.Count == 0) {
                             throw new SyntaxErrorException($"{Token.Location}: Expected value after '='");
@@ -2196,6 +2225,10 @@ namespace Embers
                             else {
                                 throw new SyntaxErrorException($"{Token.Location}: Unexpected square close bracket");
                             }
+                        }
+                        else if (StartParenthesesTokens.Contains(Token.Type)) {
+                            // Skip nested parentheses
+                            SkipParentheses(ParsedObjects, ref i);
                         }
                     }
                 }
