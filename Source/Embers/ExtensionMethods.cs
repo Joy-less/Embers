@@ -89,8 +89,8 @@ namespace Embers
             }
             return ListInspection;
         }
-        public static string Serialise<T>(this ConcurrentDictionary<T, T> Dictionary) where T : Phase2Object {
-            string Serialised = $"new ConcurrentDictionary<{typeof(T).PathTo()}, {typeof(T).PathTo()}>() {{";
+        public static string Serialise<T>(this LockingDictionary<T, T> Dictionary) where T : Phase2Object {
+            string Serialised = $"new LockingDictionary<{typeof(T).PathTo()}, {typeof(T).PathTo()}>() {{";
             bool IsFirst = true;
             foreach (KeyValuePair<T, T> Item in Dictionary) {
                 if (IsFirst) IsFirst = false;
@@ -99,7 +99,7 @@ namespace Embers
             }
             return Serialised + "}";
         }
-        public static string Inspect<T>(this ConcurrentDictionary<T, T>? Dictionary, string Separator = ", ") where T : Phase2Object {
+        public static string Inspect<T>(this LockingDictionary<T, T>? Dictionary, string Separator = ", ") where T : Phase2Object {
             string DictionaryInspection = "";
             if (Dictionary != null) {
                 foreach (KeyValuePair<T, T> Object in Dictionary) {
@@ -110,7 +110,7 @@ namespace Embers
             }
             return DictionaryInspection;
         }
-        public static string InspectInstances<T>(this ConcurrentDictionary<T, T>? Dictionary, string Separator = ", ") where T : Instance {
+        public static string InspectInstances<T>(this LockingDictionary<T, T>? Dictionary, string Separator = ", ") where T : Instance {
             string DictionaryInspection = "";
             if (Dictionary != null) {
                 foreach (KeyValuePair<T, T> Object in Dictionary) {
@@ -127,7 +127,7 @@ namespace Embers
             else
                 return new DebugLocation();
         }
-        public static void CopyTo<TKey, TValue>(this ConcurrentDictionary<TKey, TValue> Origin, ConcurrentDictionary<TKey, TValue> Target) where TKey : notnull {
+        public static void CopyTo<TKey, TValue>(this LockingDictionary<TKey, TValue> Origin, LockingDictionary<TKey, TValue> Target) where TKey : notnull {
             foreach (KeyValuePair<TKey, TValue> Pair in Origin) {
                 Target[Pair.Key] = Pair.Value;
             }
@@ -141,15 +141,15 @@ namespace Embers
             Stack.Clear();
             With.CopyTo(Stack);
         }
-        public static ConcurrentDictionary<T, T> ListAsHash<T>(this List<T> HashItemsList) where T : notnull {
-            ConcurrentDictionary<T, T> HashItems = new();
+        public static LockingDictionary<T, T> ListAsHash<T>(this List<T> HashItemsList) where T : notnull {
+            LockingDictionary<T, T> HashItems = new();
             for (int i2 = 0; i2 < HashItemsList.Count; i2 += 2) {
                 HashItems[HashItemsList[i2]] = HashItemsList[i2 + 1];
             }
             return HashItems;
         }
-        public static ConcurrentDictionary<TKey, TValue> ToConcurrentDictionary<TKey, TValue>(this ConcurrentDictionary<TKey, TValue> Dict, Func<KeyValuePair<TKey, TValue>, TKey> KeySelector, Func<KeyValuePair<TKey, TValue>, TValue> ValueSelector) where TKey : notnull {
-            ConcurrentDictionary<TKey, TValue> ConcurrentDict = new();
+        public static LockingDictionary<TKey, TValue> ToLockingDictionary<TKey, TValue>(this LockingDictionary<TKey, TValue> Dict, Func<KeyValuePair<TKey, TValue>, TKey> KeySelector, Func<KeyValuePair<TKey, TValue>, TValue> ValueSelector) where TKey : notnull {
+            LockingDictionary<TKey, TValue> ConcurrentDict = new();
             foreach (KeyValuePair<TKey, TValue> KVP in Dict) {
                 ConcurrentDict[KeySelector(KVP)] = ValueSelector(KVP);
             }

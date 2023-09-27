@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
 using System.Numerics;
-using System.Collections.Concurrent;
 using static Embers.Phase2;
 
 #nullable enable
@@ -56,7 +55,7 @@ namespace Embers
             else if (Class.InheritsFrom(Interpreter.Array))
                 return new ArrayInstance(Class, new List<Instance>());
             else if (Class.InheritsFrom(Interpreter.Hash))
-                return new HashInstance(Class, new ConcurrentDictionary<Instance, Instance>(), Interpreter.Nil);
+                return new HashInstance(Class, new LockingDictionary<Instance, Instance>(), Interpreter.Nil);
             else if (Class.InheritsFrom(Interpreter.Exception))
                 return new ExceptionInstance(Class, "");
             else if (Class.InheritsFrom(Interpreter.Thread))
@@ -68,8 +67,8 @@ namespace Embers
         }
 
         public class Block {
-            public readonly ConcurrentDictionary<string, Instance> LocalVariables = new();
-            public readonly ConcurrentDictionary<string, Instance> Constants = new();
+            public readonly LockingDictionary<string, Instance> LocalVariables = new();
+            public readonly LockingDictionary<string, Instance> Constants = new();
         }
         public class Scope : Block {
             
@@ -84,7 +83,7 @@ namespace Embers
             public readonly string Name;
             public readonly ReactiveDictionary<string, Method> Methods = new();
             public readonly ReactiveDictionary<string, Method> InstanceMethods = new();
-            public readonly ConcurrentDictionary<string, Instance> ClassVariables = new();
+            public readonly LockingDictionary<string, Instance> ClassVariables = new();
             public readonly Interpreter Interpreter;
             public readonly Module? SuperModule;
             public Module(string name, Module parent, Module? superModule = null) {
@@ -171,7 +170,7 @@ namespace Embers
             public virtual ScriptThread? Thread { get { throw new RuntimeException("Instance is not a thread"); } }
             public virtual LongRange Range { get { throw new RuntimeException("Instance is not a range"); } }
             public virtual List<Instance> Array { get { throw new RuntimeException("Instance is not an array"); } }
-            public virtual ConcurrentDictionary<Instance, Instance> Hash { get { throw new RuntimeException("Instance is not a hash"); } }
+            public virtual LockingDictionary<Instance, Instance> Hash { get { throw new RuntimeException("Instance is not a hash"); } }
             public virtual Exception Exception { get { throw new RuntimeException("Instance is not an exception"); } }
             public virtual DateTimeOffset Time { get { throw new RuntimeException("Instance is not a time"); } }
             public virtual Module ModuleRef { get { throw new ApiException("Instance is not a class/module reference"); } }
@@ -256,7 +255,7 @@ namespace Embers
                 }
             }
             public void AddOrUpdateInstanceMethod(string Name, Method Method) {
-                Module.InstanceMethods[Name] = Method;
+                Module!.InstanceMethods[Name] = Method;
                 // Change will be automatically copied to this instance
             }
             public async Task<Instance> TryCallInstanceMethod(Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
@@ -505,22 +504,22 @@ namespace Embers
             }
         }
         public class HashInstance : Instance {
-            ConcurrentDictionary<Instance, Instance> Value;
+            LockingDictionary<Instance, Instance> Value;
             public Instance DefaultValue;
             public override object? Object { get { return Value; } }
-            public override ConcurrentDictionary<Instance, Instance> Hash { get { return Value; } }
+            public override LockingDictionary<Instance, Instance> Hash { get { return Value; } }
             public override string Inspect() {
                 return $"{{{Value.InspectInstances()}}}";
             }
-            public HashInstance(Class fromClass, ConcurrentDictionary<Instance, Instance> value, Instance defaultValue) : base(fromClass) {
+            public HashInstance(Class fromClass, LockingDictionary<Instance, Instance> value, Instance defaultValue) : base(fromClass) {
                 Value = value;
                 DefaultValue = defaultValue;
             }
-            public void SetValue(ConcurrentDictionary<Instance, Instance> value, Instance defaultValue) {
+            public void SetValue(LockingDictionary<Instance, Instance> value, Instance defaultValue) {
                 Value = value;
                 DefaultValue = defaultValue;
             }
-            public void SetValue(ConcurrentDictionary<Instance, Instance> value) {
+            public void SetValue(LockingDictionary<Instance, Instance> value) {
                 Value = value;
             }
         }
@@ -1134,7 +1133,24 @@ namespace Embers
                 }
             }
         }
-        public class ReactiveDictionary<TKey, TValue> : ConcurrentDictionary<TKey, TValue> where TKey : notnull {
+        public class LockingDictionary<TKey, TValue> : Dictionary<TKey, TValue> where TKey : notnull {
+            public new void Add(TKey Key, TValue Value) {
+                lock (this) base.Add(Key, Value);
+            }
+            public new bool Remove(TKey Key) {
+                lock (this) return base.Remove(Key);
+            }
+            public new bool TryAdd(TKey Key, TValue Value) {
+                lock (this) return base.TryAdd(Key, Value);
+            }
+            public new TValue this[TKey Key] {
+                get => base[Key];
+                set {
+                    lock (this) base[Key] = value;
+                }
+            }
+        }
+        public class ReactiveDictionary<TKey, TValue> : LockingDictionary<TKey, TValue> where TKey : notnull {
             private readonly WeakEvent<DictionarySet> SetEvent = new();
             private readonly WeakEvent<DictionaryRemoved> RemovedEvent = new();
 
@@ -1167,16 +1183,16 @@ namespace Embers
                     }
                 }
             }
-            public void Add(TKey Key, TValue Value) {
+            public new void Add(TKey Key, TValue Value) {
                 lock (this) {
                     TrySetMethodName(Key, Value);
                     TryAdd(Key, Value);
                     SetEvent.Raise(Handler => Handler(Key, Value));
                 }
             }
-            public bool Remove(TKey Key) {
+            public new bool Remove(TKey Key) {
                 lock (this) {
-                    if (TryRemove(Key, out _)) {
+                    if (Remove(Key, out _)) {
                         RemovedEvent.Raise(Handler => Handler(Key));
                         return true;
                     }
@@ -1772,7 +1788,7 @@ namespace Embers
             return new ArrayInstance(Interpreter.Array, Items);
         }
         async Task<HashInstance> InterpretHashExpression(HashExpression HashExpression) {
-            ConcurrentDictionary<Instance, Instance> Items = new();
+            LockingDictionary<Instance, Instance> Items = new();
             foreach (KeyValuePair<Expression, Expression> Item in HashExpression.Expressions) {
                 Items[await InterpretExpressionAsync(Item.Key)] = await InterpretExpressionAsync(Item.Value);
             }

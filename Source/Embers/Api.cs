@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics;
-using System.Collections.Concurrent;
 using static Embers.Script;
 
 #nullable enable
@@ -523,7 +522,7 @@ namespace Embers
                 return new IntegerInstance(Input.Interpreter.Integer, Input.Instance.ObjectId);
             }
             public static async Task<Instance> methods(MethodInput Input) {
-                List<Instance> MethodsDictToSymbolsArray(ConcurrentDictionary<string, Method> MethodDict) {
+                List<Instance> MethodsDictToSymbolsArray(LockingDictionary<string, Method> MethodDict) {
                     List<Instance> Symbols = new();
                     foreach (string MethodName in MethodDict.Keys) {
                         Symbols.Add(Input.Script.GetSymbol(MethodName));
@@ -1654,7 +1653,7 @@ namespace Embers
         static class Hash {
             public static async Task<Instance> _Indexer(MethodInput Input) {
                 // Get hash and key
-                ConcurrentDictionary<Instance, Instance> Hash = Input.Instance.Hash;
+                LockingDictionary<Instance, Instance> Hash = Input.Instance.Hash;
                 Instance Key = Input.Arguments[0];
 
                 // Return value at hash index or default value
@@ -1672,7 +1671,7 @@ namespace Embers
             }
             public static async Task<Instance> _IndexEquals(MethodInput Input) {
                 // Get hash, key and value
-                ConcurrentDictionary<Instance, Instance> Hash = Input.Instance.Hash;
+                LockingDictionary<Instance, Instance> Hash = Input.Instance.Hash;
                 Instance Key = Input.Arguments[0];
                 Instance Value = Input.Arguments[1];
 
@@ -1729,7 +1728,7 @@ namespace Embers
             }
             public static async Task<Instance> each(MethodInput Input) {
                 if (Input.OnYield != null) {
-                    ConcurrentDictionary<Instance, Instance> Hash = Input.Instance.Hash;
+                    LockingDictionary<Instance, Instance> Hash = Input.Instance.Hash;
                     
                     int TakesArguments = Input.OnYield.ArgumentNames.Count;
                     for (int i = 0; i < Hash.Keys.Count; i++) {
@@ -1767,7 +1766,7 @@ namespace Embers
             }
             public static async Task<Instance> invert(MethodInput Input) {
                 HashInstance Hash = (HashInstance)Input.Instance;
-                ConcurrentDictionary<Instance, Instance> Inverted = Hash.Hash.ToConcurrentDictionary(KV => KV.Value, KV => KV.Key);
+                LockingDictionary<Instance, Instance> Inverted = Hash.Hash.ToLockingDictionary(KV => KV.Value, KV => KV.Key);
                 return new HashInstance(Input.Interpreter.Hash, Inverted, Hash.DefaultValue);
             }
             public static async Task<Instance> to_a(MethodInput Input) {
