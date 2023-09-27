@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Collections.Concurrent;
 using static Embers.Phase1;
 using static Embers.Script;
 
@@ -535,8 +536,8 @@ namespace Embers
             }
         }
         public class HashExpression : Expression {
-            public readonly Dictionary<Expression, Expression> Expressions;
-            public HashExpression(DebugLocation location, Dictionary<Expression, Expression> expressions) : base(location) {
+            public readonly ConcurrentDictionary<Expression, Expression> Expressions;
+            public HashExpression(DebugLocation location, ConcurrentDictionary<Expression, Expression> expressions) : base(location) {
                 Expressions = expressions;
             }
             public override string Inspect() {
@@ -548,7 +549,7 @@ namespace Embers
         }
         public class HashArgumentsExpression : Expression {
             public readonly HashExpression HashExpression;
-            public HashArgumentsExpression(DebugLocation location, Dictionary<Expression, Expression> expressions) : base(location) {
+            public HashArgumentsExpression(DebugLocation location, ConcurrentDictionary<Expression, Expression> expressions) : base(location) {
                 HashExpression = new(location, expressions);
             }
             public override string Inspect() {
@@ -1986,7 +1987,7 @@ namespace Embers
                                 // Get items to put in hash
                                 List<Expression> HashItemsList = ObjectsToExpressions(HashContents, ExpressionsType.KeyValueExpressions);
                                 // Split items into key value pairs
-                                Dictionary<Expression, Expression> HashItems = HashItemsList.ListAsHash();
+                                ConcurrentDictionary<Expression, Expression> HashItems = HashItemsList.ListAsHash();
                                 // Create hash expression and add to expressions
                                 CurrentBlocks.Pop();
                                 PendingObjects.Peek().Add(new HashExpression(Token.Location, HashItems));

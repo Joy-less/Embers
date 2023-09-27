@@ -37,6 +37,8 @@ puts [3, 6, 2, 4, 6].max
 
 puts (1...3).count
 
+c = 'Cat'
+
 puts 'Parallel.times(5):'
 Parallel.times 5 do |n|
     puts n
@@ -47,6 +49,10 @@ Parallel.times 5..7 do |n|
 end
 
 puts Float::INFINITY + 922337203685477580100000
+
+$lol = 'hi'
+
+p local_variables, global_variables
                     ")
                 );
                 Console.ReadLine();

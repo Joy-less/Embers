@@ -7,11 +7,13 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics;
+using System.Collections.Concurrent;
 using static Embers.Script;
 
 #nullable enable
 #pragma warning disable CS1998
 #pragma warning disable IDE1006
+#pragma warning disable SYSLIB1045
 
 namespace Embers
 {
@@ -54,6 +56,8 @@ namespace Embers
             Interpreter.Object.InstanceMethods["exit"] = Interpreter.Object.Methods["exit"] = Script.CreateMethod(exit, 0);
             Interpreter.Object.InstanceMethods["quit"] = Interpreter.Object.Methods["quit"] = Script.CreateMethod(exit, 0);
             Interpreter.Object.InstanceMethods["eval"] = Interpreter.Object.Methods["eval"] = Script.CreateMethod(eval, 1);
+            Interpreter.Object.InstanceMethods["local_variables"] = Interpreter.Object.Methods["local_variables"] = Script.CreateMethod(local_variables, 0);
+            Interpreter.Object.InstanceMethods["global_variables"] = Interpreter.Object.Methods["global_variables"] = Script.CreateMethod(global_variables, 0);
 
             Interpreter.Object.InstanceMethods["attr_reader"] = Script.CreateMethod(ClassInstance.attr_reader, 1);
             Interpreter.Object.InstanceMethods["attr_writer"] = Script.CreateMethod(ClassInstance.attr_writer, 1);
@@ -451,6 +455,20 @@ namespace Embers
                 return Ex.Instance;
             }
         }
+        static async Task<Instance> local_variables(MethodInput Input) {
+            List<Instance> GlobalVariables = new();
+            foreach (KeyValuePair<string, Instance> GlobalVariable in Input.Script.GetAllLocalVariables()) {
+                GlobalVariables.Add(Input.Script.GetSymbol(GlobalVariable.Key));
+            }
+            return new ArrayInstance(Input.Interpreter.Array, GlobalVariables);
+        }
+        static async Task<Instance> global_variables(MethodInput Input) {
+            List<Instance> GlobalVariables = new();
+            foreach (KeyValuePair<string, Instance> GlobalVariable in Input.Interpreter.GlobalVariables) {
+                GlobalVariables.Add(Input.Script.GetSymbol(GlobalVariable.Key));
+            }
+            return new ArrayInstance(Input.Interpreter.Array, GlobalVariables);
+        }
         static class ClassInstance {
             public static async Task<Instance> _Equals(MethodInput Input) {
                 Instance Left = Input.Instance;
@@ -505,7 +523,7 @@ namespace Embers
                 return new IntegerInstance(Input.Interpreter.Integer, Input.Instance.ObjectId);
             }
             public static async Task<Instance> methods(MethodInput Input) {
-                List<Instance> MethodsDictToSymbolsArray(Dictionary<string, Method> MethodDict) {
+                List<Instance> MethodsDictToSymbolsArray(ConcurrentDictionary<string, Method> MethodDict) {
                     List<Instance> Symbols = new();
                     foreach (string MethodName in MethodDict.Keys) {
                         Symbols.Add(Input.Script.GetSymbol(MethodName));
@@ -577,8 +595,7 @@ namespace Embers
                 }
                 // Create or overwrite instance method
                 Input.Instance.AddOrUpdateInstanceMethod($"{VariableName}=", Input.Script.CreateMethod(async Input2 => {
-                    lock (Input2.Instance.InstanceVariables)
-                        return Input2.Instance.InstanceVariables[VariableName] = Input2.Arguments[0];
+                    return Input2.Instance.InstanceVariables[VariableName] = Input2.Arguments[0];
                 }, 1));
 
                 return Input.Interpreter.Nil;
@@ -1637,7 +1654,7 @@ namespace Embers
         static class Hash {
             public static async Task<Instance> _Indexer(MethodInput Input) {
                 // Get hash and key
-                Dictionary<Instance, Instance> Hash = Input.Instance.Hash;
+                ConcurrentDictionary<Instance, Instance> Hash = Input.Instance.Hash;
                 Instance Key = Input.Arguments[0];
 
                 // Return value at hash index or default value
@@ -1655,13 +1672,12 @@ namespace Embers
             }
             public static async Task<Instance> _IndexEquals(MethodInput Input) {
                 // Get hash, key and value
-                Dictionary<Instance, Instance> Hash = Input.Instance.Hash;
+                ConcurrentDictionary<Instance, Instance> Hash = Input.Instance.Hash;
                 Instance Key = Input.Arguments[0];
                 Instance Value = Input.Arguments[1];
 
                 // Set value
-                lock (Hash)
-                    return Hash[Key] = Value;
+                return Hash[Key] = Value;
             }
             public static async Task<Instance> _Equals(MethodInput Input) {
                 Instance Left = Input.Instance;
@@ -1713,7 +1729,7 @@ namespace Embers
             }
             public static async Task<Instance> each(MethodInput Input) {
                 if (Input.OnYield != null) {
-                    Dictionary<Instance, Instance> Hash = Input.Instance.Hash;
+                    ConcurrentDictionary<Instance, Instance> Hash = Input.Instance.Hash;
                     
                     int TakesArguments = Input.OnYield.ArgumentNames.Count;
                     for (int i = 0; i < Hash.Keys.Count; i++) {
@@ -1751,7 +1767,7 @@ namespace Embers
             }
             public static async Task<Instance> invert(MethodInput Input) {
                 HashInstance Hash = (HashInstance)Input.Instance;
-                Dictionary<Instance, Instance> Inverted = Hash.Hash.ToDictionary(kv => kv.Value, kv => kv.Key);
+                ConcurrentDictionary<Instance, Instance> Inverted = Hash.Hash.ToConcurrentDictionary(KV => KV.Value, KV => KV.Key);
                 return new HashInstance(Input.Interpreter.Hash, Inverted, Hash.DefaultValue);
             }
             public static async Task<Instance> to_a(MethodInput Input) {

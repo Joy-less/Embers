@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
 using System.Numerics;
+using System.Collections.Concurrent;
 using static Embers.Phase2;
 
 #nullable enable
@@ -55,7 +56,7 @@ namespace Embers
             else if (Class.InheritsFrom(Interpreter.Array))
                 return new ArrayInstance(Class, new List<Instance>());
             else if (Class.InheritsFrom(Interpreter.Hash))
-                return new HashInstance(Class, new Dictionary<Instance, Instance>(), Interpreter.Nil);
+                return new HashInstance(Class, new ConcurrentDictionary<Instance, Instance>(), Interpreter.Nil);
             else if (Class.InheritsFrom(Interpreter.Exception))
                 return new ExceptionInstance(Class, "");
             else if (Class.InheritsFrom(Interpreter.Thread))
@@ -67,8 +68,8 @@ namespace Embers
         }
 
         public class Block {
-            public readonly Dictionary<string, Instance> LocalVariables = new();
-            public readonly Dictionary<string, Instance> Constants = new();
+            public readonly ConcurrentDictionary<string, Instance> LocalVariables = new();
+            public readonly ConcurrentDictionary<string, Instance> Constants = new();
         }
         public class Scope : Block {
             
@@ -83,7 +84,7 @@ namespace Embers
             public readonly string Name;
             public readonly ReactiveDictionary<string, Method> Methods = new();
             public readonly ReactiveDictionary<string, Method> InstanceMethods = new();
-            public readonly Dictionary<string, Instance> ClassVariables = new();
+            public readonly ConcurrentDictionary<string, Instance> ClassVariables = new();
             public readonly Interpreter Interpreter;
             public readonly Module? SuperModule;
             public Module(string name, Module parent, Module? superModule = null) {
@@ -105,20 +106,16 @@ namespace Embers
                     SuperModule.InstanceMethods.CopyTo(InstanceMethods);
                     // Inherit changes later
                     SuperModule.Methods.Set += (string Key, Method NewValue) => {
-                        lock (Methods)
-                            Methods[Key] = NewValue;
+                        Methods[Key] = NewValue;
                     };
                     SuperModule.InstanceMethods.Set += (string Key, Method NewValue) => {
-                        lock (InstanceMethods)
-                            InstanceMethods[Key] = NewValue;
+                        InstanceMethods[Key] = NewValue;
                     };
                     SuperModule.Methods.Removed += (string Key) => {
-                        lock (Methods)
-                            Methods.Remove(Key);
+                        Methods.Remove(Key);
                     };
                     SuperModule.InstanceMethods.Removed += (string Key) => {
-                        lock (InstanceMethods)
-                            InstanceMethods.Remove(Key);
+                        InstanceMethods.Remove(Key);
                     };
                 }
             }
@@ -174,7 +171,7 @@ namespace Embers
             public virtual ScriptThread? Thread { get { throw new RuntimeException("Instance is not a thread"); } }
             public virtual LongRange Range { get { throw new RuntimeException("Instance is not a range"); } }
             public virtual List<Instance> Array { get { throw new RuntimeException("Instance is not an array"); } }
-            public virtual Dictionary<Instance, Instance> Hash { get { throw new RuntimeException("Instance is not a hash"); } }
+            public virtual ConcurrentDictionary<Instance, Instance> Hash { get { throw new RuntimeException("Instance is not a hash"); } }
             public virtual Exception Exception { get { throw new RuntimeException("Instance is not an exception"); } }
             public virtual DateTimeOffset Time { get { throw new RuntimeException("Instance is not a time"); } }
             public virtual Module ModuleRef { get { throw new ApiException("Instance is not a class/module reference"); } }
@@ -251,19 +248,16 @@ namespace Embers
                     Module.InstanceMethods.CopyTo(InstanceMethods);
                     // Copy future changes
                     Module.InstanceMethods.Set += (string Key, Method NewValue) => {
-                        lock (InstanceMethods)
-                            InstanceMethods[Key] = NewValue;
+                        InstanceMethods[Key] = NewValue;
                     };
                     Module.InstanceMethods.Removed += (string Key) => {
-                        lock (InstanceMethods)
-                            InstanceMethods.Remove(Key);
+                        InstanceMethods.Remove(Key);
                     };
                 }
             }
             public void AddOrUpdateInstanceMethod(string Name, Method Method) {
-                lock (Module!.InstanceMethods)
-                    Module.InstanceMethods[Name] = Method;
-                    // Change will be automatically copied to this instance
+                Module.InstanceMethods[Name] = Method;
+                // Change will be automatically copied to this instance
             }
             public async Task<Instance> TryCallInstanceMethod(Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
                 // Found
@@ -511,22 +505,22 @@ namespace Embers
             }
         }
         public class HashInstance : Instance {
-            Dictionary<Instance, Instance> Value;
+            ConcurrentDictionary<Instance, Instance> Value;
             public Instance DefaultValue;
             public override object? Object { get { return Value; } }
-            public override Dictionary<Instance, Instance> Hash { get { return Value; } }
+            public override ConcurrentDictionary<Instance, Instance> Hash { get { return Value; } }
             public override string Inspect() {
                 return $"{{{Value.InspectInstances()}}}";
             }
-            public HashInstance(Class fromClass, Dictionary<Instance, Instance> value, Instance defaultValue) : base(fromClass) {
+            public HashInstance(Class fromClass, ConcurrentDictionary<Instance, Instance> value, Instance defaultValue) : base(fromClass) {
                 Value = value;
                 DefaultValue = defaultValue;
             }
-            public void SetValue(Dictionary<Instance, Instance> value, Instance defaultValue) {
+            public void SetValue(ConcurrentDictionary<Instance, Instance> value, Instance defaultValue) {
                 Value = value;
                 DefaultValue = defaultValue;
             }
-            public void SetValue(Dictionary<Instance, Instance> value) {
+            public void SetValue(ConcurrentDictionary<Instance, Instance> value) {
                 Value = value;
             }
         }
@@ -760,26 +754,22 @@ namespace Embers
                             // Create array from splat arguments
                             ArrayInstance SplatArgumentsArray = new(Input.Interpreter.Array, SplatArguments);
                             // Add array to scope
-                            lock (Scope.LocalVariables)
-                                Scope.LocalVariables.Add(ArgumentIdentifier, SplatArgumentsArray);
+                            Scope.LocalVariables[ArgumentIdentifier] = SplatArgumentsArray;
                         }
                         // Double splat argument
                         else if (ArgumentName.SplatType == SplatType.Double && Arguments[^1] is HashArgumentsInstance DoubleSplatArgumentsHash) {
                             // Add hash to scope
-                            lock (Scope.LocalVariables)
-                                Scope.LocalVariables.Add(ArgumentIdentifier, DoubleSplatArgumentsHash.Value);
+                            Scope.LocalVariables[ArgumentIdentifier] = DoubleSplatArgumentsHash.Value;
                         }
                         // Normal argument
                         else {
-                            lock (Scope.LocalVariables)
-                                Scope.LocalVariables.Add(ArgumentIdentifier, Arguments[ArgumentIndex]);
+                            Scope.LocalVariables[ArgumentIdentifier] = Arguments[ArgumentIndex];
                         }
                     }
                     // Optional argument not given
                     else {
                         Instance DefaultValue = ArgumentName.DefaultValue != null ? (await Input.Script.InterpretExpressionAsync(ArgumentName.DefaultValue)) : Input.Script.Interpreter.Nil;
-                        lock (Scope.LocalVariables)
-                            Scope.LocalVariables.Add(ArgumentIdentifier, DefaultValue);
+                        Scope.LocalVariables[ArgumentIdentifier] = DefaultValue;
                     }
                     ArgumentNameIndex++;
                     ArgumentIndex++;
@@ -1144,7 +1134,7 @@ namespace Embers
                 }
             }
         }
-        public class ReactiveDictionary<TKey, TValue> : Dictionary<TKey, TValue> where TKey : notnull {
+        public class ReactiveDictionary<TKey, TValue> : ConcurrentDictionary<TKey, TValue> where TKey : notnull {
             private readonly WeakEvent<DictionarySet> SetEvent = new();
             private readonly WeakEvent<DictionaryRemoved> RemovedEvent = new();
 
@@ -1177,17 +1167,21 @@ namespace Embers
                     }
                 }
             }
-            public new void Add(TKey Key, TValue Value) {
-                TrySetMethodName(Key, Value);
-                base.Add(Key, Value);
-                SetEvent.Raise(Handler => Handler(Key, Value));
-            }
-            public new bool Remove(TKey Key) {
-                if (base.Remove(Key)) {
-                    RemovedEvent.Raise(Handler => Handler(Key));
-                    return true;
+            public void Add(TKey Key, TValue Value) {
+                lock (this) {
+                    TrySetMethodName(Key, Value);
+                    TryAdd(Key, Value);
+                    SetEvent.Raise(Handler => Handler(Key, Value));
                 }
-                return false;
+            }
+            public bool Remove(TKey Key) {
+                lock (this) {
+                    if (TryRemove(Key, out _)) {
+                        RemovedEvent.Raise(Handler => Handler(Key));
+                        return true;
+                    }
+                    return false;
+                }
             }
 
             static void TrySetMethodName(TKey Key, TValue Value) {
@@ -1407,6 +1401,17 @@ namespace Embers
             }
             LocalInstanceMethod = null;
             return false;
+        }
+        public Dictionary<string, Instance> GetAllLocalVariables() {
+            Dictionary<string, Instance> LocalVariables = new();
+            foreach (object Object in CurrentObject) {
+                if (Object is Block Block) {
+                    foreach (KeyValuePair<string, Instance> LocalVariable in Block.LocalVariables) {
+                        LocalVariables.Add(LocalVariable.Key, LocalVariable.Value);
+                    }
+                }
+            }
+            return LocalVariables;
         }
         internal Method? ToYieldMethod(Method? Current) {
             // This makes yield methods (do ... end) be called in the scope they're called in, not the scope of the instance/class.
@@ -1767,9 +1772,9 @@ namespace Embers
             return new ArrayInstance(Interpreter.Array, Items);
         }
         async Task<HashInstance> InterpretHashExpression(HashExpression HashExpression) {
-            Dictionary<Instance, Instance> Items = new();
+            ConcurrentDictionary<Instance, Instance> Items = new();
             foreach (KeyValuePair<Expression, Expression> Item in HashExpression.Expressions) {
-                Items.Add(await InterpretExpressionAsync(Item.Key), await InterpretExpressionAsync(Item.Value));
+                Items[await InterpretExpressionAsync(Item.Key)] = await InterpretExpressionAsync(Item.Value);
             }
             return new HashInstance(Interpreter.Hash, Items, Interpreter.Nil);
         }
@@ -1857,8 +1862,7 @@ namespace Embers
                         throw new RuntimeException($"{DefineMethodStatement.Location}: The static method '{MethodName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
                     }
                     // Create or overwrite static method
-                    lock (MethodModule.Methods)
-                        MethodModule.Methods[MethodName] = DefineMethodStatement.MethodExpression.ToMethod(CurrentAccessModifier, CurrentModule);
+                    MethodModule.Methods[MethodName] = DefineMethodStatement.MethodExpression.ToMethod(CurrentAccessModifier, CurrentModule);
                 }
                 // Define instance method
                 else {
@@ -1871,8 +1875,7 @@ namespace Embers
                     Method NewInstanceMethod = DefineMethodStatement.MethodExpression.ToMethod(CurrentAccessModifier, CurrentModule);
                     if (MethodNameRef.Instance != null) {
                         // Define method for a specific instance
-                        lock (MethodInstance.InstanceMethods)
-                            MethodInstance.InstanceMethods[MethodName] = NewInstanceMethod;
+                        MethodInstance.InstanceMethods[MethodName] = NewInstanceMethod;
                     }
                     else {
                         // Define method for all instances of a class
@@ -1941,8 +1944,7 @@ namespace Embers
                 else
                     Module = (ClassNameRef.Instance ?? CurrentInstance).Module!;
                 // Store constant
-                lock (Module.Constants)
-                    Module.Constants[ClassName] = new ModuleReference(NewModule);
+                Module.Constants[ClassName] = new ModuleReference(NewModule);
             }
             else {
                 throw new InternalErrorException($"{DefineClassStatement.Location}: Invalid class/module name: {ClassNameObject}");
@@ -2084,7 +2086,7 @@ namespace Embers
                             await CreateTemporaryScope(async () => {
                                 // Set exception variable to exception instance
                                 if (RescueStatement.ExceptionVariable != null) {
-                                    CurrentScope.LocalVariables.Add(RescueStatement.ExceptionVariable.Value!, ExceptionInstance);
+                                    CurrentScope.LocalVariables[RescueStatement.ExceptionVariable.Value!] = ExceptionInstance;
                                 }
                                 await InternalInterpretAsync(RescueStatement.Statements, CurrentOnYield);
                             });
@@ -2129,27 +2131,22 @@ namespace Embers
                             }
                             else break;
                         // Set local variable
-                        lock (SetBlock.LocalVariables)
-                            SetBlock.LocalVariables[Variable.Token.Value!] = Value;
+                        SetBlock.LocalVariables[Variable.Token.Value!] = Value;
                     }
                     break;
                 case Phase2TokenType.GlobalVariable:
-                    lock (Interpreter.GlobalVariables)
-                        Interpreter.GlobalVariables[Variable.Token.Value!] = Value;
+                    Interpreter.GlobalVariables[Variable.Token.Value!] = Value;
                     break;
                 case Phase2TokenType.ConstantOrMethod:
                     if (CurrentBlock.Constants.ContainsKey(Variable.Token.Value!))
                         await Warn($"{Variable.Token.Location}: Already initialized constant '{Variable.Token.Value!}'");
-                    lock (CurrentBlock.Constants)
-                        CurrentBlock.Constants[Variable.Token.Value!] = Value;
+                    CurrentBlock.Constants[Variable.Token.Value!] = Value;
                     break;
                 case Phase2TokenType.InstanceVariable:
-                    lock (CurrentInstance.InstanceVariables)
-                        CurrentInstance.InstanceVariables[Variable.Token.Value!] = Value;
+                    CurrentInstance.InstanceVariables[Variable.Token.Value!] = Value;
                     break;
                 case Phase2TokenType.ClassVariable:
-                    lock (CurrentModule.ClassVariables)
-                        CurrentModule.ClassVariables[Variable.Token.Value!] = Value;
+                    CurrentModule.ClassVariables[Variable.Token.Value!] = Value;
                     break;
                 default:
                     throw new InternalErrorException($"{Variable.Token.Location}: Assignment variable token is not a variable type (got {Variable.Token.Type})");

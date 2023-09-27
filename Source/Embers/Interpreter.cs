@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using static Embers.Phase2;
 using static Embers.Script;
 
@@ -12,8 +13,8 @@ namespace Embers
         public readonly Instance RootInstance;
         public readonly Scope RootScope;
 
-        public readonly Dictionary<string, Instance> GlobalVariables = new();
-        public readonly Dictionary<string, SymbolInstance> Symbols = new();
+        public readonly ConcurrentDictionary<string, Instance> GlobalVariables = new();
+        public readonly ConcurrentDictionary<string, SymbolInstance> Symbols = new();
 
         public readonly Class NilClass;
         public readonly Class TrueClass;
