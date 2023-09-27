@@ -166,7 +166,7 @@ namespace Embers
             return long.MinValue / 2.0 < Long && Long < long.MaxValue / 2.0;
         }
         public static bool IsSmall(this double Double) {
-            return long.MinValue / 2.0 < Double && Double < long.MaxValue / 2.0;
+            return long.MinValue / 2.0 < Double && Double < long.MaxValue / 2.0 || double.IsInfinity(Double);
         }
         public static bool IsSmall(this BigInteger BigInteger) {
             return (BigFloat)(long.MinValue / 2.0) < BigInteger && BigInteger < (BigFloat)(long.MaxValue / 2.0);

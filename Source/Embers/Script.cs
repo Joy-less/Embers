@@ -1012,7 +1012,7 @@ namespace Embers
                 IsDouble = Integer.IsLong;
             }
             public static Float operator +(Float Left, Float Right) {
-                if (Left.IsDouble && Right.IsDouble) {
+                if (Left.IsDouble && Right.IsDouble || double.IsInfinity(Left.Double) || double.IsInfinity(Right.Double)) {
                     double SmallResult = Left.Double + Right.Double;
                     if (SmallResult.IsSmall()) return SmallResult;
                 }
@@ -1025,7 +1025,7 @@ namespace Embers
                 else return Result;
             }
             public static Float operator -(Float Left, Float Right) {
-                if (Left.IsDouble && Right.IsDouble) {
+                if (Left.IsDouble && Right.IsDouble || double.IsInfinity(Left.Double) || double.IsInfinity(Right.Double)) {
                     double SmallResult = Left.Double - Right.Double;
                     if (SmallResult.IsSmall()) return SmallResult;
                 }
@@ -1038,7 +1038,7 @@ namespace Embers
                 else return Result;
             }
             public static Float operator *(Float Left, Float Right) {
-                if (Left.IsDouble && Right.IsDouble) {
+                if (Left.IsDouble && Right.IsDouble || double.IsInfinity(Left.Double) || double.IsInfinity(Right.Double)) {
                     double SmallResult = Left.Double * Right.Double;
                     if (SmallResult.IsSmall()) return SmallResult;
                 }
@@ -1051,7 +1051,7 @@ namespace Embers
                 else return Result;
             }
             public static Float operator /(Float Left, Float Right) {
-                if (Left.IsDouble && Right.IsDouble) {
+                if (Left.IsDouble && Right.IsDouble || double.IsInfinity(Left.Double) || double.IsInfinity(Right.Double)) {
                     double SmallResult = Left.Double / Right.Double;
                     if (SmallResult.IsSmall()) return SmallResult;
                 }
@@ -1064,7 +1064,7 @@ namespace Embers
                 else return Result;
             }
             public static Float operator %(Float Left, Float Right) {
-                if (Left.IsDouble && Right.IsDouble) {
+                if (Left.IsDouble && Right.IsDouble || double.IsInfinity(Left.Double) || double.IsInfinity(Right.Double)) {
                     double SmallResult = Left.Double % Right.Double;
                     if (SmallResult.IsSmall()) return SmallResult;
                 }

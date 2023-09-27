@@ -45,6 +45,8 @@ puts 'Parallel.times(5..7):'
 Parallel.times 5..7 do |n|
     puts n
 end
+
+puts Float::INFINITY + 922337203685477580100000
                     ")
                 );
                 Console.ReadLine();
