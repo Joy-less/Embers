@@ -1435,9 +1435,9 @@ namespace Embers
             // If you've changed this function and are receiving errors, ensure you're referencing Input.Script and not this script.
             if (Current != null) {
                 Func<MethodInput, Task<Instance>> CurrentFunction = Current.Function;
-                Stack<object> OriginalSnapshot = new(CurrentObject);
+                object[] OriginalSnapshot = CurrentObject.ToArray();
                 Current.ChangeFunction(async Input => {
-                    Stack<object> TemporarySnapshot = new(Input.Script.CurrentObject);
+                    object[] TemporarySnapshot = Input.Script.CurrentObject.ToArray();
                     Input.Script.CurrentObject.ReplaceContentsWith(OriginalSnapshot);
                     try {
                         return await Input.Script.CreateTemporaryScope(async () => {

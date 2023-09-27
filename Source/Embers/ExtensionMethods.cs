@@ -141,6 +141,12 @@ namespace Embers
             Stack.Clear();
             With.CopyTo(Stack);
         }
+        public static void ReplaceContentsWith<T>(this Stack<T> Stack, T[] With) {
+            Stack.Clear();
+            for (int i = With.Length - 1; i >= 0; i--) {
+                Stack.Push(With[i]);
+            }
+        }
         public static LockingDictionary<T, T> ListAsHash<T>(this List<T> HashItemsList) where T : notnull {
             LockingDictionary<T, T> HashItems = new();
             for (int i2 = 0; i2 < HashItemsList.Count; i2 += 2) {
