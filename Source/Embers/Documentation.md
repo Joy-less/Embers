@@ -51,6 +51,12 @@ quit
 
 eval(code)
 	Evaluates the given code in the current context.
+
+local_variables
+	Returns an array containing the names of all current local variables as symbols.
+
+global_variables
+	Returns an array containing the names of all current global variables as symbols.
 ```
 ```
 object.inspect
