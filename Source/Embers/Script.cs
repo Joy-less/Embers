@@ -2084,7 +2084,7 @@ namespace Embers
                     if (Branch is RescueStatement RescueStatement) {
                         // Get or create the exception to rescue
                         ExceptionsTable.TryGetValue(ExceptionToRescue, out ExceptionInstance? ExceptionInstance);
-                        ExceptionInstance ??= new(Interpreter.RuntimeError, ExceptionToRescue);
+                        ExceptionInstance ??= new ExceptionInstance(Interpreter.RuntimeError, ExceptionToRescue);
                         // Get the rescuing exception type
                         Module RescuingExceptionModule = RescueStatement.Exception != null
                             ? (await InterpretExpressionAsync(RescueStatement.Exception)).Module!
