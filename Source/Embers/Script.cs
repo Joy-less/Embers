@@ -867,6 +867,9 @@ namespace Embers
                 if (Max != null && Number > Max) return false;
                 return true;
             }
+            public long? Count => Max != null && Min != null
+                ? (long)Max - (long)Min + 1
+                : null;
             public override string ToString() {
                 if (Min == Max) {
                     if (Min == null) {

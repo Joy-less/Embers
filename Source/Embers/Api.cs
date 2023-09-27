@@ -171,7 +171,7 @@ namespace Embers
             Interpreter.Range.InstanceMethods["max"] = Script.CreateMethod(Range.max, 0);
             Interpreter.Range.InstanceMethods["each"] = Script.CreateMethod(Range.each, 0);
             Interpreter.Range.InstanceMethods["reverse_each"] = Script.CreateMethod(Range.reverse_each, 0);
-            Interpreter.Range.InstanceMethods["length"] = Script.CreateMethod(Range.length, 0);
+            Interpreter.Range.InstanceMethods["length", "count"] = Script.CreateMethod(Range.length, 0);
             Interpreter.Range.InstanceMethods["to_a"] = Script.CreateMethod(Range.to_a, 0);
 
             // Array
@@ -186,6 +186,8 @@ namespace Embers
             Interpreter.Array.InstanceMethods["last"] = Script.CreateMethod(Array.last, 0);
             Interpreter.Array.InstanceMethods["forty_two"] = Script.CreateMethod(Array.forty_two, 0);
             Interpreter.Array.InstanceMethods["sample"] = Script.CreateMethod(Array.sample, 0);
+            Interpreter.Array.InstanceMethods["min"] = Script.CreateMethod(Array.min, 0);
+            Interpreter.Array.InstanceMethods["max"] = Script.CreateMethod(Array.max, 0);
             Interpreter.Array.InstanceMethods["insert"] = Script.CreateMethod(Array.insert, 1..);
             Interpreter.Array.InstanceMethods["each"] = Script.CreateMethod(Array.each, 0);
             Interpreter.Array.InstanceMethods["reverse_each"] = Script.CreateMethod(Array.reverse_each, 0);
@@ -265,6 +267,7 @@ namespace Embers
             // Parallel
             Module ParallelModule = Script.CreateModule("Parallel");
             ParallelModule.Methods["each"] = Script.CreateMethod(_Parallel.each, 1);
+            ParallelModule.Methods["times"] = Script.CreateMethod(_Parallel.times, 1);
 
             // Time
             Interpreter.Time.Methods["now"] = Script.CreateMethod(Time.now, 0);
@@ -401,7 +404,7 @@ namespace Embers
                     continue;
                 }
                 catch (LoopControlException Ex) {
-                    throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in loop do end");
+                    throw new SyntaxErrorException($"{Input.Location}: {Ex.GetType().Name} not valid in loop do end");
                 }
             }
             return Input.Interpreter.Nil;
@@ -574,7 +577,8 @@ namespace Embers
                 }
                 // Create or overwrite instance method
                 Input.Instance.AddOrUpdateInstanceMethod($"{VariableName}=", Input.Script.CreateMethod(async Input2 => {
-                    return Input2.Instance.InstanceVariables[VariableName] = Input2.Arguments[0];
+                    lock (Input2.Instance.InstanceVariables)
+                        return Input2.Instance.InstanceVariables[VariableName] = Input2.Arguments[0];
                 }, 1));
 
                 return Input.Interpreter.Nil;
@@ -623,7 +627,7 @@ namespace Embers
             }
             private static int _RealisticIndex(MethodInput Input, long RawIndex) {
                 if (RawIndex < int.MinValue || RawIndex > int.MaxValue) {
-                    throw new RuntimeException($"{Input.Script.ApproximateLocation}: Index ({RawIndex}) is too large for string.");
+                    throw new RuntimeException($"{Input.Location}: Index ({RawIndex}) is too large for string.");
                 }
                 int Index = (int)RawIndex;
                 return Index;
@@ -1000,7 +1004,7 @@ namespace Embers
                             continue;
                         }
                         catch (LoopControlException Ex) {
-                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in {Times}.times");
+                            throw new SyntaxErrorException($"{Input.Location}: {Ex.GetType().Name} not valid in {Times}.times");
                         }
                     }
                 }
@@ -1217,7 +1221,7 @@ namespace Embers
                 if (Input.OnYield != null) {
                     LongRange Range = Input.Instance.Range;
                     long Min = (long)(Range.Min != null ? Range.Min : 0);
-                    long Max = (long)(Range.Max != null ? Range.Max : throw new RuntimeException($"{Input.Script.ApproximateLocation}: Cannot call 'each' on range if max is endless"));
+                    long Max = (long)(Range.Max != null ? Range.Max : throw new RuntimeException($"{Input.Location}: Cannot call 'each' on range if max is endless"));
                     
                     bool TakesArgument = Input.OnYield.ArgumentNames.Count == 1;
                     for (long i = Min; i <= Max; i++) {
@@ -1242,7 +1246,7 @@ namespace Embers
                             continue;
                         }
                         catch (LoopControlException Ex) {
-                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in range.each");
+                            throw new SyntaxErrorException($"{Input.Location}: {Ex.GetType().Name} not valid in range.each");
                         }
                     }
                 }
@@ -1252,7 +1256,7 @@ namespace Embers
                 if (Input.OnYield != null) {
                     LongRange Range = Input.Instance.Range;
                     long Min = (long)(Range.Min != null ? Range.Min : 0);
-                    long Max = (long)(Range.Max != null ? Range.Max : throw new RuntimeException($"{Input.Script.ApproximateLocation}: Cannot call 'reverse_each' on range if max is endless"));
+                    long Max = (long)(Range.Max != null ? Range.Max : throw new RuntimeException($"{Input.Location}: Cannot call 'reverse_each' on range if max is endless"));
                     
                     bool TakesArgument = Input.OnYield.ArgumentNames.Count == 1;
                     for (long i = Max; i >= Min; i--) {
@@ -1277,7 +1281,7 @@ namespace Embers
                             continue;
                         }
                         catch (LoopControlException Ex) {
-                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in range.reverse_each");
+                            throw new SyntaxErrorException($"{Input.Location}: {Ex.GetType().Name} not valid in range.reverse_each");
                         }
                     }
                 }
@@ -1287,7 +1291,7 @@ namespace Embers
                 List<Instance> Array = new();
                 LongRange Range = Input.Instance.Range;
                 long Min = (long)(Range.Min != null ? Range.Min : 0);
-                long Max = (long)(Range.Max != null ? Range.Max : throw new RuntimeException($"{Input.Script.ApproximateLocation}: Cannot call 'to_a' on range if max is endless"));
+                long Max = (long)(Range.Max != null ? Range.Max : throw new RuntimeException($"{Input.Location}: Cannot call 'to_a' on range if max is endless"));
                 for (long i = Min; i <= Max; i++) {
                     Array.Add(new IntegerInstance(Input.Interpreter.Integer, i));
                 }
@@ -1295,8 +1299,9 @@ namespace Embers
             }
             public static async Task<Instance> length(MethodInput Input) {
                 LongRange Range = Input.Instance.Range;
-                if (Range.Min != null && Range.Max != null) {
-                    return new IntegerInstance(Input.Interpreter.Integer, (long)Range.Max - (long)Range.Min + 1);
+                long? Count = Range.Count;
+                if (Count != null) {
+                    return new IntegerInstance(Input.Interpreter.Integer, Count.Value);
                 }
                 else {
                     return Input.Interpreter.Nil;
@@ -1310,7 +1315,7 @@ namespace Embers
             }
             private static int _RealisticIndex(MethodInput Input, long RawIndex) {
                 if (RawIndex < int.MinValue || RawIndex > int.MaxValue) {
-                    throw new RuntimeException($"{Input.Script.ApproximateLocation}: Index ({RawIndex}) is too large for array.");
+                    throw new RuntimeException($"{Input.Location}: Index ({RawIndex}) is too large for array.");
                 }
                 int Index = (int)RawIndex;
                 return Index;
@@ -1352,10 +1357,12 @@ namespace Embers
 
                 // Set value
                 if (Index >= 0) {
-                    return Array[Index] = Value;
+                    lock (Array)
+                        return Array[Index] = Value;
                 }
                 else {
-                    return Array[^-Index] = Value;
+                    lock (Array)
+                        return Array[^-Index] = Value;
                 }
             }
             public static async Task<Instance> _Equals(MethodInput Input) {
@@ -1428,6 +1435,38 @@ namespace Embers
                     return Input.Interpreter.Nil;
                 }
             }
+            public static async Task<Instance> min(MethodInput Input) {
+                List<Instance> Items = Input.Instance.Array;
+                if (Items.Count != 0) {
+                    Instance Minimum = Items[0];
+                    for (int i = 1; i < Items.Count; i++) {
+                        Instance Current = Items[i];
+                        if ((await Current.TryCallInstanceMethod(Input.Script, "<", Minimum)).IsTruthy) {
+                            Minimum = Current;
+                        }
+                    }
+                    return Minimum;
+                }
+                else {
+                    return Input.Interpreter.Nil;
+                }
+            }
+            public static async Task<Instance> max(MethodInput Input) {
+                List<Instance> Items = Input.Instance.Array;
+                if (Items.Count != 0) {
+                    Instance Maximum = Items[0];
+                    for (int i = 1; i < Items.Count; i++) {
+                        Instance Current = Items[i];
+                        if ((await Current.TryCallInstanceMethod(Input.Script, ">", Maximum)).IsTruthy) {
+                            Maximum = Current;
+                        }
+                    }
+                    return Maximum;
+                }
+                else {
+                    return Input.Interpreter.Nil;
+                }
+            }
             public static async Task<Instance> insert(MethodInput Input) {
                 List<Instance> Items = Input.Instance.Array;
                 int Index = _RealisticIndex(Input, Input.Arguments[0].Integer);
@@ -1474,7 +1513,7 @@ namespace Embers
                             continue;
                         }
                         catch (LoopControlException Ex) {
-                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in array.each");
+                            throw new SyntaxErrorException($"{Input.Location}: {Ex.GetType().Name} not valid in array.each");
                         }
                     }
                 }
@@ -1511,7 +1550,7 @@ namespace Embers
                             continue;
                         }
                         catch (LoopControlException Ex) {
-                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in array.reverse_each");
+                            throw new SyntaxErrorException($"{Input.Location}: {Ex.GetType().Name} not valid in array.reverse_each");
                         }
                     }
                 }
@@ -1621,7 +1660,8 @@ namespace Embers
                 Instance Value = Input.Arguments[1];
 
                 // Set value
-                return Hash[Key] = Value;
+                lock (Hash)
+                    return Hash[Key] = Value;
             }
             public static async Task<Instance> _Equals(MethodInput Input) {
                 Instance Left = Input.Instance;
@@ -1703,7 +1743,7 @@ namespace Embers
                             continue;
                         }
                         catch (LoopControlException Ex) {
-                            throw new SyntaxErrorException($"{Input.Script.ApproximateLocation}: {Ex.GetType().Name} not valid in hash.each");
+                            throw new SyntaxErrorException($"{Input.Location}: {Ex.GetType().Name} not valid in hash.each");
                         }
                     }
                 }
@@ -2003,6 +2043,38 @@ namespace Embers
                                 await Thread.Thread.Run(OnYield: Input.OnYield);
                             }
                         };
+                    }
+
+                    Parallel.Invoke(Methods);
+                }
+                return Input.Interpreter.Nil;
+            }
+            public static async Task<Instance> times(MethodInput Input) {
+                if (Input.OnYield != null) {
+                    Instance Argument = Input.Arguments[0];
+                    LongRange Times = Argument is RangeInstance ? Argument.Range : new LongRange(0, Argument.Integer);
+                    int TimesCount = (int)(Times.Count ?? throw new Exception($"{Input.Location}: Expected finite range for Parallel.times(range)"));
+                    Action[] Methods = new Action[TimesCount];
+
+                    int TakesArguments = Input.OnYield.ArgumentNames.Count;
+                    int Counter = 0;
+                    for (long i = Times.Min!.Value; i <= Times.Max!.Value; i++) {
+                        long CurrentIndex = i;
+
+                        Methods[Counter] = async () => {
+                            ThreadInstance Thread = new(Input.Interpreter.Thread, Input.Script);
+                            Thread.Thread.Method = Input.OnYield;
+
+                            // Parallel.times do |n|
+                            if (TakesArguments == 1) {
+                                await Thread.Thread.Run(new IntegerInstance(Input.Interpreter.Integer, CurrentIndex), Input.OnYield);
+                            }
+                            // Parallel.times do
+                            else {
+                                await Thread.Thread.Run(OnYield: Input.OnYield);
+                            }
+                        };
+                        Counter++;
                     }
 
                     Parallel.Invoke(Methods);

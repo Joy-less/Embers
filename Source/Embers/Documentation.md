@@ -214,8 +214,8 @@ range.each {|i|}
 range.reverse_each {|i|}
 	Repeats the given block for each index in the range backwards.
 
-range.length
-	Returns the number of indexes in the array.
+range.length | range.count
+	Returns the number of indexes in the range.
 
 range.to_a
 	Returns an array containing each index in the range.
@@ -238,6 +238,12 @@ array.forty_two
 
 array.sample
 	Returns a random item in the array.
+
+array.min
+	Returns the minimum item in the array using the < operator.
+
+array.max
+	Returns the maximum item in the array using the > operator.
 
 array.insert(index, item) | array.insert(item)
 	Inserts the item into the given index in the array, or adds it to the end of the array.
@@ -338,6 +344,9 @@ thread.stop
 ```
 Parallel.each(array) {|n, i|}
 	Creates a new thread for each item in the array and repeats the given block in parallel for each thread.
+
+Parallel.times(count) {|i|} | Parallel.times(range) {|i|}
+	Creates a new thread for each index in the range and repeats the given block in parallel for each thread.
 ```
 ```
 Time.new | Time.new(year, [month = 0], [day = 0], [hour = 0], [minute = 0], [second = 0], [utc_offset = +0])

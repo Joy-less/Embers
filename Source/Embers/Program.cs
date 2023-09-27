@@ -31,6 +31,20 @@ p '1000 + 9223372036854775801'
 p 1000 + 9223372036854775801
 p 1000.0 + 9223372036854775801.0
 p 1000.0 + 9223372036854775801.0 - 9223372036854775801.0
+
+puts [3, 6, 2, 4, 6].min
+puts [3, 6, 2, 4, 6].max
+
+puts (1...3).count
+
+puts 'Parallel.times(5):'
+Parallel.times 5 do |n|
+    puts n
+end
+puts 'Parallel.times(5..7):'
+Parallel.times 5..7 do |n|
+    puts n
+end
                     ")
                 );
                 Console.ReadLine();
