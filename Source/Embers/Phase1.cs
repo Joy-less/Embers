@@ -33,10 +33,6 @@ namespace Embers
             TernaryQuestion,
             TernaryElse,
         }
-        public static readonly Phase1TokenType[] OmitEndOfStatementAfterList = new Phase1TokenType[] {
-            Phase1TokenType.OpenBracket, Phase1TokenType.AssignmentOperator, Phase1TokenType.Operator, Phase1TokenType.Dot, Phase1TokenType.DoubleColon, Phase1TokenType.Comma,
-            Phase1TokenType.StartCurly, Phase1TokenType.StartSquare, Phase1TokenType.Pipe, Phase1TokenType.RightArrow, Phase1TokenType.TernaryQuestion, Phase1TokenType.TernaryElse
-        };
         public class Phase1Token {
             public readonly DebugLocation Location;
             public Phase1TokenType Type;
@@ -63,8 +59,13 @@ namespace Embers
             }
         }
 
-        static readonly IReadOnlyList<char> InvalidIdentifierCharacters = new List<char>() {'.', ',', '(', ')', '"', '\'', ';', ':',
-            '=', '+', '-', '*', '/', '%', '#', '?', '!', '{', '}', '[', ']', '|', '^', '&', '~', '<', '>', '\\'};
+        static readonly IReadOnlyCollection<char> InvalidIdentifierCharacters = new char[] {
+            '.', ',', '(', ')', '"', '\'', ';', ':', '=', '+', '-', '*', '/', '%', '#', '?', '!', '{', '}', '[', ']', '|', '^', '&', '~', '<', '>', '\\'
+        };
+        static readonly IReadOnlyCollection<Phase1TokenType> OmitEndOfStatementAfterList = new Phase1TokenType[] {
+            Phase1TokenType.OpenBracket, Phase1TokenType.AssignmentOperator, Phase1TokenType.Operator, Phase1TokenType.Dot, Phase1TokenType.DoubleColon, Phase1TokenType.Comma,
+            Phase1TokenType.StartCurly, Phase1TokenType.StartSquare, Phase1TokenType.Pipe, Phase1TokenType.RightArrow, Phase1TokenType.TernaryQuestion, Phase1TokenType.TernaryElse
+        };
         public static List<Phase1Token> GetPhase1Tokens(string Code) {
             Code += "\n";
 
@@ -417,7 +418,7 @@ namespace Embers
                             goto case ';';
                         case ';':
                             // Add EndOfStatement if there isn't already one
-                            if (!LastTokenWas(Phase1TokenType.EndOfStatement) && !LastTokenWasAny(OmitEndOfStatementAfterList))
+                            if (!LastTokenWas(Phase1TokenType.EndOfStatement) && !OmitEndOfStatementAfterList.Any(Token => LastTokenWas(Token)))
                                 AddToken(Phase1TokenType.EndOfStatement, Chara.ToString());
                             // \r + \n --> \r\n
                             else if (Chara == '\n' && Tokens[^1].Value == "\r")
