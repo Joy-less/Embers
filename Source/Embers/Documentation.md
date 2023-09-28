@@ -39,8 +39,8 @@ lambda {}
 loop {}
 	Repeats the given block until a break or return statement is reached.
 
-rand([max = 1.0])
-	If max is an integer, gets a random integer between 0 and max-1. If max is a float, gets a random float between 0 and max.
+rand([max = 1.0]) | rand(range)
+	If max is an integer, gets a random integer between 0 and (max - 1). If a float, gets a random float between 0 and max. If a range, gets a random integer within the range.
 
 srand(seed)
 	Sets the random number seed for rand() to the given seed integer and returns the previous seed.

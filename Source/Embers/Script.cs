@@ -688,7 +688,11 @@ namespace Embers
                         // Call method
                         ReturnValue = await Function(Input);
                     }
-                    catch (BreakException) {
+                    catch (BreakException Ex) {
+                        if (Ex.ThrownInYieldMethod) {
+                            Ex.ThrownInYieldMethod = false;
+                            throw;
+                        }
                         if (BreakHandleType == BreakHandleType.Rethrow)
                             throw;
                         else if (BreakHandleType == BreakHandleType.Destroy)
@@ -697,6 +701,10 @@ namespace Embers
                             throw new SyntaxErrorException($"{Script.ApproximateLocation}: Invalid break (break must be in a loop)");
                     }
                     catch (ReturnException Ex) when (CatchReturn) {
+                        if (Ex.ThrownInYieldMethod) {
+                            Ex.ThrownInYieldMethod = false;
+                            throw;
+                        }
                         ReturnValue = Ex.Instance;
                     }
                     finally {
@@ -1446,6 +1454,10 @@ namespace Embers
                             await Current.SetArgumentVariables(Input.Script.CurrentScope, Input);
                             return await CurrentFunction(Input);
                         });
+                    }
+                    catch (NonErrorException Ex) {
+                        Ex.ThrownInYieldMethod = true;
+                        throw;
                     }
                     finally {
                         Input.Script.CurrentObject.ReplaceContentsWith(TemporarySnapshot);

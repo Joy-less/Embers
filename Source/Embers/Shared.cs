@@ -27,6 +27,7 @@ namespace Embers
         public ApiException(string Message) : base(Message) { }
     }
     public abstract class NonErrorException : EmbersException {
+        public bool ThrownInYieldMethod = false;
         public NonErrorException(string Message) : base(Message) {}
         public NonErrorException() {}
     }

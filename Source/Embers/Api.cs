@@ -1374,12 +1374,16 @@ namespace Embers
 
                 // Set value
                 if (Index >= 0) {
-                    lock (Array)
+                    lock (Array) {
+                        Array.EnsureArrayIndex(Input.Interpreter, Index);
                         return Array[Index] = Value;
+                    }
                 }
                 else {
-                    lock (Array)
+                    lock (Array) {
+                        Array.EnsureArrayIndex(Input.Interpreter, Index);
                         return Array[^-Index] = Value;
+                    }
                 }
             }
             public static async Task<Instance> _Multiply(MethodInput Input) {
@@ -1803,10 +1807,17 @@ namespace Embers
         static class _Random {
             public static async Task<Instance> rand(MethodInput Input) {
                 // Integer random
-                if (Input.Arguments.Count == 1 && Input.Arguments[0] is IntegerInstance) {
+                if (Input.Arguments.Count == 1 && Input.Arguments[0] is IntegerInstance Integer) {
                     long IncludingMin = 0;
-                    long ExcludingMax = Input.Arguments[0].Integer;
+                    long ExcludingMax = Integer.Integer;
                     long RandomNumber = Input.Interpreter.Random.NextInt64(IncludingMin, ExcludingMax);
+                    return new IntegerInstance(Input.Interpreter.Integer, RandomNumber);
+                }
+                // Range random
+                else if (Input.Arguments.Count == 1 && Input.Arguments[0] is RangeInstance Range) {
+                    long IncludingMin = Range.AppliedMin.Integer;
+                    long IncludingMax = Range.AppliedMax.Integer;
+                    long RandomNumber = Input.Interpreter.Random.NextInt64(IncludingMin, IncludingMax + 1);
                     return new IntegerInstance(Input.Interpreter.Integer, RandomNumber);
                 }
                 // Float random

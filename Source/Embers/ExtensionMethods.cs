@@ -147,6 +147,13 @@ namespace Embers
                 Stack.Push(With[i]);
             }
         }
+        public static void EnsureArrayIndex<T>(this List<T> List, Interpreter Interpreter, int Index) where T : Instance {
+            int Count = Index + 1;
+            List.EnsureCapacity(Count);
+            for (int i = List.Count; i < Count; i++) {
+                List.Add((T)(object)Interpreter.Nil);
+            }
+        }
         public static LockingDictionary<T, T> ListAsHash<T>(this List<T> HashItemsList) where T : notnull {
             LockingDictionary<T, T> HashItems = new();
             for (int i2 = 0; i2 < HashItemsList.Count; i2 += 2) {

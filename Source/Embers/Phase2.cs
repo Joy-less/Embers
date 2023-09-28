@@ -1305,7 +1305,7 @@ namespace Embers
                         }
                     }
                     else if (Token.Type == Phase2TokenType.EndOfStatement) {
-                        if (!WrappedInBrackets) {
+                        if (!WrappedInBrackets && !IsPipes) {
                             break;
                         }
                     }
@@ -1796,6 +1796,8 @@ namespace Embers
                             List<MethodArgumentExpression> DoArguments;
                             if (ParsedObjects[i] is Phase2Token Tok && Tok.Type == Phase2TokenType.Pipe) {
                                 DoArguments = GetMethodArguments(ParsedObjects, ref i, true, Token.Location);
+                                // Add end of statement after pipe arguments
+                                ParsedObjects.Insert(i + 1, new Phase2Token(Location, Phase2TokenType.EndOfStatement, null));
                             }
                             else {
                                 i--;
@@ -1965,6 +1967,8 @@ namespace Embers
                             List<MethodArgumentExpression> DoArguments;
                             if (ParsedObjects[i] is Phase2Token Tok && Tok.Type == Phase2TokenType.Pipe) {
                                 DoArguments = GetMethodArguments(ParsedObjects, ref i, true, Token.Location);
+                                // Add end of statement after pipe arguments
+                                ParsedObjects.Insert(i + 1, new Phase2Token(Location, Phase2TokenType.EndOfStatement, null));
                             }
                             else {
                                 i--;
@@ -2147,7 +2151,7 @@ namespace Embers
             }
 
             // Paths, Arrays & Indexers
-            {
+            void ParsePathsArraysAndIndexers(bool HandleIndexEquals) {
                 Stack<int> SquareBracketsStack = new();
                 for (int i = 0; i < ParsedObjects.Count; i++) {
                     Phase2Object? LastObject = i - 1 >= 0 ? ParsedObjects[i - 1] : null;
@@ -2218,13 +2222,17 @@ namespace Embers
                                 // Check whether [] is []=
                                 Expression? IsIndexEquals = null;
                                 if (IsIndexer != null && NextObject is Phase2Token NextToken && NextToken.Type == Phase2TokenType.AssignmentOperator && NextToken.Value == "=") {
+                                    if (!HandleIndexEquals) {
+                                        // Handle index equals later (low priority)
+                                        continue;
+                                    }
                                     if (NextNextObject is Expression IndexAssignmentValue) {
                                         IsIndexEquals = IndexAssignmentValue;
                                         // Remove equals and value
                                         ParsedObjects.RemoveRange(i + 1, 2);
                                     }
                                     else {
-                                        throw new SyntaxErrorException($"{Token.Location}: Expected value after []=");
+                                        throw new SyntaxErrorException($"{Token.Location}: Expected value after []=, got '{NextNextObject?.Inspect()}'");
                                     }
                                 }
 
@@ -2283,6 +2291,7 @@ namespace Embers
                     throw new SyntaxErrorException($"{ParsedObjects[RemainingOpenBracketIndex].Location}: Unclosed square bracket");
                 }
             }
+            ParsePathsArraysAndIndexers(false);
 
             // Unary
             for (int i = 0; i < ParsedObjects.Count; i++) {
@@ -2524,6 +2533,9 @@ namespace Embers
 
             // Operators (low priority)
             HandleOperators(LowPriorityOperatorPrecedence);
+
+            // []=
+            ParsePathsArraysAndIndexers(true);
 
             // Assignment
             for (int i = ParsedObjects.Count - 1; i >= 0; i--) {
