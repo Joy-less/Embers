@@ -53,6 +53,11 @@ puts Float::INFINITY + 922337203685477580100000
 $lol = 'hi'
 
 p local_variables, global_variables
+
+a = [""hi"", ""hey""]
+p a * 5
+p a
+p a * 0
                     ")
                 );
                 Console.ReadLine();

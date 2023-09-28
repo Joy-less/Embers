@@ -1133,6 +1133,7 @@ namespace Embers
                 }
             }
         }
+        /// <summary>A thread-safe dictionary that is locked while a key is being added or set.</summary>
         public class LockingDictionary<TKey, TValue> : Dictionary<TKey, TValue> where TKey : notnull {
             public new void Add(TKey Key, TValue Value) {
                 lock (this) base.Add(Key, Value);
@@ -1150,6 +1151,7 @@ namespace Embers
                 }
             }
         }
+        /// <summary>A locking dictionary with events that trigger when a key-value pair is added to or removed from the dictionary.</summary>
         public class ReactiveDictionary<TKey, TValue> : LockingDictionary<TKey, TValue> where TKey : notnull {
             private readonly WeakEvent<DictionarySet> SetEvent = new();
             private readonly WeakEvent<DictionaryRemoved> RemovedEvent = new();

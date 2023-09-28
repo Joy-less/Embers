@@ -180,6 +180,7 @@ namespace Embers
             // Array
             Interpreter.Array.InstanceMethods["[]"] = Script.CreateMethod(Array._Indexer, 1);
             Interpreter.Array.InstanceMethods["[]="] = Script.CreateMethod(Array._IndexEquals, 2);
+            Interpreter.Array.InstanceMethods["*"] = Script.CreateMethod(Array._Multiply, 1);
             Interpreter.Array.InstanceMethods["=="] = Script.CreateMethod(Array._Equals, 1);
             Interpreter.Array.InstanceMethods["==="] = Script.CreateMethod(Array._Equals, 1);
             Interpreter.Array.InstanceMethods["<<"] = Script.CreateMethod(Array._Append, 1);
@@ -1380,6 +1381,22 @@ namespace Embers
                     lock (Array)
                         return Array[^-Index] = Value;
                 }
+            }
+            public static async Task<Instance> _Multiply(MethodInput Input) {
+                // Get array and repeat count
+                List<Instance> Array = Input.Instance.Array;
+                List<Instance> NewArray = new();
+                int Repeat = _RealisticIndex(Input, Input.Arguments[0].Integer);
+                int InitialCount = Array.Count;
+                // Repeat the items in the array
+                NewArray.EnsureCapacity(InitialCount * Repeat);
+                for (int i = 0; i < Repeat; i++) {
+                    for (int i2 = 0; i2 < InitialCount; i2++) {
+                        NewArray.Add(Array[i2]);
+                    }
+                }
+                // Return the new array
+                return new ArrayInstance(Input.Interpreter.Array, NewArray);
             }
             public static async Task<Instance> _Equals(MethodInput Input) {
                 Instance Left = Input.Instance;
