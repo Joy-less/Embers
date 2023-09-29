@@ -43,11 +43,11 @@ namespace Embers
             else if (Class.InheritsFrom(Interpreter.String))
                 return new StringInstance(Class, "");
             else if (Class.InheritsFrom(Interpreter.Symbol))
-                return GetSymbol("");
+                return Interpreter.GetSymbol("");
             else if (Class.InheritsFrom(Interpreter.Integer))
-                return new IntegerInstance(Class, 0);
+                return Interpreter.GetInteger(0);
             else if (Class.InheritsFrom(Interpreter.Float))
-                return new FloatInstance(Class, 0);
+                return Interpreter.GetFloat(0);
             else if (Class.InheritsFrom(Interpreter.Proc))
                 throw new RuntimeException($"{ApproximateLocation}: Tried to create Proc instance without a block");
             else if (Class.InheritsFrom(Interpreter.Range))
@@ -226,19 +226,23 @@ namespace Embers
                     Phase2TokenType.True => Script.Interpreter.True,
                     Phase2TokenType.False => Script.Interpreter.False,
                     Phase2TokenType.String => new StringInstance(Script.Interpreter.String, Token.Value!),
-                    Phase2TokenType.Integer => new IntegerInstance(Script.Interpreter.Integer, Token.ValueAsInteger),
-                    Phase2TokenType.Float => new FloatInstance(Script.Interpreter.Float, Token.ValueAsFloat),
+                    Phase2TokenType.Integer => Script.Interpreter.GetInteger(Token.ValueAsInteger),
+                    Phase2TokenType.Float => Script.Interpreter.GetFloat(Token.ValueAsFloat),
                     _ => throw new InternalErrorException($"{Token.Location}: Cannot create new object from token type {Token.Type}")
                 };
             }
             public Instance(Module fromModule) {
                 Module = fromModule;
-                ObjectId = fromModule.Interpreter.GenerateObjectId;
+                if (this is not RealPseudoInstance) {
+                    ObjectId = fromModule.Interpreter.GenerateObjectId;
+                }
                 Setup();
             }
             public Instance(Interpreter interpreter) {
                 Module = null;
-                ObjectId = interpreter.GenerateObjectId;
+                if (this is not RealPseudoInstance) {
+                    ObjectId = interpreter.GenerateObjectId;
+                }
                 Setup();
             }
             void Setup() {
@@ -314,11 +318,10 @@ namespace Embers
             }
         }
         public class SymbolInstance : Instance {
-            string Value;
+            readonly string Value;
+            readonly bool IsStringSymbol;
             public override object? Object { get { return Value; } }
             public override string String { get { return Value; } }
-
-            bool IsStringSymbol;
             public override string Inspect() {
                 if (IsStringSymbol) {
                     return ":\"" + Value.Replace("\n", "\\n").Replace("\r", "\\r") + "\"";
@@ -332,15 +335,11 @@ namespace Embers
             }
             public SymbolInstance(Class fromClass, string value) : base(fromClass) {
                 Value = value;
-                SetValue(value);
-            }
-            public void SetValue(string value) {
-                Value = value;
                 IsStringSymbol = Value.Any("(){}[]<>=+-*/%!?.,;@#&|~^$_".Contains) || Value.Any(char.IsWhiteSpace) || (Value.Length != 0 && Value[0].IsAsciiDigit());
             }
         }
         public class IntegerInstance : Instance {
-            Integer Value;
+            readonly Integer Value;
             public override object? Object { get { return Value; } }
             public override Integer Integer { get { return Value; } }
             public override Float Float { get { return Value; } }
@@ -350,12 +349,9 @@ namespace Embers
             public IntegerInstance(Class fromClass, Integer value) : base(fromClass) {
                 Value = value;
             }
-            public void SetValue(Integer value) {
-                Value = value;
-            }
         }
         public class FloatInstance : Instance {
-            Float Value;
+            readonly Float Value;
             public override object? Object { get { return Value; } }
             public override Float Float { get { return Value; } }
             public override Integer Integer { get { return (Integer)Value; } }
@@ -371,9 +367,6 @@ namespace Embers
                 return FloatString;
             }
             public FloatInstance(Class fromClass, Float value) : base(fromClass) {
-                Value = value;
-            }
-            public void SetValue(Float value) {
                 Value = value;
             }
         }
@@ -472,7 +465,7 @@ namespace Embers
             (Instance, Instance) Setup() {
                 if (Min == null) {
                     AppliedMin = Max!.Module!.Interpreter.Nil;
-                    AppliedMax = IncludesMax ? Max : new IntegerInstance((Class)Max.Module!, Max.Integer - 1);
+                    AppliedMax = IncludesMax ? Max : Max.Module!.Interpreter.GetInteger(Max.Integer - 1);
                 }
                 else if (Max == null) {
                     AppliedMin = Min;
@@ -480,7 +473,7 @@ namespace Embers
                 }
                 else {
                     AppliedMin = Min;
-                    AppliedMax = IncludesMax ? Max : new IntegerInstance((Class)Max.Module!, Max.Integer - 1);
+                    AppliedMax = IncludesMax ? Max : Max.Module!.Interpreter.GetInteger(Max.Integer - 1);
                 }
                 return (AppliedMin, AppliedMax);
             }
@@ -1200,6 +1193,27 @@ namespace Embers
                 }
             }
         }
+        public class Cache<TKey, TValue> where TKey : notnull {
+            public const int Limit = 50_000;
+            private readonly LockingDictionary<TKey, TValue> CacheDictionary = new();
+            private readonly Queue<TKey> Keys = new();
+            public TValue Store(TKey Key, TValue Value) {
+                lock (CacheDictionary) {
+                    if (CacheDictionary.Count > Limit) {
+                        CacheDictionary.Remove(Keys.Dequeue());
+                    }
+                    Keys.Enqueue(Key);
+                    CacheDictionary.Add(Key, Value);
+                    return Value;
+                }
+            }
+            public TValue? this[TKey Key] {
+                get {
+                    CacheDictionary.TryGetValue(Key, out TValue? Value);
+                    return Value;
+                }
+            }
+        }
         public class Instances {
             // At least one of Instance or InstanceList will be null
             readonly Instance? Instance;
@@ -1371,16 +1385,6 @@ namespace Embers
         }
         async Task CreateTemporaryScope(Func<Task> Do) {
             await CreateTemporaryScope(new Scope(), Do);
-        }
-        public SymbolInstance GetSymbol(string Value) {
-            if (Interpreter.Symbols.TryGetValue(Value, out SymbolInstance? FindSymbolInstance)) {
-                return FindSymbolInstance;
-            }
-            else {
-                SymbolInstance SymbolInstance = new(Interpreter.Symbol, Value);
-                Interpreter.Symbols[Value] = SymbolInstance;
-                return SymbolInstance;
-            }
         }
         public bool TryGetLocalVariable(string Name, out Instance? LocalVariable) {
             foreach (object Object in CurrentObject) {
@@ -1714,7 +1718,7 @@ namespace Embers
                             }
                             // Symbol
                             case Phase2TokenType.Symbol: {
-                                return GetSymbol(ObjectTokenExpression.Token.Value!);
+                                return Interpreter.GetSymbol(ObjectTokenExpression.Token.Value!);
                             }
                             // Error
                             default:

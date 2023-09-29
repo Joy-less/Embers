@@ -13,7 +13,9 @@ namespace Embers
         public readonly Scope RootScope;
 
         public readonly LockingDictionary<string, Instance> GlobalVariables = new();
-        public readonly LockingDictionary<string, SymbolInstance> Symbols = new();
+        private readonly Cache<string, SymbolInstance> Symbols = new();
+        private readonly Cache<Integer, IntegerInstance> Integers = new();
+        private readonly Cache<Float, FloatInstance> Floats = new();
 
         public readonly Class NilClass;
         public readonly Class TrueClass;
@@ -47,6 +49,15 @@ namespace Embers
             List<Expression> Statements = ObjectsToExpressions(Tokens, ExpressionsType.Statements);
 
             return Statements.Serialise();
+        }
+        public SymbolInstance GetSymbol(string Value) {
+            return Symbols[Value] ?? Symbols.Store(Value, new SymbolInstance(Symbol, Value));
+        }
+        public IntegerInstance GetInteger(Integer Value) {
+            return Integers[Value] ?? Integers.Store(Value, new IntegerInstance(Integer, Value));
+        }
+        public FloatInstance GetFloat(Float Value) {
+            return Floats[Value] ?? Floats.Store(Value, new FloatInstance(Float, Value));
         }
 
         public Interpreter() {

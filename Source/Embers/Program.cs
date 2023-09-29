@@ -12,28 +12,14 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() =>
                     Script.Evaluate(@"
-def zz
-    puts 7
-    yield
-    puts 8
-end
-
-zz {
-    def b
-        def a
-          puts 1
-          yield
-          puts 2
-        end
-    
-        puts 3
-        a {return}
-        puts 4
-    end
-    puts 5
-    b
-    puts 6
-}
+puts 1.object_id
+puts 1.object_id
+puts 2.3.object_id
+puts 2.3.object_id
+puts (1 + 1).object_id
+puts (1 + 1).object_id
+puts :hi.object_id
+puts :hi.object_id
                     ")
                 );
                 Console.ReadLine();
