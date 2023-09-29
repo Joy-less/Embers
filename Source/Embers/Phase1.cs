@@ -396,7 +396,7 @@ namespace Embers
                                     LastC = C;
                                     return C == Chara;
                                 }).Replace("\\'", "'");
-                                Tokens.Add(new(Location, Phase1TokenType.String, String, FollowsWhitespace, false));
+                                Tokens.Add(new(Location, Phase1TokenType.String, String, FollowsWhitespace, FollowedByWhitespace));
                             }
                             // Symbol string
                             if (Tokens.Count >= 2 && Tokens[^2].Type == Phase1TokenType.Colon) {
@@ -404,7 +404,7 @@ namespace Embers
                                 Phase1Token StringToken = Tokens[^1];
                                 if (!StringToken.FollowsWhitespace) {
                                     Tokens.RemoveRange(Tokens.Count - 2, 2);
-                                    Tokens.Add(new Phase1Token(Location, Phase1TokenType.Identifier, ":" + StringToken.Value, SymbolToken.FollowsWhitespace, StringToken.ProcessFormatting));
+                                    Tokens.Add(new Phase1Token(Location, Phase1TokenType.Identifier, ":" + StringToken.Value, SymbolToken.FollowsWhitespace, SymbolToken.FollowedByWhitespace, processFormatting: StringToken.ProcessFormatting));
                                 }
                             }
                             break;
@@ -684,7 +684,7 @@ namespace Embers
             }
             // Certain tokens are invalid at this point
             {
-                Phase1Token? FindColon = Tokens.Find(Tok => Tok.Type == Phase1TokenType.Colon);
+                Phase1Token? FindColon = Tokens.Find(Token => Token.Type == Phase1TokenType.Colon);
                 if (FindColon != null) {
                     throw new SyntaxErrorException($"{FindColon.Location}: Unexpected colon");
                 }
