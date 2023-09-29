@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics;
+using System.Net.Http;
 using static Embers.Script;
 
 #nullable enable
@@ -292,6 +293,12 @@ namespace Embers
             FileModule.Methods["read"] = Script.CreateMethod(File.read, 1, IsUnsafe: true);
             FileModule.Methods["write"] = Script.CreateMethod(File.write, 2, IsUnsafe: true);
             FileModule.Methods["exist?", "exists?"] = Script.CreateMethod(File.exist7, 1, IsUnsafe: true);
+
+            // Net
+            Module NetModule = Script.CreateModule("Net");
+            // Net::HTTP
+            Module NetHTTPModule = Script.CreateModule("HTTP", NetModule);
+            NetHTTPModule.Methods["get"] = Script.CreateMethod(Net.HTTP.get, 1, IsUnsafe: true);
         }
 
         // API
@@ -2167,6 +2174,21 @@ namespace Embers
                 Time = Time.AddSeconds(Seconds - TruncatedSeconds);
 
                 return new TimeInstance(Input.Interpreter.Time, Time);
+            }
+        }
+        static class Net {
+            public static class HTTP {
+                public static async Task<Instance> get(MethodInput Input) {
+                    string Uri = Input.Arguments[0].String;
+                    if (!Uri.Contains("://"))
+                        Uri = "https://" + Uri;
+
+                    HttpClient Client = new();
+                    HttpResponseMessage Response = await Client.GetAsync(Uri);
+                    string ResponseString = await Response.Content.ReadAsStringAsync();
+
+                    return new StringInstance(Input.Interpreter.String, ResponseString);
+                }
             }
         }
     }

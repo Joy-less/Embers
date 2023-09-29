@@ -20,6 +20,8 @@ puts (1 + 1).object_id
 puts (1 + 1).object_id
 puts :hi.object_id
 puts :hi.object_id
+
+puts Net::HTTP.get('example.com/index.html')
                     ")
                 );
                 Console.ReadLine();
