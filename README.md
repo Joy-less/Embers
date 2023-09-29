@@ -15,7 +15,7 @@ Its minimalistic design should make Ruby suitable for use in game engines, moddi
 - A great mascot.
 
 ## Drawbacks
-- Likely to be considerably less optimised than Ruby. Benchmarks show it is several times slower.
+- Less optimised than Ruby. Benchmarks suggest it is several times slower.
 - Does not have 100% compatibility with Ruby syntax and functionality.
 
 ## Note
@@ -76,14 +76,14 @@ Parallel.each [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] do |n|
     print n.to_s + ' '
 end
 getc
-puts ""\n---""
+puts '\n---'
 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].each do |n|
     Thread.new {
         print n.to_s + ' '
     }
 end
 getc
-puts ""\n---""
+puts '\n---'
 ");
 ```
 Output:
@@ -99,7 +99,7 @@ Note that code running on a single thread will be faster if they are regularly a
 ### Custom methods
 ```csharp
 MyInterpreter.Integer.InstanceMethods.Add("double_number", MyScript.CreateMethod(async Input => {
-    return new IntegerInstance(Input.Interpreter.Integer, Input.Instance.Integer * 2);
+    return Input.Interpreter.GetInteger(Input.Instance.Integer * 2);
 }, 0));
 MyScript.Evaluate("puts 3.double_number"); // 6
 ```
@@ -173,22 +173,22 @@ MyScript.Interpret(new List<Embers.Phase2.Expression>() {new Embers.Phase2.Metho
 Please note that pre-parsed code will not be compatible between different versions of Embers. It should be done just before building your project.
 
 ## Game engine support
-Embers is fully compatible with Unity, Godot, and other C# game engines. However, certain methods such as `puts` reference `Console`, which is not shown in Unity or Godot, so you will need to make some changes.
+Embers is fully compatible with Unity, Godot, and other C# game engines. However, certain methods such as `puts` reference `Console`, which is hidden in Unity and Godot, so you will need to make some changes.
 
 For example:
-
-Unity
-```csharp
-// In Api.cs
-Console.WriteLine(Message.LightInspect()); // -> UnityEngine.Debug.Log(Message.LightInspect());
-Console.WriteLine(); // -> UnityEngine.Debug.Log("");
-```
 
 Godot
 ```csharp
 // In Api.cs
 Console.WriteLine(Message.LightInspect()); // -> Godot.GD.Print(Message.LightInspect());
 Console.WriteLine(); // -> Godot.GD.Print("");
+```
+
+Unity
+```csharp
+// In Api.cs
+Console.WriteLine(Message.LightInspect()); // -> UnityEngine.Debug.Log(Message.LightInspect());
+Console.WriteLine(); // -> UnityEngine.Debug.Log("");
 ```
 
 ## About Noko
