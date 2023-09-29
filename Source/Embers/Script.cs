@@ -104,18 +104,18 @@ namespace Embers
                     SuperModule.Methods.CopyTo(Methods);
                     SuperModule.InstanceMethods.CopyTo(InstanceMethods);
                     // Inherit changes later
-                    SuperModule.Methods.Set += (string Key, Method NewValue) => {
+                    SuperModule.Methods.OnSet.Listen((string Key, Method NewValue) => {
                         Methods[Key] = NewValue;
-                    };
-                    SuperModule.InstanceMethods.Set += (string Key, Method NewValue) => {
+                    });
+                    SuperModule.InstanceMethods.OnSet.Listen((string Key, Method NewValue) => {
                         InstanceMethods[Key] = NewValue;
-                    };
-                    SuperModule.Methods.Removed += (string Key) => {
+                    });
+                    SuperModule.Methods.OnRemoved.Listen((string Key) => {
                         Methods.Remove(Key);
-                    };
-                    SuperModule.InstanceMethods.Removed += (string Key) => {
+                    });
+                    SuperModule.InstanceMethods.OnRemoved.Listen((string Key) => {
                         InstanceMethods.Remove(Key);
-                    };
+                    });
                 }
             }
             public bool InheritsFrom(Module? Ancestor) {
@@ -246,12 +246,12 @@ namespace Embers
                     // Copy instance methods
                     Module.InstanceMethods.CopyTo(InstanceMethods);
                     // Copy future changes
-                    Module.InstanceMethods.Set += (string Key, Method NewValue) => {
+                    Module.InstanceMethods.OnSet.Listen((string Key, Method NewValue) => {
                         InstanceMethods[Key] = NewValue;
-                    };
-                    Module.InstanceMethods.Removed += (string Key) => {
+                    });
+                    Module.InstanceMethods.OnRemoved.Listen((string Key) => {
                         InstanceMethods.Remove(Key);
-                    };
+                    });
                 }
             }
             public void AddOrUpdateInstanceMethod(string Name, Method Method) {
@@ -1115,29 +1115,25 @@ namespace Embers
                 return IsDouble ? Double.ToString() : BigFloat.ToString();
             }
         }
-        public class WeakEvent<TDelegate> where TDelegate : Delegate {
-            readonly List<WeakReference> Subscribers = new();
-
-            public void Add(TDelegate Handler) {
-                lock (Subscribers) {
-                    // Remove any dead references
-                    Subscribers.RemoveAll(WeakRef => !WeakRef.IsAlive);
-                    // Add the new handler as a weak reference
-                    Subscribers.Add(new WeakReference(Handler));
+        public class WeakEvent<T> {
+            private readonly ConditionalWeakTable<Action<T>, Action<T>> Subscribers = new();
+            public void Listen(Action<T> Listener) {
+                lock (this) Subscribers.Add(Listener, Listener);
+            }
+            public void Fire(T Argument) {
+                foreach (KeyValuePair<Action<T>, Action<T>> Subscriber in Subscribers) {
+                    Subscriber.Key(Argument);
                 }
             }
-            public void Remove(TDelegate Handler) {
-                lock (Subscribers) {
-                    // Remove the handler from the list
-                    Subscribers.RemoveAll(WeakRef => WeakRef.Target == Handler);
-                }
+        }
+        public class WeakEvent<T1, T2> {
+            private readonly ConditionalWeakTable<Action<T1, T2>, Action<T1, T2>> Subscribers = new();
+            public void Listen(Action<T1, T2> Listener) {
+                lock (this) Subscribers.Add(Listener, Listener);
             }
-            public void Raise(Action<TDelegate> Action) {
-                // Invoke the action for each subscriber that is still alive
-                foreach (WeakReference WeakRef in Subscribers) {
-                    if (WeakRef.Target is TDelegate Target) {
-                        Action(Target);
-                    }
+            public void Fire(T1 Argument1, T2 Argument2) {
+                foreach (KeyValuePair<Action<T1, T2>, Action<T1, T2>> Subscriber in Subscribers) {
+                    Subscriber.Key(Argument1, Argument2);
                 }
             }
         }
@@ -1161,27 +1157,15 @@ namespace Embers
         }
         /// <summary>A locking dictionary with events that trigger when a key-value pair is added to or removed from the dictionary.</summary>
         public class ReactiveDictionary<TKey, TValue> : LockingDictionary<TKey, TValue> where TKey : notnull {
-            private readonly WeakEvent<DictionarySet> SetEvent = new();
-            private readonly WeakEvent<DictionaryRemoved> RemovedEvent = new();
-
-            public delegate void DictionarySet(TKey Key, TValue NewValue);
-            public event DictionarySet Set {
-                add => SetEvent.Add(value);
-                remove => SetEvent.Remove(value);
-            }
-
-            public delegate void DictionaryRemoved(TKey Key);
-            public event DictionaryRemoved Removed {
-                add => RemovedEvent.Add(value);
-                remove => RemovedEvent.Remove(value);
-            }
+            public readonly WeakEvent<TKey, TValue> OnSet = new();
+            public readonly WeakEvent<TKey> OnRemoved = new();
 
             public new TValue this[TKey Key] {
                 get => base[Key];
                 set {
                     TrySetMethodName(Key, value);
                     base[Key] = value;
-                    SetEvent.Raise(Handler => Handler(Key, value));
+                    OnSet.Fire(Key, value);
                 }
             }
             public TValue this[TKey FirstKey, params TKey[] Keys] {
@@ -1196,14 +1180,14 @@ namespace Embers
             public new void Add(TKey Key, TValue Value) {
                 lock (this) {
                     TrySetMethodName(Key, Value);
-                    TryAdd(Key, Value);
-                    SetEvent.Raise(Handler => Handler(Key, Value));
+                    base.Add(Key, Value);
+                    OnSet.Fire(Key, Value);
                 }
             }
             public new bool Remove(TKey Key) {
                 lock (this) {
                     if (Remove(Key, out _)) {
-                        RemovedEvent.Raise(Handler => Handler(Key));
+                        OnRemoved.Fire(Key);
                         return true;
                     }
                     return false;
@@ -1648,7 +1632,7 @@ namespace Embers
                                 }
                                 // Undefined
                                 else {
-                                    throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Undefined local variable or method '{ObjectTokenExpression.Token.Value!}' for {CurrentBlock}");
+                                    throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Undefined local variable or method '{ObjectTokenExpression.Token.Value!}' for {CurrentObject.Peek()}");
                                 }
                             }
                             // Global variable
@@ -2510,9 +2494,9 @@ namespace Embers
             Interpreter = interpreter;
             this.AllowUnsafeApi = AllowUnsafeApi;
 
-            CurrentObject.Push(interpreter.RootModule);
-            CurrentObject.Push(interpreter.RootInstance);
-            CurrentObject.Push(interpreter.RootScope);
+            CurrentObject.Push(Interpreter.RootModule);
+            CurrentObject.Push(Interpreter.RootInstance);
+            CurrentObject.Push(Interpreter.RootScope);
         }
     }
 }
