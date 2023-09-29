@@ -406,3 +406,7 @@ File.write(file_path, text)
 File.exist?(file_path) | File.exists?(file_path)
 	Returns true if a file exists with the given path.
 ```
+```
+Net::HTTP.get(uri)
+	Returns the HTML content of the given URI as a string. Assumes https:// if the protocol is not given.
+```
