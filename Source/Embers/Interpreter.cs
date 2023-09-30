@@ -7,7 +7,8 @@ namespace Embers
 {
     public class Interpreter
     {
-        public readonly Class Object; // The superclass of all classes and modules.
+        /// <summary>The superclass of all classes and modules.</summary>
+        public readonly Class Object;
         public readonly Module RootModule;
         public readonly Instance RootInstance;
         public readonly Scope RootScope;

@@ -68,7 +68,7 @@ namespace Embers
 
         public class Block {
             public readonly LockingDictionary<string, Instance> LocalVariables = new();
-            public readonly LockingDictionary<string, Instance> Constants = new();
+            public readonly ReactiveDictionary<string, Instance> Constants = new();
         }
         public class Scope : Block {
             
@@ -101,20 +101,27 @@ namespace Embers
             protected virtual void Setup() {
                 // Copy superclass class and instance methods
                 if (SuperModule != null) {
+                    // Copy methods and instance methods
                     SuperModule.Methods.CopyTo(Methods);
                     SuperModule.InstanceMethods.CopyTo(InstanceMethods);
-                    // Inherit changes later
+                    // Copy future changes
                     SuperModule.Methods.OnSet.Listen((string Key, Method NewValue) => {
                         Methods[Key] = NewValue;
-                    });
-                    SuperModule.InstanceMethods.OnSet.Listen((string Key, Method NewValue) => {
-                        InstanceMethods[Key] = NewValue;
                     });
                     SuperModule.Methods.OnRemoved.Listen((string Key) => {
                         Methods.Remove(Key);
                     });
+                    SuperModule.InstanceMethods.OnSet.Listen((string Key, Method NewValue) => {
+                        InstanceMethods[Key] = NewValue;
+                    });
                     SuperModule.InstanceMethods.OnRemoved.Listen((string Key) => {
                         InstanceMethods.Remove(Key);
+                    });
+                    SuperModule.Constants.OnSet.Listen((string Key, Instance NewValue) => {
+                        Constants[Key] = NewValue;
+                    });
+                    SuperModule.Constants.OnRemoved.Listen((string Key) => {
+                        Constants.Remove(Key);
                     });
                 }
             }
@@ -257,10 +264,6 @@ namespace Embers
                         InstanceMethods.Remove(Key);
                     });
                 }
-            }
-            public void AddOrUpdateInstanceMethod(string Name, Method Method) {
-                Module!.InstanceMethods[Name] = Method;
-                // Change will be automatically copied to this instance
             }
             public async Task<Instance> TryCallInstanceMethod(Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
                 // Found
@@ -602,7 +605,15 @@ namespace Embers
             public override string LightInspect() {
                 return Module!.Name;
             }
-            public ModuleReference(Module module) : base(module) { }
+            public ModuleReference(Module module) : base(module) {
+                // Copy changes to the parent module
+                InstanceMethods.OnSet.Listen((string Key, Method NewValue) => {
+                    module.InstanceMethods[Key] = NewValue;
+                });
+                InstanceMethods.OnRemoved.Listen((string Key) => {
+                    module.InstanceMethods.Remove(Key);
+                });
+            }
         }
         public class MethodReference : RealPseudoInstance {
             readonly Method Method;
@@ -1111,22 +1122,26 @@ namespace Embers
         public class WeakEvent<T> {
             private readonly ConditionalWeakTable<Action<T>, Action<T>> Subscribers = new();
             public void Listen(Action<T> Listener) {
-                lock (this) Subscribers.Add(Listener, Listener);
+                lock (Subscribers) Subscribers.Add(Listener, Listener);
             }
             public void Fire(T Argument) {
-                foreach (KeyValuePair<Action<T>, Action<T>> Subscriber in Subscribers) {
-                    Subscriber.Key(Argument);
+                lock (Subscribers) {
+                    foreach (KeyValuePair<Action<T>, Action<T>> Subscriber in Subscribers) {
+                        Subscriber.Key(Argument);
+                    }
                 }
             }
         }
         public class WeakEvent<T1, T2> {
             private readonly ConditionalWeakTable<Action<T1, T2>, Action<T1, T2>> Subscribers = new();
             public void Listen(Action<T1, T2> Listener) {
-                lock (this) Subscribers.Add(Listener, Listener);
+                lock (Subscribers) Subscribers.Add(Listener, Listener);
             }
             public void Fire(T1 Argument1, T2 Argument2) {
-                foreach (KeyValuePair<Action<T1, T2>, Action<T1, T2>> Subscriber in Subscribers) {
-                    Subscriber.Key(Argument1, Argument2);
+                lock (Subscribers) {
+                    foreach (KeyValuePair<Action<T1, T2>, Action<T1, T2>> Subscriber in Subscribers) {
+                        Subscriber.Key(Argument1, Argument2);
+                    }
                 }
             }
         }
@@ -1142,7 +1157,9 @@ namespace Embers
                 lock (this) return base.TryAdd(Key, Value);
             }
             public new TValue this[TKey Key] {
-                get => base[Key];
+                get {
+                    lock (this) return base[Key];
+                }
                 set {
                     lock (this) base[Key] = value;
                 }
@@ -1157,8 +1174,10 @@ namespace Embers
                 get => base[Key];
                 set {
                     TrySetMethodName(Key, value);
-                    base[Key] = value;
-                    OnSet.Fire(Key, value);
+                    if (!IsValueAlreadySet(Key, value)) {
+                        base[Key] = value;
+                        OnSet.Fire(Key, value);
+                    }
                 }
             }
             public TValue this[TKey FirstKey, params TKey[] Keys] {
@@ -1171,22 +1190,23 @@ namespace Embers
                 }
             }
             public new void Add(TKey Key, TValue Value) {
-                lock (this) {
-                    TrySetMethodName(Key, Value);
-                    base.Add(Key, Value);
+                TrySetMethodName(Key, Value);
+                if (!IsValueAlreadySet(Key, Value)) {
+                    lock (this) base.Add(Key, Value);
                     OnSet.Fire(Key, Value);
                 }
             }
             public new bool Remove(TKey Key) {
-                lock (this) {
-                    if (Remove(Key, out _)) {
-                        OnRemoved.Fire(Key);
-                        return true;
-                    }
-                    return false;
-                }
+                bool Success;
+                lock (this) Success = Remove(Key, out _);
+                if (Success) OnRemoved.Fire(Key);
+                return Success;
             }
-
+            
+            bool IsValueAlreadySet(TKey Key, TValue Value) {
+                bool Exists = TryGetValue(Key, out TValue? CurrentValue);
+                return Exists && Equals(CurrentValue, Value);
+            }
             static void TrySetMethodName(TKey Key, TValue Value) {
                 if (Key is string MethodName && Value is Method Method) {
                     Method.Name = MethodName;
@@ -1636,6 +1656,7 @@ namespace Embers
                                 }
                                 // Undefined
                                 else {
+                                    Console.WriteLine(string.Join(", ", CurrentInstance.InstanceMethods.Keys));
                                     throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Undefined local variable or method '{ObjectTokenExpression.Token.Value!}' for {CurrentObject.Peek()}");
                                 }
                             }
@@ -1897,7 +1918,7 @@ namespace Embers
                     }
                     else {
                         // Define method for all instances of a class
-                        MethodInstance.AddOrUpdateInstanceMethod(MethodName, NewInstanceMethod);
+                        MethodInstance.Module!.InstanceMethods[MethodName] = NewInstanceMethod;
                     }
                 }
             }

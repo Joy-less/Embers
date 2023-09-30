@@ -286,7 +286,7 @@ namespace Embers
             //
 
             // Global methods
-            Interpreter.RootInstance.InstanceMethods["system"] = Script.CreateMethod(system, 1, IsUnsafe: true);
+            Interpreter.Object.InstanceMethods["system"] = Script.CreateMethod(system, 1, IsUnsafe: true);
 
             // File
             Module FileModule = Script.CreateModule("File");
@@ -583,14 +583,10 @@ namespace Embers
                     throw new RuntimeException($"{Input.Location}: The instance method '{VariableName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
                 }
                 // Create or overwrite instance method
-                Input.Instance.AddOrUpdateInstanceMethod(VariableName, Input.Script.CreateMethod(async Input2 => {
-                    if (Input2.Instance.InstanceVariables.TryGetValue(VariableName, out Instance? Value)) {
-                        return Value;
-                    }
-                    else {
-                        return Input.Interpreter.Nil;
-                    }
-                }, 0));
+                Input.Instance.InstanceMethods[VariableName] = Input.Script.CreateMethod(async Input2 => {
+                    Input2.Instance.InstanceVariables.TryGetValue(VariableName, out Instance? Value);
+                    return Value ?? Input.Interpreter.Nil;
+                }, 0);
 
                 return Input.Interpreter.Nil;
             }
@@ -601,9 +597,9 @@ namespace Embers
                     throw new RuntimeException($"{Input.Location}: The instance method '{VariableName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
                 }
                 // Create or overwrite instance method
-                Input.Instance.AddOrUpdateInstanceMethod($"{VariableName}=", Input.Script.CreateMethod(async Input2 => {
+                Input.Instance.InstanceMethods[$"{VariableName}="] = Input.Script.CreateMethod(async Input2 => {
                     return Input2.Instance.InstanceVariables[VariableName] = Input2.Arguments[0];
-                }, 1));
+                }, 1);
 
                 return Input.Interpreter.Nil;
             }
