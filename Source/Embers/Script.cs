@@ -105,22 +105,22 @@ namespace Embers
                     SuperModule.Methods.CopyTo(Methods);
                     SuperModule.InstanceMethods.CopyTo(InstanceMethods);
                     // Copy future changes
-                    SuperModule.Methods.OnSet.Listen((string Key, Method NewValue) => {
+                    SuperModule.Methods.OnSet.Listen(Methods, (string Key, Method NewValue) => {
                         Methods[Key] = NewValue;
                     });
-                    SuperModule.Methods.OnRemoved.Listen((string Key) => {
+                    SuperModule.Methods.OnRemoved.Listen(Methods, (string Key) => {
                         Methods.Remove(Key);
                     });
-                    SuperModule.InstanceMethods.OnSet.Listen((string Key, Method NewValue) => {
+                    SuperModule.InstanceMethods.OnSet.Listen(InstanceMethods, (string Key, Method NewValue) => {
                         InstanceMethods[Key] = NewValue;
                     });
-                    SuperModule.InstanceMethods.OnRemoved.Listen((string Key) => {
+                    SuperModule.InstanceMethods.OnRemoved.Listen(InstanceMethods, (string Key) => {
                         InstanceMethods.Remove(Key);
                     });
-                    SuperModule.Constants.OnSet.Listen((string Key, Instance NewValue) => {
+                    SuperModule.Constants.OnSet.Listen(Constants, (string Key, Instance NewValue) => {
                         Constants[Key] = NewValue;
                     });
-                    SuperModule.Constants.OnRemoved.Listen((string Key) => {
+                    SuperModule.Constants.OnRemoved.Listen(Constants, (string Key) => {
                         Constants.Remove(Key);
                     });
                 }
@@ -181,7 +181,6 @@ namespace Embers
             public virtual Exception Exception { get { throw new RuntimeException("Instance is not an exception"); } }
             public virtual DateTimeOffset Time { get { throw new RuntimeException("Instance is not a time"); } }
             public virtual Module ModuleRef { get { throw new ApiException("Instance is not a class/module reference"); } }
-            public virtual Method MethodRef { get { throw new ApiException("Instance is not a method reference"); } }
             public virtual string Inspect() {
                 return $"#<{Module?.Name}:0x{GetHashCode():x16}>";
             }
@@ -192,13 +191,9 @@ namespace Embers
                 Instance Clone = (Instance)MemberwiseClone();
                 Clone.ObjectId = Interpreter.GenerateObjectId;
                 Clone.InstanceVariables = new();
-                foreach (KeyValuePair<string, Instance> KVP in InstanceVariables) {
-                    Clone.InstanceVariables[KVP.Key] = (Instance)KVP.Value.MemberwiseClone();
-                }
+                InstanceVariables.CopyTo(Clone.InstanceVariables);
                 Clone.InstanceMethods = new();
-                foreach (KeyValuePair<string, Method> KVP in InstanceMethods) {
-                    Clone.InstanceMethods[KVP.Key] = KVP.Value.Clone();
-                }
+                InstanceMethods.CopyTo(Clone.InstanceMethods);
                 return Clone;
             }
             public static async Task<Instance> CreateFromToken(Script Script, Phase2Token Token) {
@@ -240,27 +235,27 @@ namespace Embers
             }
             public Instance(Module fromModule) {
                 Module = fromModule;
-                if (this is not RealPseudoInstance) {
+                if (this is not PseudoInstance) {
                     ObjectId = fromModule.Interpreter.GenerateObjectId;
                 }
                 Setup();
             }
             public Instance(Interpreter interpreter) {
                 Module = null;
-                if (this is not RealPseudoInstance) {
+                if (this is not PseudoInstance) {
                     ObjectId = interpreter.GenerateObjectId;
                 }
                 Setup();
             }
             void Setup() {
-                if (this is not RealPseudoInstance && Module != null) {
+                if (Module != null) {
                     // Copy instance methods
                     Module.InstanceMethods.CopyTo(InstanceMethods);
                     // Copy future changes
-                    Module.InstanceMethods.OnSet.Listen((string Key, Method NewValue) => {
+                    Module.InstanceMethods.OnSet.Listen(InstanceMethods, (string Key, Method NewValue) => {
                         InstanceMethods[Key] = NewValue;
                     });
-                    Module.InstanceMethods.OnRemoved.Listen((string Key) => {
+                    Module.InstanceMethods.OnRemoved.Listen(InstanceMethods, (string Key) => {
                         InstanceMethods.Remove(Key);
                     });
                 }
@@ -338,7 +333,7 @@ namespace Embers
             }
             public SymbolInstance(Class fromClass, string value) : base(fromClass) {
                 Value = value;
-                IsStringSymbol = Value.Any("(){}[]<>=+-*/%!?.,;@#&|~^$_".Contains) || Value.Any(char.IsWhiteSpace) || (Value.Length != 0 && Value[0].IsAsciiDigit());
+                IsStringSymbol = Value.Any("(){}[]<>=+-*/%.,;@#&|~^$".Contains) || Value.Any(char.IsWhiteSpace) || (Value.Length != 0 && Value[0].IsAsciiDigit()) || Value[..^1].Any("?!".Contains);
             }
         }
         public class IntegerInstance : Instance {
@@ -559,17 +554,30 @@ namespace Embers
                 Value = value;
             }
         }
+        public class ModuleReference : Instance {
+            public override object? Object { get { return Module; } }
+            public override Module ModuleRef { get { return Module!; } }
+            public override string Inspect() {
+                return Module!.Name;
+            }
+            public override string LightInspect() {
+                return Module!.Name;
+            }
+            public ModuleReference(Module module) : base(module) {
+                // Copy changes to the parent module
+                InstanceMethods.OnSet.Listen(module.InstanceMethods, (string Key, Method NewValue) => {
+                    module.InstanceMethods[Key] = NewValue;
+                });
+                InstanceMethods.OnRemoved.Listen(module.InstanceMethods, (string Key) => {
+                    module.InstanceMethods.Remove(Key);
+                });
+            }
+        }
         public abstract class PseudoInstance : Instance {
             public PseudoInstance(Module module) : base(module) { }
             public PseudoInstance(Interpreter interpreter) : base(interpreter) { }
         }
-        public abstract class RealPseudoInstance : PseudoInstance {
-            public override ReactiveDictionary<string, Instance> InstanceVariables { get { throw new ApiException($"{GetType().Name} instance does not have instance variables"); } }
-            public override ReactiveDictionary<string, Method> InstanceMethods { get { throw new ApiException($"{GetType().Name} instance does not have instance methods"); } }
-            public RealPseudoInstance(Module module) : base(module) { }
-            public RealPseudoInstance(Interpreter interpreter) : base(interpreter) { }
-        }
-        public class VariableReference : RealPseudoInstance {
+        public class VariableReference : PseudoInstance {
             public Instance? Instance;
             public Phase2Token Token;
             public bool IsLocalReference => Module == null && Instance == null;
@@ -587,7 +595,7 @@ namespace Embers
                 Token = token;
             }
         }
-        public class ScopeReference : RealPseudoInstance {
+        public class ScopeReference : PseudoInstance {
             public Scope Scope;
             public override string Inspect() {
                 return Scope.GetType().Name;
@@ -596,29 +604,9 @@ namespace Embers
                 Scope = scope;
             }
         }
-        public class ModuleReference : PseudoInstance {
-            public override object? Object { get { return Module; } }
-            public override Module ModuleRef { get { return Module!; } }
-            public override string Inspect() {
-                return Module!.Name;
-            }
-            public override string LightInspect() {
-                return Module!.Name;
-            }
-            public ModuleReference(Module module) : base(module) {
-                // Copy changes to the parent module
-                InstanceMethods.OnSet.Listen((string Key, Method NewValue) => {
-                    module.InstanceMethods[Key] = NewValue;
-                });
-                InstanceMethods.OnRemoved.Listen((string Key) => {
-                    module.InstanceMethods.Remove(Key);
-                });
-            }
-        }
-        public class MethodReference : RealPseudoInstance {
+        public class MethodReference : PseudoInstance {
             readonly Method Method;
             public override object? Object { get { return Method; } }
-            public override Method MethodRef { get { return Method; } }
             public override string Inspect() {
                 return Method.ToString()!;
             }
@@ -1120,27 +1108,27 @@ namespace Embers
             }
         }
         public class WeakEvent<T> {
-            private readonly ConditionalWeakTable<Action<T>, Action<T>> Subscribers = new();
-            public void Listen(Action<T> Listener) {
-                lock (Subscribers) Subscribers.Add(Listener, Listener);
+            private readonly ConditionalWeakTable<object, Action<T>> Subscribers = new();
+            public void Listen(object AttachedObject, Action<T> Listener) {
+                lock (Subscribers) Subscribers.Add(AttachedObject, Listener);
             }
             public void Fire(T Argument) {
                 lock (Subscribers) {
-                    foreach (KeyValuePair<Action<T>, Action<T>> Subscriber in Subscribers) {
-                        Subscriber.Key(Argument);
+                    foreach (KeyValuePair<object, Action<T>> Subscriber in Subscribers) {
+                        Subscriber.Value(Argument);
                     }
                 }
             }
         }
         public class WeakEvent<T1, T2> {
-            private readonly ConditionalWeakTable<Action<T1, T2>, Action<T1, T2>> Subscribers = new();
-            public void Listen(Action<T1, T2> Listener) {
-                lock (Subscribers) Subscribers.Add(Listener, Listener);
+            private readonly ConditionalWeakTable<object, Action<T1, T2>> Subscribers = new();
+            public void Listen(object AttachedObject, Action<T1, T2> Listener) {
+                lock (Subscribers) Subscribers.Add(AttachedObject, Listener);
             }
             public void Fire(T1 Argument1, T2 Argument2) {
                 lock (Subscribers) {
-                    foreach (KeyValuePair<Action<T1, T2>, Action<T1, T2>> Subscriber in Subscribers) {
-                        Subscriber.Key(Argument1, Argument2);
+                    foreach (KeyValuePair<object, Action<T1, T2>> Subscriber in Subscribers) {
+                        Subscriber.Value(Argument1, Argument2);
                     }
                 }
             }
@@ -1428,7 +1416,7 @@ namespace Embers
         }
         public bool TryGetLocalInstanceMethod(string Name, out Method? LocalInstanceMethod) {
             foreach (object Object in CurrentObject) {
-                if (Object is Instance Instance && (Instance is RealPseudoInstance ? Instance.Module!.InstanceMethods : Instance.InstanceMethods).TryGetValue(Name, out Method? FindLocalInstanceMethod)) {
+                if (Object is Instance Instance && (Instance is PseudoInstance ? Instance.Module!.InstanceMethods : Instance.InstanceMethods).TryGetValue(Name, out Method? FindLocalInstanceMethod)) {
                     LocalInstanceMethod = FindLocalInstanceMethod;
                     return true;
                 }
@@ -1656,7 +1644,6 @@ namespace Embers
                                 }
                                 // Undefined
                                 else {
-                                    Console.WriteLine(string.Join(", ", CurrentInstance.InstanceMethods.Keys));
                                     throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Undefined local variable or method '{ObjectTokenExpression.Token.Value!}' for {CurrentObject.Peek()}");
                                 }
                             }

@@ -286,7 +286,9 @@ namespace Embers
             //
 
             // Global methods
-            Interpreter.Object.InstanceMethods["system"] = Script.CreateMethod(system, 1, IsUnsafe: true);
+            Script.CurrentAccessModifier = AccessModifier.Protected;
+            Interpreter.Object.InstanceMethods["system"] = Interpreter.Object.Methods["system"] = Script.CreateMethod(system, 1, IsUnsafe: true);
+            Script.CurrentAccessModifier = AccessModifier.Public;
 
             // File
             Module FileModule = Script.CreateModule("File");
@@ -509,7 +511,7 @@ namespace Embers
                 string MethodName = Input.Arguments[0].String;
                 Method? FindMethod;
                 bool Found;
-                if (Input.Instance is PseudoInstance) {
+                if (Input.Instance is ModuleReference) {
                     Found = Input.Instance.Module!.Methods.TryGetValue(MethodName, out FindMethod);
                 }
                 else {
