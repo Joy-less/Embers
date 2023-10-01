@@ -56,6 +56,9 @@ namespace Embers
             }
             return Serialised + "}";
         }
+        public static string Serialise(this string? String) {
+            return String != null ? '"' + String.Replace("\"", "\\\"") + '"' : "null";
+        }
         public static string Inspect<T>(this List<T>? List, string Separator = ", ") where T : Phase2Object {
             string ListInspection = "";
             if (List != null) {
@@ -168,7 +171,7 @@ namespace Embers
             }
             return ConcurrentDict;
         }
-        public static string PathTo(this object Self) => PathTo(Self.GetType());
+        public static string PathTo(this object Self) => PathTo(Self.GetType()) + "." + Self;
         public static string PathTo(this Type Self) => (Self.FullName ?? "").Replace('+', '.');
         public static string ReplaceFirst(this string Original, string Replace, string With) {
             int FoundIndex = Original.IndexOf(Replace);

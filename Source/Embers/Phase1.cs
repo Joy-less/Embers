@@ -51,11 +51,12 @@ namespace Embers
             public string NonNullValue {
                 get { return Value ?? throw new InternalErrorException("Value was null"); }
             }
+            private string? OneLineValue => Value?.Replace("\n", "\\n").Replace("\r", "\\r");
             public string Inspect() {
-                return Type + (Value != null ? ":" : "") + Value?.Replace("\n", "\\n").Replace("\r", "\\r") + (FollowsWhitespace ? " (follows whitespace)" : "") + (FollowedByWhitespace ? " (followed by whitespace)" : "");
+                return Type + (Value != null ? ":" : "") + OneLineValue + (FollowsWhitespace ? " (follows whitespace)" : "") + (FollowedByWhitespace ? " (followed by whitespace)" : "");
             }
             public string Serialise() {
-                return $"new {typeof(Phase1Token).PathTo()}({Location.Serialise()}, {typeof(Phase1TokenType).PathTo()}.{Type}, \"{Value}\", {(FollowsWhitespace ? "true" : "false")}, {(FollowedByWhitespace ? "true" : "false")}, {(ProcessFormatting ? "true" : "false")})";
+                return $"new {typeof(Phase1Token).PathTo()}({Location.Serialise()}, {Type.PathTo()}, {OneLineValue.Serialise()}, {(FollowsWhitespace ? "true" : "false")}, {(FollowedByWhitespace ? "true" : "false")}, {(ProcessFormatting ? "true" : "false")})";
             }
         }
 
