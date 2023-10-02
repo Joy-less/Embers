@@ -89,7 +89,7 @@ namespace Embers
             public Module(string name, Module parent, Module? superModule = null) {
                 Name = name;
                 Interpreter = parent.Interpreter;
-                SuperModule = superModule ?? Interpreter.Object;
+                SuperModule = superModule ?? Interpreter.Class;
                 Setup();
             }
             public Module(string name, Interpreter interpreter, Module? superModule = null) {
@@ -144,19 +144,12 @@ namespace Embers
                 // Default method: new
                 Methods["new"] = new Method(async Input => {
                     Instance NewInstance = Input.Script.CreateInstanceWithNew((Class)Input.Instance.Module!);
-                    if (NewInstance.InstanceMethods.TryGetValue("initialize", out Method? Initialize)) {
-                        // Call initialize & ignore result
-                        await Initialize.Call(Input.Script, NewInstance, Input.Arguments, Input.OnYield);
-                        // Return instance
-                        return NewInstance;
-                    }
-                    else {
-                        throw new RuntimeException($"Undefined method 'initialize' for {Name}");
-                    }
+                    await NewInstance.TryCallInstanceMethod(Input.Script, "initialize", Input.Arguments, Input.OnYield);
+                    return NewInstance;
                 }, null);
                 // Default method: initialize
                 InstanceMethods["initialize"] = new Method(async Input => {
-                    return Input.Instance;
+                    return Input.Interpreter.Nil;
                 }, 0);
                 // Base setup
                 base.Setup();
@@ -180,7 +173,6 @@ namespace Embers
             public virtual LockingDictionary<Instance, Instance> Hash { get { throw new RuntimeException("Instance is not a hash"); } }
             public virtual Exception Exception { get { throw new RuntimeException("Instance is not an exception"); } }
             public virtual DateTimeOffset Time { get { throw new RuntimeException("Instance is not a time"); } }
-            public virtual Module ModuleRef { get { throw new ApiException("Instance is not a class/module reference"); } }
             public virtual string Inspect() {
                 return $"#<{Module?.Name}:0x{GetHashCode():x16}>";
             }
@@ -228,6 +220,7 @@ namespace Embers
                     Phase2TokenType.True => Script.Interpreter.True,
                     Phase2TokenType.False => Script.Interpreter.False,
                     Phase2TokenType.String => new StringInstance(Script.Interpreter.String, Token.Value!),
+                    Phase2TokenType.Symbol => Script.Interpreter.GetSymbol(Token.Value!),
                     Phase2TokenType.Integer => Script.Interpreter.GetInteger(Token.ValueAsInteger),
                     Phase2TokenType.Float => Script.Interpreter.GetFloat(Token.ValueAsFloat),
                     _ => throw new InternalErrorException($"{Token.Location}: Cannot create new object from token type {Token.Type}")
@@ -555,8 +548,7 @@ namespace Embers
             }
         }
         public class ModuleReference : Instance {
-            public override object? Object { get { return Module; } }
-            public override Module ModuleRef { get { return Module!; } }
+            public override object? Object { get { return Module!; } }
             public override string Inspect() {
                 return Module!.Name;
             }
@@ -1724,10 +1716,6 @@ namespace Embers
                                     throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Uninitialized class variable '{ObjectTokenExpression.Token.Value!}' for {CurrentModule}");
                                 }
                             }
-                            // Symbol
-                            case Phase2TokenType.Symbol: {
-                                return Interpreter.GetSymbol(ObjectTokenExpression.Token.Value!);
-                            }
                             // Error
                             default:
                                 throw new InternalErrorException($"{ObjectTokenExpression.Token.Location}: Unknown variable type {ObjectTokenExpression.Token.Type}");
@@ -1954,11 +1942,11 @@ namespace Embers
                 // Interpret class statements
                 AccessModifier PreviousAccessModifier = CurrentAccessModifier;
                 CurrentAccessModifier = AccessModifier.Public;
-                await CreateTemporaryClassScope(NewModule, async () => {
-                    await CreateTemporaryInstanceScope(new ModuleReference(NewModule), async () => {
-                        await InternalInterpretAsync(DefineClassStatement.BlockStatements, CurrentOnYield);
-                    });
-                });
+                await CreateTemporaryClassScope(NewModule, async () =>
+                    await CreateTemporaryInstanceScope(new ModuleReference(NewModule), async () =>
+                        await InternalInterpretAsync(DefineClassStatement.BlockStatements, CurrentOnYield)
+                    )
+                );
                 CurrentAccessModifier = PreviousAccessModifier;
 
                 // Store class/module constant
@@ -2076,10 +2064,10 @@ namespace Embers
             BeginStatement BeginBranch = (BeginStatement)BeginBranchesStatement.Branches[0];
             Exception? ExceptionToRescue = null;
             try {
-                await CreateTemporaryScope(async () => {
+                await CreateTemporaryScope(async () =>
                     // Run statements
-                    await InternalInterpretAsync(BeginBranch.Statements, CurrentOnYield);
-                });
+                    await InternalInterpretAsync(BeginBranch.Statements, CurrentOnYield)
+                );
             }
             catch (Exception Ex) when (Ex is not NonErrorException) {
                 ExceptionToRescue = Ex;
@@ -2129,9 +2117,9 @@ namespace Embers
                 BeginComponentStatement Branch = BeginBranchesStatement.Branches[i];
                 if (Branch is EnsureStatement || (Branch is RescueElseStatement && !Rescued)) {
                     // Run statements
-                    await CreateTemporaryScope(async () => {
-                        await InternalInterpretAsync(Branch.Statements, CurrentOnYield);
-                    });
+                    await CreateTemporaryScope(async () =>
+                        await InternalInterpretAsync(Branch.Statements, CurrentOnYield)
+                    );
                 }
             }
 

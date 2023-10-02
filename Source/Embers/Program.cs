@@ -22,6 +22,13 @@ puts :hi.object_id
 puts :hi.object_id
 
 puts Net::HTTP.get('example.com/index.html')
+
+p :hi
+p 5.class.class
+p 5.class.name
+p 5.class.class.name
+
+p Integer.methods
                     ")
                 );
                 Console.ReadLine();

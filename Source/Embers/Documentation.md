@@ -108,6 +108,10 @@ instance.protected
 	Sets each method defined after it to protected (the method can only be called from the current class/module or any class/module that inherits from it).
 ```
 ```
+class.name
+	Returns the name of the class as a string.
+```
+```
 string.to_str
 	Returns the string.
 
@@ -408,5 +412,5 @@ File.exist?(file_path) | File.exists?(file_path)
 ```
 ```
 Net::HTTP.get(uri)
-	Returns the HTML content of the given URI as a string. Assumes https:// if the protocol is not given.
+	Fetches and returns the HTML content of the given URI as a string. Assumes https:// if the scheme is not included.
 ```

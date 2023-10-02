@@ -388,7 +388,7 @@ namespace Embers_Tests
             ", new object[] {new Integer(1L), new Integer(2L), new Integer(1L), new Integer(5L), new Integer(6L)});
 
             // Or & not priority
-            // This works differently in Ruby, but imo, it's better in Embers.
+            // Not works differently in Ruby, but imo, it's better in Embers.
             AssertEqual(@"
                 a = 5
                 b = a or 2
@@ -402,6 +402,12 @@ namespace Embers_Tests
                 b = a.clone
                 a.object_id == b.object_id
             ", false);
+
+            // Class
+            AssertEqual(@"
+                a = 5
+                [a.class.name, a.class.class.name]
+            ", new object[] {"Integer", "Class"});
         }
 
 
@@ -438,7 +444,7 @@ namespace Embers_Tests
                 new Script(new Interpreter(), AllowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
             }
             catch (Exception Ex) {
-                if (Ex.InnerException == null) {
+                if (Ex.InnerException is null) {
                     Assert.Fail("This test function needs to be re-written.");
                 }
                 else if (Ex.InnerException is not TError) {

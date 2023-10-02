@@ -18,6 +18,7 @@ namespace Embers
         private readonly Cache<Integer, IntegerInstance> Integers = new();
         private readonly Cache<Float, FloatInstance> Floats = new();
 
+        public readonly Class Class;
         public readonly Class NilClass;
         public readonly Class TrueClass;
         public readonly Class FalseClass;
@@ -64,6 +65,7 @@ namespace Embers
         public Interpreter() {
             Object = new Module("Object", this); Object.InstanceMethods.Remove("initialize"); Object.Methods.Remove("new");
             RootModule = new Module("main", this, Object);
+            Class = new Class("Class", RootModule, Object); RootModule.Constants["Class"] = new ModuleReference(Class);
             RootInstance = new ModuleReference(RootModule);
             RootScope = new Scope();
 

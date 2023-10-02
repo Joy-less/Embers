@@ -74,6 +74,9 @@ namespace Embers
             Interpreter.RootScope.Constants["EMBERS_COPYRIGHT"] = new StringInstance(Interpreter.String, Info.Copyright);
             Interpreter.RootScope.Constants["RUBY_COPYRIGHT"] = new StringInstance(Interpreter.String, Info.RubyCopyright);
 
+            // Class
+            Interpreter.Class.InstanceMethods["name"] = Interpreter.Class.Methods["name"] = Script.CreateMethod(_Class.name, 0);
+
             // String
             Interpreter.String.InstanceMethods["[]"] = Script.CreateMethod(String._Indexer, 1);
             Interpreter.String.InstanceMethods["[]="] = Script.CreateMethod(String._IndexEquals, 2);
@@ -501,7 +504,12 @@ namespace Embers
                 return new StringInstance(Input.Interpreter.String, Input.Instance.Inspect());
             }
             public static async Task<Instance> @class(MethodInput Input) {
-                return new ModuleReference(Input.Instance.Module!);
+                if (Input.Instance is ModuleReference) {
+                    return new ModuleReference(Input.Interpreter.Class);
+                }
+                else {
+                    return new ModuleReference(Input.Instance.Module!);
+                }
             }
             public static async Task<Instance> to_s(MethodInput Input) {
                 return new StringInstance(Input.Interpreter.String, Input.Instance.LightInspect());
@@ -2177,9 +2185,8 @@ namespace Embers
         static class Net {
             public static class HTTP {
                 public static async Task<Instance> get(MethodInput Input) {
-                    string Uri = Input.Arguments[0].String;
-                    if (!Uri.Contains("://"))
-                        Uri = "https://" + Uri;
+                    Uri Uri = new(Input.Arguments[0].String, UriKind.RelativeOrAbsolute);
+                    if (!Uri.IsAbsoluteUri) Uri = new("https://" + Uri.OriginalString);
 
                     HttpClient Client = new();
                     HttpResponseMessage Response = await Client.GetAsync(Uri);
@@ -2187,6 +2194,11 @@ namespace Embers
 
                     return new StringInstance(Input.Interpreter.String, ResponseString);
                 }
+            }
+        }
+        static class _Class {
+            public static async Task<Instance> name(MethodInput Input) {
+                return new StringInstance(Input.Interpreter.String, Input.Instance.Module!.Name);
             }
         }
     }

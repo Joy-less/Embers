@@ -877,6 +877,7 @@ namespace Embers
                 or Phase2TokenType.True
                 or Phase2TokenType.False
                 or Phase2TokenType.String
+                or Phase2TokenType.Symbol
                 or Phase2TokenType.Integer
                 or Phase2TokenType.Float;
         }
