@@ -74,8 +74,8 @@ namespace Embers
             Interpreter.RootScope.Constants["RUBY_COPYRIGHT"] = new StringInstance(Interpreter.String, Info.RubyCopyright);
 
             // Class
-            Interpreter.Class.InstanceMethods["name"] = Interpreter.Class.Methods["name"] = Script.CreateMethod(_Class.name, 0);
-            Interpreter.Class.InstanceMethods["==="] = Interpreter.Class.Methods["==="] = Script.CreateMethod(_Class._TripleEquals, 1);
+            Interpreter.Class.Methods["name"] = Script.CreateMethod(_Class.name, 0);
+            Interpreter.Class.Methods["==="] = Script.CreateMethod(_Class._TripleEquals, 1);
 
             // String
             Interpreter.String.InstanceMethods["[]"] = Script.CreateMethod(String._Indexer, 1);

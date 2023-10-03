@@ -51,6 +51,10 @@ puts key.is_a? Thing
 puts key.instance_of? Thing
 
 puts Class === Class
+
+puts :hi === :hi
+puts :he === :hi
+puts :hi === :he
                     ")
                 );
                 Console.ReadLine();
