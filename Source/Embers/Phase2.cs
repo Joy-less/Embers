@@ -2328,16 +2328,16 @@ namespace Embers
 
                         // Add method call expression for unary operator
                         if (NextObjectToken != null) {
-                            /*If previous object is LocalVariableOrMethod/ConstantOrMethod, then it's add/sub unless space before operator AND NO space after operator
+                            /*If previous object is LocalVariableOrMethod/ConstantOrMethod, then it's add/sub unless space before operator AND NO space after operator.
                               If there is no previous object, then it's unary.
                               If the previous object is an ObjectToken/VariableToken, then it's add/sub.
                               Otherwise, it's unary.*/
                             ObjectTokenExpression? LastObjectToken = LastUnknownObject as ObjectTokenExpression;
-                            bool LastObjectIsMethod = LastObjectToken != null && LastObjectToken.Token.Type is Phase2TokenType.LocalVariableOrMethod or Phase2TokenType.ConstantOrMethod;
+                            bool LastObjectIsMethod = (LastObjectToken != null && LastObjectToken.Token.Type is Phase2TokenType.LocalVariableOrMethod or Phase2TokenType.ConstantOrMethod) || LastUnknownObject is MethodCallExpression;
                             bool LastObjectIsObjectToken = LastObjectToken != null && (LastObjectToken.Token.IsObjectToken || IsVariableToken(LastObjectToken.Token));
                             bool SpaceBeforeOperator = Token.FollowsWhitespace;
                             bool SpaceAfterOperator = Token.FollowedByWhitespace;
-                            if ((LastObjectIsMethod && SpaceBeforeOperator && !SpaceAfterOperator) || LastUnknownObject == null || !LastObjectIsObjectToken) {
+                            if ((LastObjectIsMethod && SpaceBeforeOperator && !SpaceAfterOperator) || LastUnknownObject == null || (!LastObjectIsObjectToken && !LastObjectIsMethod)) {
                                 ParsedObjects.RemoveRange(i, 2);
                                 ParsedObjects.Insert(i, new MethodCallExpression(
                                     new PathExpression(NextObjectToken, new Phase2Token(NextObjectToken.Location, Phase2TokenType.LocalVariableOrMethod, Token.Value! + "@")),

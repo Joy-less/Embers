@@ -23,8 +23,7 @@ namespace Embers
             Interpreter Interpreter = Script.Interpreter;
             
             // Object
-            Interpreter.Object.InstanceMethods["=="] = Interpreter.Object.Methods["=="] = Script.CreateMethod(ClassInstance._Equals, 1);
-            Interpreter.Object.InstanceMethods["==="] = Interpreter.Object.Methods["==="] = Script.CreateMethod(ClassInstance._Equals, 1);
+            Interpreter.Object.InstanceMethods["==", "==="] = Interpreter.Object.Methods["==", "==="] = Script.CreateMethod(ClassInstance._Equals, 1);
             Interpreter.Object.InstanceMethods["!="] = Interpreter.Object.Methods["!="] = Script.CreateMethod(ClassInstance._NotEquals, 1);
             Interpreter.Object.InstanceMethods["<=>"] = Interpreter.Object.Methods["<=>"] = Script.CreateMethod(ClassInstance._Spaceship, 1);
             Interpreter.Object.InstanceMethods["inspect"] = Interpreter.Object.Methods["inspect"] = Script.CreateMethod(ClassInstance.inspect, 0);
@@ -76,14 +75,14 @@ namespace Embers
 
             // Class
             Interpreter.Class.InstanceMethods["name"] = Interpreter.Class.Methods["name"] = Script.CreateMethod(_Class.name, 0);
+            Interpreter.Class.InstanceMethods["==="] = Interpreter.Class.Methods["==="] = Script.CreateMethod(_Class._TripleEquals, 1);
 
             // String
             Interpreter.String.InstanceMethods["[]"] = Script.CreateMethod(String._Indexer, 1);
             Interpreter.String.InstanceMethods["[]="] = Script.CreateMethod(String._IndexEquals, 2);
             Interpreter.String.InstanceMethods["+"] = Script.CreateMethod(String._Add, 1);
             Interpreter.String.InstanceMethods["*"] = Script.CreateMethod(String._Multiply, 1);
-            Interpreter.String.InstanceMethods["=="] = Script.CreateMethod(String._Equals, 1);
-            Interpreter.String.InstanceMethods["==="] = Script.CreateMethod(String._Equals, 1);
+            Interpreter.String.InstanceMethods["==", "==="] = Script.CreateMethod(String._Equals, 1);
             Interpreter.String.InstanceMethods["<"] = Script.CreateMethod(String._LessThan, 1);
             Interpreter.String.InstanceMethods[">"] = Script.CreateMethod(String._GreaterThan, 1);
             Interpreter.String.InstanceMethods["<="] = Script.CreateMethod(String._LessThanOrEqualTo, 1);
@@ -126,8 +125,7 @@ namespace Embers
             Interpreter.Integer.InstanceMethods["/"] = Script.CreateMethod(Integer._Divide, 1);
             Interpreter.Integer.InstanceMethods["%"] = Script.CreateMethod(Integer._Modulo, 1);
             Interpreter.Integer.InstanceMethods["**"] = Script.CreateMethod(Integer._Exponentiate, 1);
-            Interpreter.Integer.InstanceMethods["=="] = Script.CreateMethod(Float._Equals, 1);
-            Interpreter.Integer.InstanceMethods["==="] = Script.CreateMethod(Float._Equals, 1);
+            Interpreter.Integer.InstanceMethods["==", "==="] = Script.CreateMethod(Float._Equals, 1);
             Interpreter.Integer.InstanceMethods["<"] = Script.CreateMethod(Float._LessThan, 1);
             Interpreter.Integer.InstanceMethods[">"] = Script.CreateMethod(Float._GreaterThan, 1);
             Interpreter.Integer.InstanceMethods["<="] = Script.CreateMethod(Float._LessThanOrEqualTo, 1);
@@ -152,8 +150,7 @@ namespace Embers
             Interpreter.Float.InstanceMethods["/"] = Script.CreateMethod(Float._Divide, 1);
             Interpreter.Float.InstanceMethods["%"] = Script.CreateMethod(Float._Modulo, 1);
             Interpreter.Float.InstanceMethods["**"] = Script.CreateMethod(Float._Exponentiate, 1);
-            Interpreter.Float.InstanceMethods["=="] = Script.CreateMethod(Float._Equals, 1);
-            Interpreter.Float.InstanceMethods["==="] = Script.CreateMethod(Float._Equals, 1);
+            Interpreter.Float.InstanceMethods["==", "==="] = Script.CreateMethod(Float._Equals, 1);
             Interpreter.Float.InstanceMethods["<"] = Script.CreateMethod(Float._LessThan, 1);
             Interpreter.Float.InstanceMethods[">"] = Script.CreateMethod(Float._GreaterThan, 1);
             Interpreter.Float.InstanceMethods["<="] = Script.CreateMethod(Float._LessThanOrEqualTo, 1);
@@ -185,8 +182,7 @@ namespace Embers
             Interpreter.Array.InstanceMethods["[]"] = Script.CreateMethod(Array._Indexer, 1);
             Interpreter.Array.InstanceMethods["[]="] = Script.CreateMethod(Array._IndexEquals, 2);
             Interpreter.Array.InstanceMethods["*"] = Script.CreateMethod(Array._Multiply, 1);
-            Interpreter.Array.InstanceMethods["=="] = Script.CreateMethod(Array._Equals, 1);
-            Interpreter.Array.InstanceMethods["==="] = Script.CreateMethod(Array._Equals, 1);
+            Interpreter.Array.InstanceMethods["==", "==="] = Script.CreateMethod(Array._Equals, 1);
             Interpreter.Array.InstanceMethods["<<"] = Script.CreateMethod(Array._Append, 1);
             Interpreter.Array.InstanceMethods["length"] = Script.CreateMethod(Array.length, 0);
             Interpreter.Array.InstanceMethods["count"] = Script.CreateMethod(Array.count, 0..1);
@@ -211,8 +207,7 @@ namespace Embers
             // Hash
             Interpreter.Hash.InstanceMethods["[]"] = Script.CreateMethod(Hash._Indexer, 1);
             Interpreter.Hash.InstanceMethods["[]="] = Script.CreateMethod(Hash._IndexEquals, 2);
-            Interpreter.Hash.InstanceMethods["=="] = Script.CreateMethod(Hash._Equals, 1);
-            Interpreter.Hash.InstanceMethods["==="] = Script.CreateMethod(Hash._Equals, 1);
+            Interpreter.Hash.InstanceMethods["==", "==="] = Script.CreateMethod(Hash._Equals, 1);
             Interpreter.Hash.InstanceMethods["initialize"] = Script.CreateMethod(Hash.initialize, 0..1);
             Interpreter.Hash.InstanceMethods["has_key?"] = Script.CreateMethod(Hash.has_key7, 1);
             Interpreter.Hash.InstanceMethods["has_value?"] = Script.CreateMethod(Hash.has_value7, 1);
@@ -558,20 +553,20 @@ namespace Embers
             }
             public static async Task<Instance> is_a7(MethodInput Input) {
                 Instance Argument = Input.Arguments[0];
-                if (Argument is ModuleReference ModuleRef && Input.Instance is not PseudoInstance) {
+                if (Argument is ModuleReference ModuleRef && Input.Instance is not (PseudoInstance or ModuleReference)) {
                     return Input.Instance.Module!.InheritsFrom(ModuleRef.Module!) ? Input.Interpreter.True : Input.Interpreter.False;
                 }
                 else {
-                    return Input.Interpreter.False;
+                    throw new RuntimeException($"{Input.Location}: Expected class/module for is_a?");
                 }
             }
             public static async Task<Instance> instance_of7(MethodInput Input) {
                 Instance Argument = Input.Arguments[0];
-                if (Argument is ModuleReference ModuleRef && Input.Instance is not PseudoInstance) {
+                if (Argument is ModuleReference ModuleRef && Input.Instance is not (PseudoInstance or ModuleReference)) {
                     return Input.Instance.Module! == ModuleRef.Module! ? Input.Interpreter.True : Input.Interpreter.False;
                 }
                 else {
-                    return Input.Interpreter.False;
+                    throw new RuntimeException($"{Input.Location}: Expected class/module for instance_of?");
                 }
             }
             public static async Task<Instance> in7(MethodInput Input) {
@@ -2197,6 +2192,11 @@ namespace Embers
             }
         }
         static class _Class {
+            public static async Task<Instance> _TripleEquals(MethodInput Input) {
+                Instance Left = Input.Instance;
+                Instance Right = Input.Arguments[0];
+                return Right.Module!.InheritsFrom(Left.Module) ? Input.Interpreter.True : Input.Interpreter.False;
+            }
             public static async Task<Instance> name(MethodInput Input) {
                 return new StringInstance(Input.Interpreter.String, Input.Instance.Module!.Name);
             }

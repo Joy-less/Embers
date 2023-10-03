@@ -21,7 +21,7 @@ puts (1 + 1).object_id
 puts :hi.object_id
 puts :hi.object_id
 
-puts Net::HTTP.get('example.com/index.html')
+# puts Net::HTTP.get('example.com/index.html')
 
 p :hi
 p 5.class.class
@@ -29,6 +29,28 @@ p 5.class.name
 p 5.class.class.name
 
 p Integer.methods
+
+a = ['a']
+puts [a[0] + 0.5.to_s]
+puts -1
+
+class Thing
+    
+end
+class SpecialThing < Thing
+    
+end
+
+key = SpecialThing.new
+
+puts Thing === key
+puts Integer === 5
+puts 5 === Integer
+puts 2..3 === 2
+puts key.is_a? Thing
+puts key.instance_of? Thing
+
+puts Class === Class
                     ")
                 );
                 Console.ReadLine();
