@@ -256,9 +256,7 @@ namespace Embers
             public async Task<Instance> TryCallInstanceMethod(Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
                 // Found
                 if (InstanceMethods.TryGetValue(MethodName, out Method? FindMethod)) {
-                    return await Script.CreateTemporaryInstanceScope(this, async () =>
-                        await FindMethod.Call(Script, this, Arguments, OnYield)
-                    );
+                    return await FindMethod.Call(Script, this, Arguments, OnYield);
                 }
                 // Error
                 else {
@@ -1754,20 +1752,24 @@ namespace Embers
         }
         async Task<Instance> InterpretCaseExpression(CaseExpression CaseExpression) {
             Instance Subject = await InterpretExpressionAsync(CaseExpression.Subject);
-            foreach (IfExpression Branch in CaseExpression.Branches) {
+            foreach (WhenExpression Branch in CaseExpression.Branches) {
                 // Check if when statements apply
                 bool WhenApplies = false;
-                if (Branch.Condition != null) {
-                    Instance ConditionObject = await InterpretExpressionAsync(Branch.Condition);
-                    if (ConditionObject.InstanceMethods.TryGetValue("===", out Method? TripleEquality)) {
-                        if ((await TripleEquality.Call(this, ConditionObject, Subject)).IsTruthy) {
-                            WhenApplies = true;
+                // When
+                if (Branch.Conditions.Count != 0) {
+                    foreach (Expression Condition in Branch.Conditions) {
+                        Instance ConditionObject = await InterpretExpressionAsync(Condition);
+                        if (ConditionObject.InstanceMethods.TryGetValue("===", out Method? TripleEquality)) {
+                            if ((await TripleEquality.Call(this, ConditionObject, Subject)).IsTruthy) {
+                                WhenApplies = true;
+                            }
+                        }
+                        else {
+                            throw new RuntimeException($"{Branch.Location}: Case 'when' instance must have an '===' method");
                         }
                     }
-                    else {
-                        throw new RuntimeException($"{Branch.Location}: Case 'when' instance must have an '===' method");
-                    }
                 }
+                // Else
                 else {
                     WhenApplies = true;
                 }

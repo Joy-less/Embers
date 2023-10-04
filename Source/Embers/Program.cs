@@ -55,6 +55,13 @@ puts Class === Class
 puts :hi === :hi
 puts :he === :hi
 puts :hi === :he
+
+case 5
+when 2..3
+    puts '2..3'
+when 6, 5, 4
+    puts '6, 5 or 4'
+end
                     ")
                 );
                 Console.ReadLine();

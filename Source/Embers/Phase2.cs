@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using static Embers.Phase1;
+using static Embers.Phase2;
 using static Embers.Script;
 
 #nullable enable
@@ -397,6 +398,25 @@ namespace Embers
                 return $"new {PathToSelf}({Location.Serialise()}, {Condition!.Serialise()}, {Statements.Serialise()}, {(Inverse ? "true" : "false")})";
             }
         }
+        public class WhenExpression : Expression {
+            public readonly List<Expression> Conditions;
+            public readonly List<Expression> Statements;
+            public WhenExpression(DebugLocation location, List<Expression> conditions, List<Expression> statements) : base(location) {
+                Conditions = conditions;
+                Statements = statements;
+            }
+            public override string Inspect() {
+                if (Conditions.Count != 0) {
+                    return $"when {Conditions.Inspect()} then {Statements.Inspect()} end";
+                }
+                else {
+                    return $"else {Statements.Inspect()} end";
+                }
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({Location.Serialise()}, {Conditions.Serialise()}, {Statements.Serialise()})";
+            }
+        }
         public class RescueExpression : Expression {
             public readonly Expression Statement;
             public readonly Expression RescueStatement;
@@ -429,13 +449,13 @@ namespace Embers
         }
         public class CaseExpression : Expression {
             public readonly Expression Subject;
-            public readonly List<IfExpression> Branches;
-            public CaseExpression(DebugLocation location, Expression subject, List<IfExpression> branches) : base(location) {
+            public readonly List<WhenExpression> Branches;
+            public CaseExpression(DebugLocation location, Expression subject, List<WhenExpression> branches) : base(location) {
                 Subject = subject;
                 Branches = branches;
             }
             public override string Inspect() {
-                return $"case {Subject.Inspect()}; when {Branches.Inspect("; when ")}; end";
+                return $"case {Subject.Inspect()}; {Branches.Inspect("; ")}; end";
             }
             public override string Serialise() {
                 return $"new {PathToSelf}({Location.Serialise()}, {Subject.Serialise()}, {Branches.Serialise()})";
@@ -1559,12 +1579,12 @@ namespace Embers
             }
             // End Case Block
             else if (Block is BuildingCase CaseBlock) {
-                List<IfExpression> IfExpressions = new();
+                List<WhenExpression> WhenExpressions = new();
                 for (int i = 0; i < CaseBlock.Branches.Count; i++) {
                     BuildingWhen Branch = CaseBlock.Branches[i];
-                    IfExpressions.Add(new IfExpression(Branch.Location, Branch.Condition, Branch.Statements));
+                    WhenExpressions.Add(new WhenExpression(Branch.Location, Branch.Conditions, Branch.Statements));
                 }
-                return new CaseExpression(CaseBlock.Location, CaseBlock.Subject, IfExpressions);
+                return new CaseExpression(CaseBlock.Location, CaseBlock.Subject, WhenExpressions);
             }
             // End For Block
             else if (Block is BuildingFor ForBlock) {
@@ -1675,13 +1695,15 @@ namespace Embers
             return new BuildingCase(Location, CaseExpression);
         }
         static BuildingWhen ParseWhen(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index) {
-            // Get condition
+            // Get condition(s)
             Index++;
             List<Phase2Object> ConditionObjects = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type is Phase2TokenType.Then or Phase2TokenType.EndOfStatement));
-            Expression ConditionExpression = ObjectsToExpression(ConditionObjects);
+            List<Expression> ConditionExpressions = ObjectsToExpressions(ConditionObjects, ExpressionsType.CommaSeparatedExpressions);
+            if (ConditionExpressions.Count == 0)
+                throw new SyntaxErrorException($"{Location}: Expected condition after 'when'");
 
             // Open when block
-            return new BuildingWhen(Location, ConditionExpression);
+            return new BuildingWhen(Location, ConditionExpressions);
         }
         static BuildingFor ParseFor(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index) {
             // Get for variables
@@ -1879,10 +1901,10 @@ namespace Embers
                             }
                             else if (CurrentBlocks.TryPeek(out BuildingBlock? Block3) && Block3 is BuildingCase CaseBlock) {
                                 ResolveStatementsWithoutEndingBlock();
-                                if (CaseBlock.Branches.Count == 0 || CaseBlock.Branches[^1].Condition == null) {
+                                if (CaseBlock.Branches.Count == 0 || CaseBlock.Branches[^1].Conditions.Count == 0) {
                                     throw new SyntaxErrorException($"{Token.Location}: 'Else' in 'case' block must follow 'when', not 'case'");
                                 }
-                                CaseBlock.Branches.Add(new BuildingWhen(Token.Location, null));
+                                CaseBlock.Branches.Add(new BuildingWhen(Token.Location, new List<Expression>()));
                             }
                             else {
                                 throw new SyntaxErrorException($"{Token.Location}: 'Else' must follow 'if', 'begin' or 'case'");
@@ -1938,7 +1960,7 @@ namespace Embers
                         case Phase2TokenType.When: {
                             if (CurrentBlocks.TryPeek(out BuildingBlock? Block) && Block is BuildingCase CaseBlock) {
                                 ResolveStatementsWithoutEndingBlock();
-                                if (CaseBlock.Branches.Count != 0 && CaseBlock.Branches[^1].Condition == null) {
+                                if (CaseBlock.Branches.Count != 0 && CaseBlock.Branches[^1].Conditions.Count == 0) {
                                     throw new SyntaxErrorException($"{Token.Location}: 'When' must not follow 'else'");
                                 }
                                 CaseBlock.Branches.Add(ParseWhen(Token.Location, ParsedObjects, ref i));
@@ -2956,9 +2978,9 @@ namespace Embers
             }
         }
         class BuildingWhen : BuildingBlock {
-            public readonly Expression? Condition;
-            public BuildingWhen(DebugLocation location, Expression? condition) : base(location) {
-                Condition = condition;
+            public readonly List<Expression> Conditions;
+            public BuildingWhen(DebugLocation location, List<Expression> conditions) : base(location) {
+                Conditions = conditions;
             }
         }
         class BuildingFor : BuildingBlock {
