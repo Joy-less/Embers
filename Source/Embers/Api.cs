@@ -21,7 +21,7 @@ namespace Embers
     {
         public static void Setup(Script Script) {
             Interpreter Interpreter = Script.Interpreter;
-            
+
             // Object
             Interpreter.Object.InstanceMethods["==", "==="] = Interpreter.Object.Methods["==", "==="] = Script.CreateMethod(ClassInstance._Equals, 1);
             Interpreter.Object.InstanceMethods["!="] = Interpreter.Object.Methods["!="] = Script.CreateMethod(ClassInstance._NotEquals, 1);
@@ -290,9 +290,15 @@ namespace Embers
 
             // File
             Module FileModule = Script.CreateModule("File");
-            FileModule.Methods["read"] = Script.CreateMethod(File.read, 1, IsUnsafe: true);
-            FileModule.Methods["write"] = Script.CreateMethod(File.write, 2, IsUnsafe: true);
-            FileModule.Methods["exist?", "exists?"] = Script.CreateMethod(File.exist7, 1, IsUnsafe: true);
+            FileModule.Methods["read"] = Script.CreateMethod(_File.read, 1, IsUnsafe: true);
+            FileModule.Methods["write"] = Script.CreateMethod(_File.write, 2, IsUnsafe: true);
+            FileModule.Methods["append"] = Script.CreateMethod(_File.append, 2, IsUnsafe: true);
+            FileModule.Methods["delete"] = Script.CreateMethod(_File.delete, 1, IsUnsafe: true);
+            FileModule.Methods["exist?", "exists?"] = Script.CreateMethod(_File.exist7, 1, IsUnsafe: true);
+            FileModule.Methods["absolute_path"] = Script.CreateMethod(_File.absolute_path, 1, IsUnsafe: true);
+            FileModule.Methods["absolute_path?"] = Script.CreateMethod(_File.absolute_path7, 1, IsUnsafe: true);
+            FileModule.Methods["basename"] = Script.CreateMethod(_File.basename, 1, IsUnsafe: true);
+            FileModule.Methods["dirname"] = Script.CreateMethod(_File.dirname, 1, IsUnsafe: true);
 
             // Net
             Module NetModule = Script.CreateModule("Net");
@@ -1188,11 +1194,11 @@ namespace Embers
                 return Input.Interpreter.GetInteger(Result);
             }
         }
-        static class File {
+        static class _File {
             public static async Task<Instance> read(MethodInput Input) {
                 string FilePath = Input.Arguments[0].String;
                 try {
-                    string FileContents = System.IO.File.ReadAllText(FilePath);
+                    string FileContents = File.ReadAllText(FilePath);
                     return new StringInstance(Input.Interpreter.String, FileContents);
                 }
                 catch (FileNotFoundException) {
@@ -1206,17 +1212,53 @@ namespace Embers
                 string FilePath = Input.Arguments[0].String;
                 string Text = Input.Arguments[1].String;
                 try {
-                    System.IO.File.WriteAllText(FilePath, Text);
+                    File.WriteAllText(FilePath, Text);
                     return Input.Interpreter.Nil;
                 }
                 catch (Exception Ex) {
                     throw new RuntimeException($"{Input.Location}: Error writing file: '{Ex.Message}'");
                 }
             }
+            public static async Task<Instance> append(MethodInput Input) {
+                string FilePath = Input.Arguments[0].String;
+                string Text = Input.Arguments[1].String;
+                try {
+                    File.AppendAllText(FilePath, Text);
+                    return Input.Interpreter.Nil;
+                }
+                catch (Exception Ex) {
+                    throw new RuntimeException($"{Input.Location}: Error appending file: '{Ex.Message}'");
+                }
+            }
+            public static async Task<Instance> delete(MethodInput Input) {
+                string FilePath = Input.Arguments[0].String;
+                File.Delete(FilePath);
+                return Input.Interpreter.Nil;
+            }
             public static async Task<Instance> exist7(MethodInput Input) {
                 string FilePath = Input.Arguments[0].String;
-                bool Exists = System.IO.File.Exists(FilePath);
+                bool Exists = File.Exists(FilePath);
                 return Exists ? Input.Interpreter.True : Input.Interpreter.False;
+            }
+            public static async Task<Instance> absolute_path(MethodInput Input) {
+                string FilePath = Input.Arguments[0].String;
+                string FullFilePath = Path.GetFullPath(FilePath);
+                return new StringInstance(Input.Interpreter.String, FullFilePath);
+            }
+            public static async Task<Instance> absolute_path7(MethodInput Input) {
+                string FilePath = Input.Arguments[0].String;
+                string FullFilePath = Path.GetFullPath(FilePath);
+                return FilePath == FullFilePath ? Input.Interpreter.True : Input.Interpreter.False;
+            }
+            public static async Task<Instance> basename(MethodInput Input) {
+                string FilePath = Input.Arguments[0].String;
+                string FileName = Path.GetFileName(FilePath);
+                return new StringInstance(Input.Interpreter.String, FileName);
+            }
+            public static async Task<Instance> dirname(MethodInput Input) {
+                string FilePath = Input.Arguments[0].String;
+                string DirectoryName = Path.GetDirectoryName(FilePath) ?? "";
+                return new StringInstance(Input.Interpreter.String, DirectoryName);
             }
         }
         static class Proc {

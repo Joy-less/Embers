@@ -39,14 +39,13 @@ lambda {}
 loop {}
 	Repeats the given block until a break or return statement is reached.
 
-rand([max = 1.0]) | rand(range)
+rand([max = 1.0]) | rand(range) | Random.range([max = 1.0]) | Random.range(range)
 	If max is an integer, gets a random integer between 0 and (max - 1). If a float, gets a random float between 0 and max. If a range, gets a random integer within the range.
 
-srand(seed)
+srand(seed) | Random.srand(seed)
 	Sets the random number seed for rand() to the given seed integer and returns the previous seed.
 
-exit
-quit
+exit | quit
 	Throws an exception which cannot be caught.
 
 eval(code)
@@ -77,11 +76,11 @@ object.object_id
 object.methods
 	Returns an array containing a symbol for the name of each method in a given object.
 
-object.is_a?(module)
-	Returns true if the object is an instance of the module.
+object.is_a?(class)
+	Returns true if the object is an instance of the class or a class that inherits from it.
 
-object.instance_of?(module)
-	Returns true if the object is an instance of the module or a module that inherits from it.
+object.instance_of?(class)
+	Returns true if the object is an instance of the class.
 
 object.in?(array)
 	Returns true if the array contains the item.
@@ -90,10 +89,10 @@ object.clone
 	Returns a shallow copy of the object.
 
 instance.attr_reader(instance_variable_name)
-	Creates an instance method called "{the given name}" which returns the given instance variable.
+	Creates an instance method called {the given name} which returns the given instance variable.
 
 instance.attr_writer(instance_variable_name)
-	Creates an instance method called "{the given name}=" which sets the instance variable to the given value.
+	Creates an instance method called {the given name}= which sets the instance variable to the given value.
 
 instance.attr_accessor(instance_variable_name)
 	Calls attr_writer and attr_reader.
@@ -146,7 +145,7 @@ string.chop | string.chop!
 	Returns the string with a single character removed from the end.
 
 string.chr
-	Returns the first character of the string.
+	Returns the first character in the string.
 
 string.capitalize | string.capitalize!
 	Returns the string in which the first letter is uppercase and the rest are lowercase (supports unicode).
@@ -173,7 +172,7 @@ integer.to_f
 integer.clamp(min, max)
 	Returns min if integer < min, max if integer > max or otherwise integer.
 
-integer.round(digits = 0)
+integer.round(decimal_places = 0)
 	Returns the integer rounded to the given number of decimal places (which can be negative).
 
 integer.floor, integer.ceil, integer.truncate
@@ -195,7 +194,7 @@ float.to_f
 float.clamp(min, max)
 	Returns min if float < min, max if float > max or otherwise float.
 
-float.round(digits = 0)
+float.round(decimal_places = 0)
 	Returns the float rounded to the given number of decimal places (which can be negative).
 
 float.floor
@@ -405,10 +404,28 @@ File.read(file_path)
 	Reads the given file and returns its contents as a string.
 
 File.write(file_path, text)
-	Writes the text to the given file.
+	Writes the text to the given file, overwriting it if it already exists.
+
+File.append(file_path, text)
+	Appends the text to the end of the given file.
+
+File.delete(file_path)
+	Deletes the given file if it exists.
 
 File.exist?(file_path) | File.exists?(file_path)
 	Returns true if a file exists with the given path.
+
+File.absolute_path(file_path)
+	Returns an absolute file path from the given relative file path.
+
+File.absolute_path?(file_path)
+	Returns true if the given file path is absolute (e.g. C://Documents/neko.jpg).
+	
+File.basename(file_path)
+	Returns the filename and extension from the file path (e.g. C://Documents/neko.jpg becomes neko.jpg).
+	
+File.dirname(file_path)
+	Returns the directory path from the file path (e.g. C://Documents/neko.jpg becomes C://Documents).
 ```
 ```
 Net::HTTP.get(uri)
