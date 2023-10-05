@@ -2037,7 +2037,7 @@ namespace Embers
             }
 
             if (CurrentBlocks.Count != 1) {
-                throw new SyntaxErrorException($"{CurrentBlocks.Peek().Location}: {(CurrentBlocks.Count == 2 ? "" : CurrentBlocks.Count - 1 + " ")}block{(CurrentBlocks.Count == 2 ? " was" : "s were")} never closed with an end statement");
+                throw new SyntaxErrorException($"{CurrentBlocks.Peek().Location}: {(CurrentBlocks.Count == 2 ? "Block was" : $"{CurrentBlocks.Count - 1} blocks were")} never closed with an end statement");
             }
 
             BuildingBlock TopBlock = CurrentBlocks.Pop();
