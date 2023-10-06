@@ -56,7 +56,7 @@ namespace Embers
                 return Type + (Value != null ? ":" : "") + OneLineValue + (FollowsWhitespace ? " (follows whitespace)" : "") + (FollowedByWhitespace ? " (followed by whitespace)" : "");
             }
             public string Serialise() {
-                return $"new {typeof(Phase1Token).PathTo()}({Location.Serialise()}, {Type.PathTo()}, {OneLineValue.Serialise()}, {(FollowsWhitespace ? "true" : "false")}, {(FollowedByWhitespace ? "true" : "false")}, {(ProcessFormatting ? "true" : "false")})";
+                return $"new {typeof(Phase1Token).GetPath()}({Location.Serialise()}, {Type.GetPath()}, {OneLineValue.Serialise()}, {(FollowsWhitespace ? "true" : "false")}, {(FollowedByWhitespace ? "true" : "false")}, {(ProcessFormatting ? "true" : "false")})";
             }
         }
 

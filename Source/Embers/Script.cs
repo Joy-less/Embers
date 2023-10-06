@@ -826,7 +826,7 @@ namespace Embers
                 }
             }
             public string Serialise() {
-                return $"new {typeof(IntRange).PathTo()}({(Min != null ? Min : "null")}, {(Max != null ? Max : "null")})";
+                return $"new {typeof(IntRange).GetPath()}({(Min != null ? Min : "null")}, {(Max != null ? Max : "null")})";
             }
         }
         public class LongRange {
@@ -868,7 +868,7 @@ namespace Embers
                 }
             }
             public string Serialise() {
-                return $"new {typeof(LongRange).PathTo()}({(Min != null ? Min : "null")}, {(Max != null ? Max : "null")})";
+                return $"new {typeof(LongRange).GetPath()}({(Min != null ? Min : "null")}, {(Max != null ? Max : "null")})";
             }
         }
         public readonly struct Integer {

@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using static Embers.Phase1;
-using static Embers.Phase2;
 using static Embers.Script;
 
 #nullable enable
@@ -155,7 +154,7 @@ namespace Embers
                 return Type + (Value != null ? ":" : "") + OneLineValue;
             }
             public override string Serialise() {
-                return $"new {PathToSelf}({Location.Serialise()}, {Type.PathTo()}, {OneLineValue.Serialise()}, {(FromPhase1Token != null ? FromPhase1Token.Serialise() : "null")})";
+                return $"new {PathToSelf}({Location.Serialise()}, {Type.GetPath()}, {OneLineValue.Serialise()}, {(FromPhase1Token != null ? FromPhase1Token.Serialise() : "null")})";
             }
         }
 
@@ -255,7 +254,7 @@ namespace Embers
                 return Type.ToString();
             }
             public override string Serialise() {
-                return $"new {PathToSelf}({Location}, {Type.PathTo()})";
+                return $"new {PathToSelf}({Location}, {Type.GetPath()})";
             }
         }
         public class MethodArgumentExpression : Expression {
@@ -279,7 +278,7 @@ namespace Embers
                 }
             }
             public override string Serialise() {
-                return $"new {PathToSelf}({ArgumentName.Serialise()}, {(DefaultValue != null ? DefaultValue.Serialise() : "null")}, {(SplatType != null ? SplatType.PathTo() : "null")})";
+                return $"new {PathToSelf}({ArgumentName.Serialise()}, {(DefaultValue != null ? DefaultValue.Serialise() : "null")}, {(SplatType != null ? SplatType.GetPath() : "null")})";
             }
         }
         public class MethodExpression : Expression {
@@ -466,11 +465,13 @@ namespace Embers
             public Expression Right;
 
             readonly string Operator;
+            readonly Expression OriginalRight;
 
             public AssignmentExpression(ObjectTokenExpression left, string op, Expression right) : base(left.Location) {
                 Left = left;
                 Operator = op;
                 Right = right;
+                OriginalRight = right;
 
                 // Compound assignment operators
                 if (Operator != "=") {
@@ -490,7 +491,7 @@ namespace Embers
                 return Left.Inspect() + " " + Operator + " " + Right.Inspect();
             }
             public override string Serialise() {
-                return $"new {PathToSelf}({Left.Serialise()}, {Operator.Serialise()}, {Right.Serialise()})";
+                return $"new {PathToSelf}({Left.Serialise()}, {Operator.Serialise()}, {OriginalRight.Serialise()})";
             }
         }
         public class MultipleAssignmentExpression : Expression {
@@ -498,11 +499,13 @@ namespace Embers
             public List<Expression> Right;
 
             readonly string Operator;
+            readonly List<Expression> OriginalRight;
 
             public MultipleAssignmentExpression(List<ObjectTokenExpression> left, string op, List<Expression> right) : base(left[0].Location) {
                 Left = left;
                 Operator = op;
                 Right = right;
+                OriginalRight = right;
 
                 // Compound assignment operators
                 if (Operator != "=") {
@@ -526,7 +529,7 @@ namespace Embers
                 return Left.Inspect() + " " + Operator + " " + Right.Inspect();
             }
             public override string Serialise() {
-                return $"new {PathToSelf}({Left.Serialise()}, {Operator.Serialise()}, {Right.Serialise()})";
+                return $"new {PathToSelf}({Left.Serialise()}, {Operator.Serialise()}, {OriginalRight.Serialise()})";
             }
         }
         public class DoExpression : Expression {
@@ -694,7 +697,7 @@ namespace Embers
                 return Type.ToString().ToLower();
             }
             public override string Serialise() {
-                return $"new {PathToSelf}({Location.Serialise()}, {Type.PathTo()}))";
+                return $"new {PathToSelf}({Location.Serialise()}, {Type.GetPath()}))";
             }
         }
         public abstract class BeginComponentStatement : Statement {

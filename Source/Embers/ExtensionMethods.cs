@@ -1,14 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
-using System.Diagnostics;
 using System.Numerics;
-using System.Collections.Concurrent;
 using static Embers.Phase2;
 using static Embers.Script;
+#if !NET6_0_OR_GREATER
+    using System.Threading.Tasks;
+    using System.Diagnostics;
+#endif
+#if !NET7_0_OR_GREATER
+    using System.Runtime.CompilerServices;
+#endif
 
 #nullable enable
 
@@ -47,7 +50,7 @@ namespace Embers
             }
         }
         public static string Serialise<T>(this List<T> List) where T : Phase2Object {
-            string Serialised = $"new List<{typeof(T).PathTo()}>() {{";
+            string Serialised = $"new {typeof(List<T>).GetPath()}() {{";
             bool IsFirst = true;
             foreach (T Item in List) {
                 if (IsFirst) IsFirst = false;
@@ -93,7 +96,7 @@ namespace Embers
             return ListInspection;
         }
         public static string Serialise<T>(this LockingDictionary<T, T> Dictionary) where T : Phase2Object {
-            string Serialised = $"new LockingDictionary<{typeof(T).PathTo()}, {typeof(T).PathTo()}>() {{";
+            string Serialised = $"new {typeof(LockingDictionary<T, T>).GetPath()}() {{";
             bool IsFirst = true;
             foreach (KeyValuePair<T, T> Item in Dictionary) {
                 if (IsFirst) IsFirst = false;
@@ -171,8 +174,35 @@ namespace Embers
             }
             return ConcurrentDict;
         }
-        public static string PathTo(this object Self) => PathTo(Self.GetType()) + "." + Self;
-        public static string PathTo(this Type Self) => (Self.FullName ?? "").Replace('+', '.');
+        public static string GetPath(this object Self) {
+            return GetPath(Self.GetType()) + "." + Self;
+        }
+        public static string GetPath(this Type Self) {
+            StringBuilder Result = new();
+            StringBuilder BuildPath(Type CurrentType, List<Type>? TypeArguments = null) {
+                TypeArguments ??= CurrentType.GetGenericArguments().ToList();
+                int TypeArgumentCount = CurrentType.IsGenericType ? CurrentType.GetGenericArguments().Length : 0;
+                if (CurrentType.IsNested) {
+                    BuildPath(CurrentType.DeclaringType!, TypeArguments);
+                }
+                else {
+                    Result.Append(CurrentType.Namespace);
+                }
+                Result.Append('.');
+                Result.Append(CurrentType.Name.Split('`')[0]);
+                if (TypeArgumentCount > 0) {
+                    Result.Append('<');
+                    for (int i = 0; i < TypeArgumentCount; i++) {
+                        if (i != 0) Result.Append(',');
+                        BuildPath(TypeArguments[i]);
+                    }
+                    Result.Append('>');
+                }
+                return Result;
+            }
+            BuildPath(Self);
+            return Result.ToString();
+        }
         public static string ReplaceFirst(this string Original, string Replace, string With) {
             int FoundIndex = Original.IndexOf(Replace);
             if (FoundIndex != -1)
