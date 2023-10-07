@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Diagnostics;
 using static Embers.Script;
 
 namespace Embers
@@ -62,6 +63,8 @@ when 2..3
 when 6, 5, 4
     puts '6, 5 or 4'
 end
+
+p constants
                     ")
                 );
                 Console.ReadLine();

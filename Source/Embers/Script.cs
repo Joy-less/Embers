@@ -1345,30 +1345,6 @@ namespace Embers
         async Task<T> CreateTemporaryScope<T>(Func<Task<T>> Do) {
             return await CreateTemporaryScope(new Scope(), Do);
         }
-        async Task CreateTemporaryClassScope(Module Module, Func<Task> Do) {
-            // Create temporary class/module scope
-            CurrentObject.Push(Module);
-            try {
-                // Do action
-                await Do();
-            }
-            finally {
-                // Step back a class/module
-                CurrentObject.Pop();
-            }
-        }
-        async Task CreateTemporaryInstanceScope(Instance Instance, Func<Task> Do) {
-            // Create temporary instance scope
-            CurrentObject.Push(Instance);
-            try {
-                // Do action
-                await Do();
-            }
-            finally {
-                // Step back an instance
-                CurrentObject.Pop();
-            }
-        }
         async Task CreateTemporaryScope(Scope Scope, Func<Task> Do) {
             // Create temporary scope
             CurrentObject.Push(Scope);
@@ -1419,11 +1395,22 @@ namespace Embers
             foreach (object Object in CurrentObject) {
                 if (Object is Block Block) {
                     foreach (KeyValuePair<string, Instance> LocalVariable in Block.LocalVariables) {
-                        LocalVariables.Add(LocalVariable.Key, LocalVariable.Value);
+                        LocalVariables[LocalVariable.Key] = LocalVariable.Value;
                     }
                 }
             }
             return LocalVariables;
+        }
+        public Dictionary<string, Instance> GetAllLocalConstants() {
+            Dictionary<string, Instance> Constants = new();
+            foreach (object Object in CurrentObject) {
+                if (Object is Block Block) {
+                    foreach (KeyValuePair<string, Instance> LocalVariable in Block.Constants) {
+                        Constants[LocalVariable.Key] = LocalVariable.Value;
+                    }
+                }
+            }
+            return Constants;
         }
         internal Method? ToYieldMethod(Method? Current) {
             // This makes yield methods (do ... end) be called in the scope they're called in, not the scope of the instance/class.

@@ -57,6 +57,7 @@ namespace Embers
             Interpreter.Object.InstanceMethods["eval"] = Interpreter.Object.Methods["eval"] = Script.CreateMethod(eval, 1);
             Interpreter.Object.InstanceMethods["local_variables"] = Interpreter.Object.Methods["local_variables"] = Script.CreateMethod(local_variables, 0);
             Interpreter.Object.InstanceMethods["global_variables"] = Interpreter.Object.Methods["global_variables"] = Script.CreateMethod(global_variables, 0);
+            Interpreter.Object.InstanceMethods["constants"] = Interpreter.Object.Methods["constants"] = Script.CreateMethod(constants, 0);
 
             Interpreter.Object.InstanceMethods["attr_reader"] = Script.CreateMethod(ClassInstance.attr_reader, 1);
             Interpreter.Object.InstanceMethods["attr_writer"] = Script.CreateMethod(ClassInstance.attr_writer, 1);
@@ -481,6 +482,13 @@ namespace Embers
                 GlobalVariables.Add(Input.Interpreter.GetSymbol(GlobalVariable.Key));
             }
             return new ArrayInstance(Input.Interpreter.Array, GlobalVariables);
+        }
+        static async Task<Instance> constants(MethodInput Input) {
+            List<Instance> Constants = new();
+            foreach (KeyValuePair<string, Instance> Constant in Input.Script.GetAllLocalConstants()) {
+                Constants.Add(Input.Interpreter.GetSymbol(Constant.Key));
+            }
+            return new ArrayInstance(Input.Interpreter.Array, Constants);
         }
         static class ClassInstance {
             public static async Task<Instance> _Equals(MethodInput Input) {
