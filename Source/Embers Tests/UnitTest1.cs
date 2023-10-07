@@ -408,6 +408,13 @@ namespace Embers_Tests
                 a = 5
                 [a.class.name, a.class.class.name]
             ", new object[] {"Integer", "Class"});
+
+            // Private / protected
+            AssertErrors<RuntimeException>(@"
+                class MyClass
+                end
+                MyClass.local_variables
+            ");
         }
 
 

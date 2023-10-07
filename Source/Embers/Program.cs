@@ -39,7 +39,7 @@ class Thing
     
 end
 class SpecialThing < Thing
-    
+    AAA = true
 end
 
 key = SpecialThing.new
@@ -65,6 +65,7 @@ when 6, 5, 4
 end
 
 p constants
+p SpecialThing.constants
                     ")
                 );
                 Console.ReadLine();

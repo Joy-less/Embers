@@ -30,6 +30,7 @@ namespace Embers
             Interpreter.Object.InstanceMethods["class"] = Interpreter.Object.Methods["class"] = Script.CreateMethod(ClassInstance.@class, 0);
             Interpreter.Object.InstanceMethods["to_s"] = Interpreter.Object.Methods["to_s"] = Script.CreateMethod(ClassInstance.to_s, 0);
             Interpreter.Object.InstanceMethods["method"] = Interpreter.Object.Methods["method"] = Script.CreateMethod(ClassInstance.method, 1);
+            Interpreter.Object.InstanceMethods["constants"] = Interpreter.Object.Methods["constants"] = Script.CreateMethod(ClassInstance.constants, 0);
             Interpreter.Object.InstanceMethods["object_id"] = Interpreter.Object.Methods["object_id"] = Script.CreateMethod(ClassInstance.object_id, 0);
             Interpreter.Object.InstanceMethods["methods"] = Interpreter.Object.Methods["methods"] = Script.CreateMethod(ClassInstance.methods, 0);
             Interpreter.Object.InstanceMethods["is_a?"] = Interpreter.Object.Methods["is_a?"] = Script.CreateMethod(ClassInstance.is_a7, 1);
@@ -57,7 +58,6 @@ namespace Embers
             Interpreter.Object.InstanceMethods["eval"] = Interpreter.Object.Methods["eval"] = Script.CreateMethod(eval, 1);
             Interpreter.Object.InstanceMethods["local_variables"] = Interpreter.Object.Methods["local_variables"] = Script.CreateMethod(local_variables, 0);
             Interpreter.Object.InstanceMethods["global_variables"] = Interpreter.Object.Methods["global_variables"] = Script.CreateMethod(global_variables, 0);
-            Interpreter.Object.InstanceMethods["constants"] = Interpreter.Object.Methods["constants"] = Script.CreateMethod(constants, 0);
 
             Interpreter.Object.InstanceMethods["attr_reader"] = Script.CreateMethod(ClassInstance.attr_reader, 1);
             Interpreter.Object.InstanceMethods["attr_writer"] = Script.CreateMethod(ClassInstance.attr_writer, 1);
@@ -483,13 +483,6 @@ namespace Embers
             }
             return new ArrayInstance(Input.Interpreter.Array, GlobalVariables);
         }
-        static async Task<Instance> constants(MethodInput Input) {
-            List<Instance> Constants = new();
-            foreach (KeyValuePair<string, Instance> Constant in Input.Script.GetAllLocalConstants()) {
-                Constants.Add(Input.Interpreter.GetSymbol(Constant.Key));
-            }
-            return new ArrayInstance(Input.Interpreter.Array, Constants);
-        }
         static class ClassInstance {
             public static async Task<Instance> _Equals(MethodInput Input) {
                 Instance Left = Input.Instance;
@@ -544,6 +537,13 @@ namespace Embers
                 else {
                     throw new RuntimeException($"{Input.Location}: Undefined method '{MethodName}' for {Input.Instance.LightInspect()}");
                 }
+            }
+            public static async Task<Instance> constants(MethodInput Input) {
+                List<Instance> Constants = new();
+                foreach (KeyValuePair<string, Instance> Constant in Input.Script.GetAllLocalConstants()) {
+                    Constants.Add(Input.Interpreter.GetSymbol(Constant.Key));
+                }
+                return new ArrayInstance(Input.Interpreter.Array, Constants);
             }
             public static async Task<Instance> object_id(MethodInput Input) {
                 return Input.Interpreter.GetInteger(Input.Instance.ObjectId);

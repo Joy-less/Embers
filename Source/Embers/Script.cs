@@ -102,23 +102,23 @@ namespace Embers
                 // Copy superclass class and instance methods
                 if (SuperModule != null) {
                     // Copy methods and instance methods
-                    SuperModule.Methods.CopyTo(Methods);
-                    SuperModule.InstanceMethods.CopyTo(InstanceMethods);
+                    SuperModule.Methods.CloneTo(Methods, this);
+                    SuperModule.InstanceMethods.CloneTo(InstanceMethods, this);
                     // Copy future changes
-                    SuperModule.Methods.OnSet.Listen(Methods, (string Key, Method NewValue) => {
-                        Methods[Key] = NewValue;
+                    SuperModule.Methods.OnSet.Listen(Methods, (string Key, Method Method) => {
+                        Methods[Key] = Method.CloneTo(this);
                     });
                     SuperModule.Methods.OnRemoved.Listen(Methods, (string Key) => {
                         Methods.Remove(Key);
                     });
-                    SuperModule.InstanceMethods.OnSet.Listen(InstanceMethods, (string Key, Method NewValue) => {
-                        InstanceMethods[Key] = NewValue;
+                    SuperModule.InstanceMethods.OnSet.Listen(InstanceMethods, (string Key, Method Method) => {
+                        InstanceMethods[Key] = Method.CloneTo(this);
                     });
                     SuperModule.InstanceMethods.OnRemoved.Listen(InstanceMethods, (string Key) => {
                         InstanceMethods.Remove(Key);
                     });
-                    SuperModule.Constants.OnSet.Listen(Constants, (string Key, Instance NewValue) => {
-                        Constants[Key] = NewValue;
+                    SuperModule.Constants.OnSet.Listen(Constants, (string Key, Instance Constant) => {
+                        Constants[Key] = Constant;
                     });
                     SuperModule.Constants.OnRemoved.Listen(Constants, (string Key) => {
                         Constants.Remove(Key);
@@ -158,8 +158,8 @@ namespace Embers
         public class Instance {
             public readonly Module? Module; // Will be null if instance is a pseudoinstance
             public long ObjectId { get; private set; }
-            public virtual ReactiveDictionary<string, Instance> InstanceVariables { get; private set; } = new();
-            public virtual ReactiveDictionary<string, Method> InstanceMethods { get; private set; } = new();
+            public ReactiveDictionary<string, Instance> InstanceVariables { get; protected set; } = new();
+            public ReactiveDictionary<string, Method> InstanceMethods { get; protected set; } = new();
             public bool IsTruthy => Object is not (null or false);
             public virtual object? Object { get { return null; } }
             public virtual bool Boolean { get { throw new RuntimeException("Instance is not a boolean"); } }
@@ -185,7 +185,7 @@ namespace Embers
                 Clone.InstanceVariables = new();
                 InstanceVariables.CopyTo(Clone.InstanceVariables);
                 Clone.InstanceMethods = new();
-                InstanceMethods.CopyTo(Clone.InstanceMethods);
+                InstanceMethods.CloneTo(Clone.InstanceMethods, Clone.Module!);
                 return Clone;
             }
             public static async Task<Instance> CreateFromToken(Script Script, Phase2Token Token) {
@@ -243,14 +243,16 @@ namespace Embers
             void Setup() {
                 if (Module != null) {
                     // Copy instance methods
-                    Module.InstanceMethods.CopyTo(InstanceMethods);
+                    Module.InstanceMethods.CloneTo(InstanceMethods, Module);
                     // Copy future changes
-                    Module.InstanceMethods.OnSet.Listen(InstanceMethods, (string Key, Method NewValue) => {
-                        InstanceMethods[Key] = NewValue;
-                    });
-                    Module.InstanceMethods.OnRemoved.Listen(InstanceMethods, (string Key) => {
-                        InstanceMethods.Remove(Key);
-                    });
+                    if (this is not ModuleReference) {
+                        Module.InstanceMethods.OnSet.Listen(InstanceMethods, (string Key, Method Method) => {
+                            InstanceMethods[Key] = Method.CloneTo(Module);
+                        });
+                        Module.InstanceMethods.OnRemoved.Listen(InstanceMethods, (string Key) => {
+                            InstanceMethods.Remove(Key);
+                        });
+                    }
                 }
             }
             public async Task<Instance> TryCallInstanceMethod(Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
@@ -555,12 +557,7 @@ namespace Embers
             }
             public ModuleReference(Module module) : base(module) {
                 // Copy changes to the parent module
-                InstanceMethods.OnSet.Listen(module.InstanceMethods, (string Key, Method NewValue) => {
-                    module.InstanceMethods[Key] = NewValue;
-                });
-                InstanceMethods.OnRemoved.Listen(module.InstanceMethods, (string Key) => {
-                    module.InstanceMethods.Remove(Key);
-                });
+                InstanceMethods = module.InstanceMethods;
             }
         }
         public abstract class PseudoInstance : Instance {
@@ -606,7 +603,7 @@ namespace Embers
         }
         public class Method {
             public string? Name;
-            public readonly Module? Parent;
+            public Module? Parent {get; private set;}
             public Func<MethodInput, Task<Instance>> Function {get; private set;}
             public readonly IntRange ArgumentCountRange;
             public readonly List<MethodArgumentExpression> ArgumentNames;
@@ -640,11 +637,11 @@ namespace Embers
                 if (Unsafe && !Script.AllowUnsafeApi)
                     throw new RuntimeException($"{Script.ApproximateLocation}: The method '{Name}' is unavailable since 'AllowUnsafeApi' is disabled for this script.");
                 if (AccessModifier == AccessModifier.Private) {
-                    if (Parent != null && Parent != Script.Interpreter.RootModule && Script.CurrentModule != Parent)
+                    if (Parent != null && Script.CurrentModule != Parent)
                         throw new RuntimeException($"{Script.ApproximateLocation}: Private method '{Name}' called {(Parent != null ? $"for {Parent.Name}" : "")}");
                 }
                 else if (AccessModifier == AccessModifier.Protected) {
-                    if (Parent != null && Parent != Script.Interpreter.RootModule && !Script.CurrentModule.InheritsFrom(Parent))
+                    if (Parent != null && !Script.CurrentModule.InheritsFrom(Parent))
                         throw new RuntimeException($"{Script.ApproximateLocation}: Protected method '{Name}' called {(Parent != null ? $"for {Parent.Name}" : "")}");
                 }
 
@@ -709,6 +706,9 @@ namespace Embers
             }
             public void ChangeFunction(Func<MethodInput, Task<Instance>> function) {
                 Function = function;
+            }
+            public void ChangeParent(Module? parent) {
+                Parent = parent;
             }
             public Method Clone() {
                 return (Method)MemberwiseClone();
@@ -1258,29 +1258,16 @@ namespace Embers
                     yield return Instance;
                 }
             }
-            public Instance SingleInstance { get {
-                if (Count == 1) {
-                    return this[0];
-                }
-                else {
-                    throw new SyntaxErrorException($"Unexpected instances (expected one, got {Count})");
-                }
-            } }
-            public List<Instance> MultiInstance { get {
-                if (InstanceList != null) {
-                    return InstanceList;
-                }
-                else if (Instance != null) {
-                    return new List<Instance>() { Instance };
-                }
-                else {
-                    return new List<Instance>();
-                }
-            } }
+            public Instance SingleInstance => Count == 1
+                ? this[0]
+                : throw new SyntaxErrorException($"Unexpected instances (expected one, got {Count})");
+            public List<Instance> MultiInstance => InstanceList ?? (Instance != null
+                ? new List<Instance>() { Instance }
+                : new List<Instance>());
         }
 
         public async Task Warn(string Message) {
-            await Interpreter.RootInstance.InstanceMethods["warn"].Call(this, new ModuleReference(Interpreter.RootModule), new StringInstance(Interpreter.String, Message));
+            await CurrentInstance.TryCallInstanceMethod(this, "warn", new StringInstance(Interpreter.String, Message));
         }
         public Module CreateModule(string Name, Module? Parent = null, Module? InheritsFrom = null) {
             Parent ??= Interpreter.RootModule;
@@ -1405,9 +1392,10 @@ namespace Embers
             Dictionary<string, Instance> Constants = new();
             foreach (object Object in CurrentObject) {
                 if (Object is Block Block) {
-                    foreach (KeyValuePair<string, Instance> LocalVariable in Block.Constants) {
-                        Constants[LocalVariable.Key] = LocalVariable.Value;
+                    foreach (KeyValuePair<string, Instance> Constant in Block.Constants) {
+                        Constants[Constant.Key] = Constant.Value;
                     }
+                    if (Object is Module) break;
                 }
             }
             return Constants;
@@ -1513,9 +1501,7 @@ namespace Embers
                         if (ParentModule.Module!.Methods.TryGetValue(PathExpression.Token.Value!, out Method? FindMethod)) {
                             // Call class/module method
                             if (ReturnType == ReturnType.InterpretResult) {
-                                return await CreateTemporaryClassScope(ParentModule.Module, async () =>
-                                    await FindMethod.Call(this, ParentModule)
-                                );
+                                return await FindMethod.Call(this, ParentModule);
                             }
                             // Return method
                             else {
@@ -1540,9 +1526,7 @@ namespace Embers
                         if (ParentInstance.InstanceMethods.TryGetValue(PathExpression.Token.Value!, out Method? FindMethod)) {
                             // Call instance method
                             if (ReturnType == ReturnType.InterpretResult) {
-                                return await CreateTemporaryInstanceScope(ParentInstance, async () =>
-                                    await FindMethod.Call(this, ParentInstance)
-                                );
+                                return await FindMethod.Call(this, ParentInstance);
                             }
                             // Return method
                             else {
@@ -2220,7 +2204,7 @@ namespace Embers
         async Task<Instance> InterpretUndefineMethodStatement(UndefineMethodStatement UndefineMethodStatement) {
             string MethodName = UndefineMethodStatement.MethodName.Token.Value!;
             if (MethodName == "initialize") {
-                await Warn($"{UndefineMethodStatement.MethodName.Token.Location}: undefining 'initialize' may cause serious problems");
+                await Warn($"{UndefineMethodStatement.MethodName.Token.Location}: Undefining 'initialize' may cause problems");
             }
             if (!CurrentModule.InstanceMethods.Remove(MethodName)) {
                 throw new RuntimeException($"{UndefineMethodStatement.MethodName.Token.Location}: Undefined method '{MethodName}' for {CurrentModule.Name}");
