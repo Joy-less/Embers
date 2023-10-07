@@ -70,6 +70,9 @@ object.to_s
 object.method(method_name)
 	Returns a proc containing the method that can be called with call(*args).
 
+object.constants
+	Returns an array containing the names of all constants in the object as symbols.
+
 object.object_id
 	Returns an integer to uniquely identify the given object.
 
