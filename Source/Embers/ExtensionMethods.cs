@@ -56,7 +56,7 @@ namespace Embers
             bool IsFirst = true;
             foreach (T Item in List) {
                 if (IsFirst) IsFirst = false;
-                else Serialised += ",";
+                else Serialised += ", ";
                 Serialised += Item.Serialise();
             }
             return Serialised + "}";
@@ -103,7 +103,7 @@ namespace Embers
             foreach (KeyValuePair<T, T> Item in Dictionary) {
                 if (IsFirst) IsFirst = false;
                 else Serialised += ", ";
-                Serialised += "{" + Item.Key.Serialise() + ", " + Item.Value.Serialise() + "}, ";
+                Serialised += "{" + Item.Key.Serialise() + ", " + Item.Value.Serialise() + "}";
             }
             return Serialised + "}";
         }

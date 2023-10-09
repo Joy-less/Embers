@@ -4,7 +4,7 @@ using static Embers.Script;
 namespace Embers
 {
     public static class Info {
-        public const string Version = "1.4.0";
+        public const string Version = "1.4.1";
         public const string ReleaseDate = "2023-10-09";
         public const string Copyright = "Embers - Copyright © 2023 Joyless";
         public const string RubyCopyright = "Ruby - Copyright © Yukihiro Matsumoto";

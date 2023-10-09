@@ -297,7 +297,7 @@ namespace Embers
             public override object? Object { get { return Value; } }
             public override string String { get { return Value; } }
             public override string Inspect() {
-                return "\"" + Value.Replace("\n", "\\n").Replace("\r", "\\r") + "\"";
+                return '"' + Value.Replace("\n", "\\n").Replace("\r", "\\r") + '"';
             }
             public override string LightInspect() {
                 return Value;
