@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using System.Linq;
 using static Embers.Script;
 
+#nullable enable
+
 namespace Embers
 {
     public static class SpecialTypes
