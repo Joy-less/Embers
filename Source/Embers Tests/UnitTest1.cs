@@ -1,5 +1,6 @@
 using Embers;
 using static Embers.Script;
+using static Embers.SpecialTypes;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Embers_Tests
@@ -11,8 +12,8 @@ namespace Embers_Tests
         public void Test1() {
             // Basic tests
             AssertEqualToNull("");
-            AssertEqual("4", new Integer(4));
-            AssertEqual("4.0", new Float(4.0));
+            AssertEqual("4", new DynInteger(4));
+            AssertEqual("4.0", new DynFloat(4.0));
 
             // Global variables
             AssertEqual(@"
@@ -45,7 +46,7 @@ namespace Embers_Tests
                 }
 
                 return $result
-            ", new Integer(5));
+            ", new DynInteger(5));
             AssertErrors<RuntimeException>(@"
                 $result = 0
 
@@ -76,7 +77,7 @@ namespace Embers_Tests
                 a = (b = 2)
                 c = d = 3.0
                 return a, b, c, d
-            ", new object[] {new Integer(2), new Integer(2), new Float(3.0d), new Float(3.0d)});
+            ", new object[] {new DynInteger(2), new DynInteger(2), new DynFloat(3.0d), new DynFloat(3.0d)});
 
             // If statements
             AssertEqual(@"
@@ -94,7 +95,7 @@ namespace Embers_Tests
                     $result += 20
                 end
                 # should return $result implicitly
-            ", new Integer(-99));
+            ", new DynInteger(-99));
 
             // Unless
             AssertEqual(@"
@@ -104,7 +105,7 @@ namespace Embers_Tests
                     $result = 0
                 end
                 $result
-            ", new Integer(1));
+            ", new DynInteger(1));
 
             // One-line conditions
             AssertEqual(@"
@@ -112,7 +113,7 @@ namespace Embers_Tests
                 $value += 1 until true
                 $value -= 30 if true
                 $value
-            ", new Integer(-30));
+            ", new DynInteger(-30));
 
             // Lambdas & always return last expression
             AssertEqual(@"
@@ -136,7 +137,7 @@ namespace Embers_Tests
                 end
                 my_instance = MyClass.new
                 my_instance.a + my_instance.b
-            ", new Integer(11));
+            ", new DynInteger(11));
 
             // Unsafe API
             {
@@ -173,7 +174,7 @@ namespace Embers_Tests
                     $return_val -= 10000
                 end
                 $return_val
-            ", new Integer(13));
+            ", new DynInteger(13));
             AssertErrors<SyntaxErrorException>(@"
                 break
             ");
@@ -204,7 +205,7 @@ namespace Embers_Tests
                 c = A.new
                 c.a
                 return c.b
-            ", new Integer(5));
+            ", new DynInteger(5));
 
             // system
             AssertEqual(@"
@@ -215,12 +216,12 @@ namespace Embers_Tests
             AssertEqual(@"
                 a = [4, 7]
                 return a[1], a.count
-            ", new object[] {new Integer(7), new Integer(2)});
+            ", new object[] {new DynInteger(7), new DynInteger(2)});
             AssertEqual(@"
                 arr = [1, 2, 3, 4, 5]
                 arr.map {|a| 2*a}
             ", Obj => Obj is ArrayInstance Arr && Arr.Array.Count == 5 && Arr.Array[0].Integer == 2L && Arr.Array[1].Integer == 4L && Arr.Array[2].Integer == 6L
-                && Arr.Array[3].Integer == new Integer(8) && Arr.Array[4].Integer == new Integer(10));
+                && Arr.Array[3].Integer == new DynInteger(8) && Arr.Array[4].Integer == new DynInteger(10));
 
             // Unary
             AssertEqual(@"
@@ -228,13 +229,13 @@ namespace Embers_Tests
                 b = - 2
                 c = (- 3.4)
                 return a, b, c
-            ", new object[] {new Integer(-1L), new Integer(-2L), new Float(-3.4d)});
+            ", new object[] {new DynInteger(-1L), new DynInteger(-2L), new DynFloat(-3.4d)});
 
             // Hashes
             AssertEqual(@"
                 a = {:hi => 56.1}
                 return a[:hi]
-            ", new Float(56.1d));
+            ", new DynFloat(56.1d));
 
             // Splat Arguments
             AssertEqual(@"
@@ -245,13 +246,13 @@ namespace Embers_Tests
 
                 a true, 5, 8, ""hi"" => 2.4, ""hey"" => :test
                 return $b, $c
-            ", Obj => Obj is ArrayInstance Objs && Objs.Array.Count == 2 && Objs.Array[0] is ArrayInstance Arr && Arr.Array[0].Boolean == true && Arr.Array[1].Integer == new Integer(5)
-                && Arr.Array[2].Integer == new Integer(8) && Objs.Array[1] is HashInstance Hash && Hash.Hash.Count == 2);
+            ", Obj => Obj is ArrayInstance Objs && Objs.Array.Count == 2 && Objs.Array[0] is ArrayInstance Arr && Arr.Array[0].Boolean == true && Arr.Array[1].Integer == new DynInteger(5)
+                && Arr.Array[2].Integer == new DynInteger(8) && Objs.Array[1] is HashInstance Hash && Hash.Hash.Count == 2);
 
             // Ranges
             AssertEqual(@"
                 return (5..7).max, (5...7).max
-            ", new object[] {new Integer(7), new Integer(6L)});
+            ", new object[] {new DynInteger(7), new DynInteger(6L)});
             AssertEqual(@"
                 return 'Hi there'[2..10]
             ", " there");
@@ -385,7 +386,7 @@ namespace Embers_Tests
                 $c = (a, b = 1, 2)
                 $d, $e = [5, 6]
                 return a, b, $c[0], $d, $e
-            ", new object[] {new Integer(1L), new Integer(2L), new Integer(1L), new Integer(5L), new Integer(6L)});
+            ", new object[] {new DynInteger(1L), new DynInteger(2L), new DynInteger(1L), new DynInteger(5L), new DynInteger(6L)});
 
             // Or & not priority
             // Not works differently in Ruby, but imo, it's better in Embers.
@@ -394,7 +395,7 @@ namespace Embers_Tests
                 b = a or 2
                 c = not 2 or 3
                 return b, c
-            ", new object[] {new Integer(5), new Integer(3)});
+            ", new object[] {new DynInteger(5), new DynInteger(3)});
 
             // Clone
             AssertEqual(@"

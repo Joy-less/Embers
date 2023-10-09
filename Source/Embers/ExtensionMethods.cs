@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Numerics;
+using System.Threading.Tasks;
 using static Embers.Phase2;
 using static Embers.Script;
+using static Embers.SpecialTypes;
 #if !NET6_0_OR_GREATER
     using System.Threading.Tasks;
     using System.Diagnostics;
@@ -54,7 +56,7 @@ namespace Embers
             bool IsFirst = true;
             foreach (T Item in List) {
                 if (IsFirst) IsFirst = false;
-                else Serialised += ", ";
+                else Serialised += ",";
                 Serialised += Item.Serialise();
             }
             return Serialised + "}";
@@ -168,11 +170,19 @@ namespace Embers
             return HashItems;
         }
         public static LockingDictionary<TKey, TValue> ToLockingDictionary<TKey, TValue>(this LockingDictionary<TKey, TValue> Dict, Func<KeyValuePair<TKey, TValue>, TKey> KeySelector, Func<KeyValuePair<TKey, TValue>, TValue> ValueSelector) where TKey : notnull {
-            LockingDictionary<TKey, TValue> ConcurrentDict = new();
+            LockingDictionary<TKey, TValue> LockingDict = new();
             foreach (KeyValuePair<TKey, TValue> KVP in Dict) {
-                ConcurrentDict[KeySelector(KVP)] = ValueSelector(KVP);
+                LockingDict[KeySelector(KVP)] = ValueSelector(KVP);
             }
-            return ConcurrentDict;
+            return LockingDict;
+        }
+        public static async Task<Instance?> HashLookup(this LockingDictionary<Instance, Instance> Hash, Script Script, Instance Key) {
+            DynInteger FindHashKey = (await Key.TryCallInstanceMethod(Script, "hash")).Integer;
+            foreach (KeyValuePair<Instance, Instance> KVP in Hash) {
+                DynInteger HashKey = (await KVP.Key.TryCallInstanceMethod(Script, "hash")).Integer;
+                if (HashKey == FindHashKey) return KVP.Value;
+            }
+            return null;
         }
         public static Method CloneTo(this Method Method, Module Target) {
             Method MethodClone = Method.Clone();
@@ -238,28 +248,28 @@ namespace Embers
         public static bool IsSmall(this BigFloat BigFloat) {
             return (BigFloat)(long.MinValue / 2.0) < BigFloat && BigFloat < (BigFloat)(long.MaxValue / 2.0);
         }
-        public static Integer ParseInteger(this string String) {
+        public static DynInteger ParseInteger(this string String) {
             if (long.TryParse(String, out long Result) && Result.IsSmall()) {
-                return new Integer(Result);
+                return new DynInteger(Result);
             }
             else {
-                return new Integer(BigInteger.Parse(String));
+                return new DynInteger(BigInteger.Parse(String));
             }
         }
-        public static Float ParseFloat(this string String) {
+        public static DynFloat ParseFloat(this string String) {
             if (double.TryParse(String, out double Result) && Result.IsSmall()) {
-                return new Float(Result);
+                return new DynFloat(Result);
             }
             else {
-                return new Float(BigFloat.Parse(String));
+                return new DynFloat(BigFloat.Parse(String));
             }
         }
-        public static Integer ParseHexInteger(this string String) {
+        public static DynInteger ParseHexInteger(this string String) {
             if (long.TryParse(String, System.Globalization.NumberStyles.HexNumber, null, out long Result)) {
-                return new Integer(Result);
+                return new DynInteger(Result);
             }
             else {
-                return new Integer(BigInteger.Parse(String, System.Globalization.NumberStyles.HexNumber));
+                return new DynInteger(BigInteger.Parse(String, System.Globalization.NumberStyles.HexNumber));
             }
         }
         public static long ToUnixTimeSeconds(this DateTimeOffset DateTimeOffset) {

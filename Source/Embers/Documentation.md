@@ -76,6 +76,12 @@ object.constants
 object.object_id
 	Returns an integer to uniquely identify the given object.
 
+object.hash
+	Returns an integer hash code that represents the object for Hash key lookups.
+
+object.eql?(other)
+	Returns true if the objects have the same hash.
+
 object.methods
 	Returns an array containing a symbol for the name of each method in a given object.
 
@@ -164,6 +170,9 @@ string.sub(replace, with) | string.sub!(replace, with)
 
 string.gsub(replace, with) | string.gsub!(replace, with)
 	Returns the string where all instances of replace are replaced with with.
+
+string.eql?(other)
+	Returns true if other is a string and has the same contents.
 ```
 ```
 integer.to_i

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using static Embers.Phase1;
 using static Embers.Script;
+using static Embers.SpecialTypes;
 
 #nullable enable
 
@@ -130,8 +131,8 @@ namespace Embers
             public readonly bool ProcessFormatting;
 
             public readonly bool IsObjectToken;
-            public readonly Integer ValueAsInteger;
-            public readonly Float ValueAsFloat;
+            public readonly DynInteger ValueAsInteger;
+            public readonly DynFloat ValueAsFloat;
 
             private readonly Phase1Token? FromPhase1Token;
 

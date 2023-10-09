@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using static Embers.Phase2;
 using static Embers.Script;
+using static Embers.SpecialTypes;
 
 namespace Embers
 {
@@ -15,8 +16,8 @@ namespace Embers
 
         public readonly LockingDictionary<string, Instance> GlobalVariables = new();
         private readonly Cache<string, SymbolInstance> Symbols = new();
-        private readonly Cache<Integer, IntegerInstance> Integers = new();
-        private readonly Cache<Float, FloatInstance> Floats = new();
+        private readonly Cache<DynInteger, IntegerInstance> Integers = new();
+        private readonly Cache<DynFloat, FloatInstance> Floats = new();
 
         public readonly Class Class;
         public readonly Class NilClass;
@@ -55,10 +56,10 @@ namespace Embers
         public SymbolInstance GetSymbol(string Value) {
             return Symbols[Value] ?? Symbols.Store(Value, new SymbolInstance(Symbol, Value));
         }
-        public IntegerInstance GetInteger(Integer Value) {
+        public IntegerInstance GetInteger(DynInteger Value) {
             return Integers[Value] ?? Integers.Store(Value, new IntegerInstance(Integer, Value));
         }
-        public FloatInstance GetFloat(Float Value) {
+        public FloatInstance GetFloat(DynFloat Value) {
             return Floats[Value] ?? Floats.Store(Value, new FloatInstance(Float, Value));
         }
 

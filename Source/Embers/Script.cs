@@ -3,8 +3,8 @@ using System.Runtime.CompilerServices;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
-using System.Numerics;
 using static Embers.Phase2;
+using static Embers.SpecialTypes;
 
 #nullable enable
 #pragma warning disable CS1998
@@ -164,11 +164,11 @@ namespace Embers
             public virtual object? Object { get { return null; } }
             public virtual bool Boolean { get { throw new RuntimeException("Instance is not a boolean"); } }
             public virtual string String { get { throw new RuntimeException("Instance is not a string"); } }
-            public virtual Integer Integer { get { throw new RuntimeException("Instance is not an integer"); } }
-            public virtual Float Float { get { throw new RuntimeException("Instance is not a float"); } }
+            public virtual DynInteger Integer { get { throw new RuntimeException("Instance is not an integer"); } }
+            public virtual DynFloat Float { get { throw new RuntimeException("Instance is not a float"); } }
             public virtual Method Proc { get { throw new RuntimeException("Instance is not a proc"); } }
             public virtual ScriptThread? Thread { get { throw new RuntimeException("Instance is not a thread"); } }
-            public virtual LongRange Range { get { throw new RuntimeException("Instance is not a range"); } }
+            public virtual IntegerRange Range { get { throw new RuntimeException("Instance is not a range"); } }
             public virtual List<Instance> Array { get { throw new RuntimeException("Instance is not an array"); } }
             public virtual LockingDictionary<Instance, Instance> Hash { get { throw new RuntimeException("Instance is not a hash"); } }
             public virtual Exception Exception { get { throw new RuntimeException("Instance is not an exception"); } }
@@ -186,6 +186,7 @@ namespace Embers
                 InstanceVariables.CopyTo(Clone.InstanceVariables);
                 Clone.InstanceMethods = new();
                 InstanceMethods.CloneTo(Clone.InstanceMethods, Clone.Module!);
+                Clone.Setup();
                 return Clone;
             }
             public static async Task<Instance> CreateFromToken(Script Script, Phase2Token Token) {
@@ -307,6 +308,9 @@ namespace Embers
             public void SetValue(string value) {
                 Value = value;
             }
+            public override int GetHashCode() {
+                return Value.GetHashCode();
+            }
         }
         public class SymbolInstance : Instance {
             readonly string Value;
@@ -330,34 +334,36 @@ namespace Embers
             }
         }
         public class IntegerInstance : Instance {
-            readonly Integer Value;
+            readonly DynInteger Value;
             public override object? Object { get { return Value; } }
-            public override Integer Integer { get { return Value; } }
-            public override Float Float { get { return Value; } }
+            public override DynInteger Integer { get { return Value; } }
+            public override DynFloat Float { get { return Value; } }
             public override string Inspect() {
                 return Value.ToString();
             }
-            public IntegerInstance(Class fromClass, Integer value) : base(fromClass) {
+            public IntegerInstance(Class fromClass, DynInteger value) : base(fromClass) {
                 Value = value;
             }
         }
         public class FloatInstance : Instance {
-            readonly Float Value;
+            readonly DynFloat Value;
             public override object? Object { get { return Value; } }
-            public override Float Float { get { return Value; } }
-            public override Integer Integer { get { return (Integer)Value; } }
+            public override DynFloat Float { get { return Value; } }
+            public override DynInteger Integer { get { return (DynInteger)Value; } }
             public override string Inspect() {
-                if (double.IsPositiveInfinity(Value))
-                    return "Infinity";
-                else if (double.IsNegativeInfinity(Value))
-                    return "-Infinity";
+                if (Value.IsDouble) {
+                    if (double.IsPositiveInfinity(Value.Double))
+                        return "Infinity";
+                    else if (double.IsNegativeInfinity(Value.Double))
+                        return "-Infinity";
+                }
 
                 string FloatString = Value.ToString();
                 if (!FloatString.Contains('.'))
                     FloatString += ".0";
                 return FloatString;
             }
-            public FloatInstance(Class fromClass, Float value) : base(fromClass) {
+            public FloatInstance(Class fromClass, DynFloat value) : base(fromClass) {
                 Value = value;
             }
         }
@@ -435,8 +441,8 @@ namespace Embers
             public Instance AppliedMin;
             public Instance AppliedMax;
             public bool IncludesMax;
-            public override object? Object { get { return ToLongRange; } }
-            public override LongRange Range { get { return ToLongRange; } }
+            public override object? Object { get { return ToIntegerRange; } }
+            public override IntegerRange Range { get { return ToIntegerRange; } }
             public override string Inspect() {
                 return $"{(Min != null ? Min.Inspect() : "")}{(IncludesMax ? ".." : "...")}{(Max != null ? Max.Inspect() : "")}";
             }
@@ -468,7 +474,7 @@ namespace Embers
                 }
                 return (AppliedMin, AppliedMax);
             }
-            LongRange ToLongRange => new(AppliedMin is IntegerInstance ? AppliedMin.Integer : null, AppliedMax is IntegerInstance ? AppliedMax.Integer : null);
+            IntegerRange ToIntegerRange => new(AppliedMin is IntegerInstance ? (long)AppliedMin.Integer : null, AppliedMax is IntegerInstance ? (long)AppliedMax.Integer : null);
         }
         public class ArrayInstance : Instance {
             List<Instance> Value;
@@ -485,6 +491,15 @@ namespace Embers
             }
             public void SetValue(List<Instance> value) {
                 Value = value;
+            }
+            public override int GetHashCode() {
+                unchecked {
+                    int CurrentHash = 19;
+                    foreach (Instance Item in Value) {
+                        CurrentHash = CurrentHash * 31 + Item.GetHashCode();
+                    }
+                    return CurrentHash;
+                }
             }
         }
         public class HashInstance : Instance {
@@ -505,6 +520,15 @@ namespace Embers
             }
             public void SetValue(LockingDictionary<Instance, Instance> value) {
                 Value = value;
+            }
+            public override int GetHashCode() {
+                unchecked {
+                    int CurrentHash = 0;
+                    foreach (KeyValuePair<Instance, Instance> Item in Value) {
+                        CurrentHash ^= Item.Key.GetHashCode() ^ Item.Value.GetHashCode();
+                    }
+                    return CurrentHash;
+                }
             }
         }
         public class HashArgumentsInstance : Instance {
@@ -780,437 +804,6 @@ namespace Embers
                 OnYield = onYield;
             }
             public DebugLocation Location => Script.ApproximateLocation;
-        }
-        public class IntRange {
-            public readonly int? Min;
-            public readonly int? Max;
-            public IntRange(int? min = null, int? max = null) {
-                Min = min;
-                Max = max;
-            }
-            public IntRange(Range range) {
-                if (range.Start.IsFromEnd) {
-                    Min = null;
-                    Max = range.End.Value;
-                }
-                else if (range.End.IsFromEnd) {
-                    Min = range.Start.Value;
-                    Max = null;
-                }
-                else {
-                    Min = range.Start.Value;
-                    Max = range.End.Value;
-                }
-            }
-            public bool IsInRange(int Number) {
-                if (Min != null && Number < Min) return false;
-                if (Max != null && Number > Max) return false;
-                return true;
-            }
-            public override string ToString() {
-                if (Min == Max) {
-                    if (Min == null) {
-                        return "any";
-                    }
-                    else {
-                        return $"{Min}";
-                    }
-                }
-                else {
-                    if (Min == null)
-                        return $"{Max}";
-                    else if (Max == null)
-                        return $"{Min}+";
-                    else
-                        return $"{Min}..{Max}";
-                }
-            }
-            public string Serialise() {
-                return $"new {typeof(IntRange).GetPath()}({(Min != null ? Min : "null")}, {(Max != null ? Max : "null")})";
-            }
-        }
-        public class LongRange {
-            public readonly long? Min;
-            public readonly long? Max;
-            public LongRange(long? min = null, long? max = null) {
-                Min = min;
-                Max = max;
-            }
-            public bool IsInRange(long Number) {
-                if (Min != null && Number < Min) return false;
-                if (Max != null && Number > Max) return false;
-                return true;
-            }
-            public bool IsInRange(double Number) {
-                if (Min != null && Number < Min) return false;
-                if (Max != null && Number > Max) return false;
-                return true;
-            }
-            public long? Count => Max != null && Min != null
-                ? (long)Max - (long)Min + 1
-                : null;
-            public override string ToString() {
-                if (Min == Max) {
-                    if (Min == null) {
-                        return "any";
-                    }
-                    else {
-                        return $"{Min}";
-                    }
-                }
-                else {
-                    if (Min == null)
-                        return $"{Max}";
-                    else if (Max == null)
-                        return $"{Min}+";
-                    else
-                        return $"{Min}..{Max}";
-                }
-            }
-            public string Serialise() {
-                return $"new {typeof(LongRange).GetPath()}({(Min != null ? Min : "null")}, {(Max != null ? Max : "null")})";
-            }
-        }
-        public readonly struct Integer {
-            public readonly long Long;
-            public readonly BigInteger BigInteger;
-            public readonly bool IsLong;
-            public Integer(long Long) {
-                this.Long = Long;
-                BigInteger = default;
-                IsLong = true;
-            }
-            public Integer(BigInteger BigInteger) {
-                this.BigInteger = BigInteger;
-                Long = default;
-                IsLong = false;
-            }
-            public static Integer operator +(Integer Left, Integer Right) {
-                if (Left.IsLong && Right.IsLong) {
-                    long SmallResult = Left.Long + Right.Long;
-                    if (SmallResult.IsSmall()) return SmallResult;
-                }
-
-                BigInteger BigLeft = Left.IsLong ? Left.Long : Left.BigInteger;
-                BigInteger BigRight = Right.IsLong ? Right.Long : Right.BigInteger;
-
-                BigInteger Result = BigLeft + BigRight;
-                if (Result.IsSmall()) return (long)Result;
-                else return Result;
-            }
-            public static Integer operator -(Integer Left, Integer Right) {
-                if (Left.IsLong && Right.IsLong) {
-                    long SmallResult = Left.Long - Right.Long;
-                    if (SmallResult.IsSmall()) return SmallResult;
-                }
-
-                BigInteger BigLeft = Left.IsLong ? Left.Long : Left.BigInteger;
-                BigInteger BigRight = Right.IsLong ? Right.Long : Right.BigInteger;
-
-                BigInteger Result = BigLeft - BigRight;
-                if (Result.IsSmall()) return (long)Result;
-                else return Result;
-            }
-            public static Integer operator *(Integer Left, Integer Right) {
-                if (Left.IsLong && Right.IsLong) {
-                    long SmallResult = Left.Long * Right.Long;
-                    if (SmallResult.IsSmall()) return SmallResult;
-                }
-
-                BigInteger BigLeft = Left.IsLong ? Left.Long : Left.BigInteger;
-                BigInteger BigRight = Right.IsLong ? Right.Long : Right.BigInteger;
-
-                BigInteger Result = BigLeft * BigRight;
-                if (Result.IsSmall()) return (long)Result;
-                else return Result;
-            }
-            public static Integer operator /(Integer Left, Integer Right) {
-                if (Left.IsLong && Right.IsLong) {
-                    long SmallResult = Left.Long / Right.Long;
-                    if (SmallResult.IsSmall()) return SmallResult;
-                }
-
-                BigInteger BigLeft = Left.IsLong ? Left.Long : Left.BigInteger;
-                BigInteger BigRight = Right.IsLong ? Right.Long : Right.BigInteger;
-
-                BigInteger Result = BigLeft / BigRight;
-                if (Result.IsSmall()) return (long)Result;
-                else return Result;
-            }
-            public static Integer operator %(Integer Left, Integer Right) {
-                if (Left.IsLong && Right.IsLong) {
-                    long SmallResult = Left.Long % Right.Long;
-                    if (SmallResult.IsSmall()) return SmallResult;
-                }
-
-                BigInteger BigLeft = Left.IsLong ? Left.Long : Left.BigInteger;
-                BigInteger BigRight = Right.IsLong ? Right.Long : Right.BigInteger;
-
-                BigInteger Result = BigLeft % BigRight;
-                if (Result.IsSmall()) return (long)Result;
-                else return Result;
-            }
-            public static implicit operator Integer(long Value) {
-                return new Integer(Value);
-            }
-            public static implicit operator Integer(BigInteger Value) {
-                return new Integer(Value);
-            }
-            public static implicit operator long(Integer Value) {
-                return Value.IsLong ? Value.Long : (long)Value.BigInteger;
-            }
-            public static implicit operator BigInteger(Integer Value) {
-                return Value.IsLong ? Value.Long : Value.BigInteger;
-            }
-            public override string ToString() {
-                return IsLong ? Long.ToString() : BigInteger.ToString();
-            }
-        }
-        public readonly struct Float {
-            public readonly double Double;
-            public readonly BigFloat BigFloat;
-            public readonly bool IsDouble;
-            public Float(double Double) {
-                this.Double = Double;
-                BigFloat = default;
-                IsDouble = true;
-            }
-            public Float(long Long) {
-                Double = Long;
-                BigFloat = default;
-                IsDouble = true;
-            }
-            public Float(BigFloat BigFloat) {
-                this.BigFloat = BigFloat;
-                Double = default;
-                IsDouble = false;
-            }
-            public Float(Integer Integer) {
-                BigFloat = Integer.IsLong ? default : new BigFloat(Integer.BigInteger);
-                Double = Integer.IsLong ? Integer.Long : default;
-                IsDouble = Integer.IsLong;
-            }
-            public static Float operator +(Float Left, Float Right) {
-                if (Left.IsDouble && Right.IsDouble || double.IsInfinity(Left.Double) || double.IsInfinity(Right.Double)) {
-                    double SmallResult = Left.Double + Right.Double;
-                    if (SmallResult.IsSmall()) return SmallResult;
-                }
-
-                BigFloat BigLeft = Left.IsDouble ? Left.Double : Left.BigFloat;
-                BigFloat BigRight = Right.IsDouble ? Right.Double : Right.BigFloat;
-
-                BigFloat Result = BigLeft + BigRight;
-                if (Result.IsSmall()) return (double)Result;
-                else return Result;
-            }
-            public static Float operator -(Float Left, Float Right) {
-                if (Left.IsDouble && Right.IsDouble || double.IsInfinity(Left.Double) || double.IsInfinity(Right.Double)) {
-                    double SmallResult = Left.Double - Right.Double;
-                    if (SmallResult.IsSmall()) return SmallResult;
-                }
-
-                BigFloat BigLeft = Left.IsDouble ? Left.Double : Left.BigFloat;
-                BigFloat BigRight = Right.IsDouble ? Right.Double : Right.BigFloat;
-
-                BigFloat Result = BigLeft - BigRight;
-                if (Result.IsSmall()) return (double)Result;
-                else return Result;
-            }
-            public static Float operator *(Float Left, Float Right) {
-                if (Left.IsDouble && Right.IsDouble || double.IsInfinity(Left.Double) || double.IsInfinity(Right.Double)) {
-                    double SmallResult = Left.Double * Right.Double;
-                    if (SmallResult.IsSmall()) return SmallResult;
-                }
-
-                BigFloat BigLeft = Left.IsDouble ? Left.Double : Left.BigFloat;
-                BigFloat BigRight = Right.IsDouble ? Right.Double : Right.BigFloat;
-
-                BigFloat Result = BigLeft * BigRight;
-                if (Result.IsSmall()) return (double)Result;
-                else return Result;
-            }
-            public static Float operator /(Float Left, Float Right) {
-                if (Left.IsDouble && Right.IsDouble || double.IsInfinity(Left.Double) || double.IsInfinity(Right.Double)) {
-                    double SmallResult = Left.Double / Right.Double;
-                    if (SmallResult.IsSmall()) return SmallResult;
-                }
-
-                BigFloat BigLeft = Left.IsDouble ? Left.Double : Left.BigFloat;
-                BigFloat BigRight = Right.IsDouble ? Right.Double : Right.BigFloat;
-
-                BigFloat Result = BigLeft / BigRight;
-                if (Result.IsSmall()) return (double)Result;
-                else return Result;
-            }
-            public static Float operator %(Float Left, Float Right) {
-                if (Left.IsDouble && Right.IsDouble || double.IsInfinity(Left.Double) || double.IsInfinity(Right.Double)) {
-                    double SmallResult = Left.Double % Right.Double;
-                    if (SmallResult.IsSmall()) return SmallResult;
-                }
-
-                BigFloat BigLeft = Left.IsDouble ? Left.Double : Left.BigFloat;
-                BigFloat BigRight = Right.IsDouble ? Right.Double : Right.BigFloat;
-
-                BigFloat Result = BigLeft % BigRight;
-                if (Result.IsSmall()) return (double)Result;
-                else return Result;
-            }
-            public static Float operator +(Integer Left, Float Right) {
-                return (Float)Left + Right;
-            }
-            public static Float operator -(Integer Left, Float Right) {
-                return (Float)Left - Right;
-            }
-            public static Float operator *(Integer Left, Float Right) {
-                return (Float)Left * Right;
-            }
-            public static Float operator /(Integer Left, Float Right) {
-                return (Float)Left / Right;
-            }
-            public static Float operator %(Integer Left, Float Right) {
-                return (Float)Left % Right;
-            }
-            public static implicit operator Float(double Value) {
-                return new Float(Value);
-            }
-            public static implicit operator Float(Integer Value) {
-                return new Float(Value);
-            }
-            public static implicit operator Float(BigFloat Value) {
-                return new Float(Value);
-            }
-            public static implicit operator double(Float Value) {
-                return Value.IsDouble ? Value.Double : (double)Value.BigFloat;
-            }
-            public static implicit operator BigFloat(Float Value) {
-                return Value.IsDouble ? Value.Double : Value.BigFloat;
-            }
-            public static implicit operator Integer(Float Value) {
-                if (Value.IsDouble) {
-                    return new Integer((long)Value.Double);
-                }
-                else {
-                    return new Integer((BigInteger)Value.BigFloat);
-                }
-            }
-            public override string ToString() {
-                return IsDouble ? Double.ToString() : BigFloat.ToString();
-            }
-        }
-        public class WeakEvent<T> {
-            private readonly ConditionalWeakTable<object, Action<T>> Subscribers = new();
-            public void Listen(object AttachedObject, Action<T> Listener) {
-                lock (Subscribers) Subscribers.Add(AttachedObject, Listener);
-            }
-            public void Fire(T Argument) {
-                lock (Subscribers) {
-                    foreach (KeyValuePair<object, Action<T>> Subscriber in Subscribers) {
-                        Subscriber.Value(Argument);
-                    }
-                }
-            }
-        }
-        public class WeakEvent<T1, T2> {
-            private readonly ConditionalWeakTable<object, Action<T1, T2>> Subscribers = new();
-            public void Listen(object AttachedObject, Action<T1, T2> Listener) {
-                lock (Subscribers) Subscribers.Add(AttachedObject, Listener);
-            }
-            public void Fire(T1 Argument1, T2 Argument2) {
-                lock (Subscribers) {
-                    foreach (KeyValuePair<object, Action<T1, T2>> Subscriber in Subscribers) {
-                        Subscriber.Value(Argument1, Argument2);
-                    }
-                }
-            }
-        }
-        /// <summary>A thread-safe dictionary that is locked while a key is being added or set.</summary>
-        public class LockingDictionary<TKey, TValue> : Dictionary<TKey, TValue> where TKey : notnull {
-            public new void Add(TKey Key, TValue Value) {
-                lock (this) base.Add(Key, Value);
-            }
-            public new bool Remove(TKey Key) {
-                lock (this) return base.Remove(Key);
-            }
-            public new bool TryAdd(TKey Key, TValue Value) {
-                lock (this) return base.TryAdd(Key, Value);
-            }
-            public new TValue this[TKey Key] {
-                get {
-                    lock (this) return base[Key];
-                }
-                set {
-                    lock (this) base[Key] = value;
-                }
-            }
-        }
-        /// <summary>A locking dictionary with events that trigger when a key-value pair is added to or removed from the dictionary.</summary>
-        public class ReactiveDictionary<TKey, TValue> : LockingDictionary<TKey, TValue> where TKey : notnull {
-            public readonly WeakEvent<TKey, TValue> OnSet = new();
-            public readonly WeakEvent<TKey> OnRemoved = new();
-
-            public new TValue this[TKey Key] {
-                get => base[Key];
-                set {
-                    TrySetMethodName(Key, value);
-                    if (!IsValueAlreadySet(Key, value)) {
-                        base[Key] = value;
-                        OnSet.Fire(Key, value);
-                    }
-                }
-            }
-            public TValue this[TKey FirstKey, params TKey[] Keys] {
-                set {
-                    TrySetMethodName(FirstKey, value);
-                    this[FirstKey] = value;
-                    foreach (TKey Key in Keys) {
-                        this[Key] = value;
-                    }
-                }
-            }
-            public new void Add(TKey Key, TValue Value) {
-                TrySetMethodName(Key, Value);
-                if (!IsValueAlreadySet(Key, Value)) {
-                    lock (this) base.Add(Key, Value);
-                    OnSet.Fire(Key, Value);
-                }
-            }
-            public new bool Remove(TKey Key) {
-                bool Success;
-                lock (this) Success = Remove(Key, out _);
-                if (Success) OnRemoved.Fire(Key);
-                return Success;
-            }
-            
-            bool IsValueAlreadySet(TKey Key, TValue Value) {
-                bool Exists = TryGetValue(Key, out TValue? CurrentValue);
-                return Exists && Equals(CurrentValue, Value);
-            }
-            static void TrySetMethodName(TKey Key, TValue Value) {
-                if (Key is string MethodName && Value is Method Method) {
-                    Method.Name = MethodName;
-                }
-            }
-        }
-        public class Cache<TKey, TValue> where TKey : notnull {
-            public const int Limit = 50_000;
-            private readonly LockingDictionary<TKey, TValue> CacheDictionary = new();
-            private readonly Queue<TKey> Keys = new();
-            public TValue Store(TKey Key, TValue Value) {
-                lock (CacheDictionary) {
-                    if (CacheDictionary.Count > Limit) {
-                        CacheDictionary.Remove(Keys.Dequeue());
-                    }
-                    Keys.Enqueue(Key);
-                    CacheDictionary.Add(Key, Value);
-                    return Value;
-                }
-            }
-            public TValue? this[TKey Key] {
-                get {
-                    CacheDictionary.TryGetValue(Key, out TValue? Value);
-                    return Value;
-                }
-            }
         }
         public class Instances {
             // At least one of Instance or InstanceList will be null

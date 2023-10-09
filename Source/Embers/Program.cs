@@ -13,59 +13,43 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() =>
                     Script.Evaluate(@"
-puts 1.object_id
-puts 1.object_id
-puts 2.3.object_id
-puts 2.3.object_id
-puts (1 + 1).object_id
-puts (1 + 1).object_id
-puts :hi.object_id
-puts :hi.object_id
+puts ""Hello World"".hash
+puts ""Hello World"".hash
+puts ""Hello World 2"".hash
+puts ""Hello World 2"".hash
+puts ""Hello World"".object_id
+puts ""Hello World"".object_id
 
-# puts Net::HTTP.get('example.com/index.html')
-
-p :hi
-p 5.class.class
-p 5.class.name
-p 5.class.class.name
-
-p Integer.methods
-
-a = ['a']
-puts [a[0] + 0.5.to_s]
-puts -1
-
-class Thing
+class A
+    def ==(value)
+        true
+    end
+end
+class B
     
 end
-class SpecialThing < Thing
-    AAA = true
-end
 
-key = SpecialThing.new
+z = A.new
+b = {z => 1, B.new => 2}
 
-puts Thing === key
-puts Integer === 5
-puts 5 === Integer
-puts 2..3 === 2
-puts key.is_a? Thing
-puts key.instance_of? Thing
+p b[B.new]
+p b[z]
+p ({'a' => 2})['a']
 
-puts Class === Class
+p [1.0.eql?(1.0), 1.0.eql? 1]
 
-puts :hi === :hi
-puts :he === :hi
-puts :hi === :he
+puts '---'
+p [0, 1, 2].hash
+p [0, 1, 2].hash
+p [0, 1, 2].hash == [0, 1, 2].hash # => true
+p [0, 1, 2].hash == [0, 1, 3].hash # => false
 
-case 5
-when 2..3
-    puts '2..3'
-when 6, 5, 4
-    puts '6, 5 or 4'
-end
-
-p constants
-p SpecialThing.constants
+puts '---'
+p ({:foo => 0, :bar => 1, :baz => 2}).hash
+p ({:foo => 0, :bar => 1, :baz => 2}).hash
+p ({:foo => 0, :bar => 1, :baz => 2}).hash == {:foo => 0, :bar => 1, :baz => 2}.hash # => true
+p ({:foo => 0, :bar => 1, :baz => 2}).hash == {:baz => 2, :bar => 1, :foo => 0}.hash # => true
+p ({:foo => 0, :bar => 1, :baz => 2}).hash == {:baz => 2, :bar => 1}.hash # => false
                     ")
                 );
                 Console.ReadLine();
