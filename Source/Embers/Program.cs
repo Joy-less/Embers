@@ -50,6 +50,9 @@ p ({:foo => 0, :bar => 1, :baz => 2}).hash
 p ({:foo => 0, :bar => 1, :baz => 2}).hash == {:foo => 0, :bar => 1, :baz => 2}.hash # => true
 p ({:foo => 0, :bar => 1, :baz => 2}).hash == {:baz => 2, :bar => 1, :foo => 0}.hash # => true
 p ({:foo => 0, :bar => 1, :baz => 2}).hash == {:baz => 2, :bar => 1}.hash # => false
+
+puts 2.== 2
+puts 2.== 3
                     ")
                 );
                 Console.ReadLine();

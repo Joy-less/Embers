@@ -55,7 +55,7 @@ namespace Embers
             else if (Class.InheritsFrom(Interpreter.Array))
                 return new ArrayInstance(Class, new List<Instance>());
             else if (Class.InheritsFrom(Interpreter.Hash))
-                return new HashInstance(Class, new LockingDictionary<Instance, Instance>(), Interpreter.Nil);
+                return new HashInstance(Class, new HashDictionary(), Interpreter.Nil);
             else if (Class.InheritsFrom(Interpreter.Exception))
                 return new ExceptionInstance(Class, "");
             else if (Class.InheritsFrom(Interpreter.Thread))
@@ -170,7 +170,7 @@ namespace Embers
             public virtual ScriptThread? Thread { get { throw new RuntimeException("Instance is not a thread"); } }
             public virtual IntegerRange Range { get { throw new RuntimeException("Instance is not a range"); } }
             public virtual List<Instance> Array { get { throw new RuntimeException("Instance is not an array"); } }
-            public virtual LockingDictionary<Instance, Instance> Hash { get { throw new RuntimeException("Instance is not a hash"); } }
+            public virtual HashDictionary Hash { get { throw new RuntimeException("Instance is not a hash"); } }
             public virtual Exception Exception { get { throw new RuntimeException("Instance is not an exception"); } }
             public virtual DateTimeOffset Time { get { throw new RuntimeException("Instance is not a time"); } }
             public virtual string Inspect() {
@@ -503,28 +503,28 @@ namespace Embers
             }
         }
         public class HashInstance : Instance {
-            LockingDictionary<Instance, Instance> Value;
+            HashDictionary Value;
             public Instance DefaultValue;
             public override object? Object { get { return Value; } }
-            public override LockingDictionary<Instance, Instance> Hash { get { return Value; } }
+            public override HashDictionary Hash { get { return Value; } }
             public override string Inspect() {
-                return $"{{{Value.InspectInstances()}}}";
+                return $"{{{Value.Dict.InspectInstances()}}}";
             }
-            public HashInstance(Class fromClass, LockingDictionary<Instance, Instance> value, Instance defaultValue) : base(fromClass) {
+            public HashInstance(Class fromClass, HashDictionary value, Instance defaultValue) : base(fromClass) {
                 Value = value;
                 DefaultValue = defaultValue;
             }
-            public void SetValue(LockingDictionary<Instance, Instance> value, Instance defaultValue) {
+            public void SetValue(HashDictionary value, Instance defaultValue) {
                 Value = value;
                 DefaultValue = defaultValue;
             }
-            public void SetValue(LockingDictionary<Instance, Instance> value) {
+            public void SetValue(HashDictionary value) {
                 Value = value;
             }
             public override int GetHashCode() {
                 unchecked {
                     int CurrentHash = 0;
-                    foreach (KeyValuePair<Instance, Instance> Item in Value) {
+                    foreach (KeyValuePair<Instance, Instance> Item in Value.Dict) {
                         CurrentHash ^= Item.Key.GetHashCode() ^ Item.Value.GetHashCode();
                     }
                     return CurrentHash;
@@ -1352,9 +1352,9 @@ namespace Embers
             return new ArrayInstance(Interpreter.Array, Items);
         }
         async Task<HashInstance> InterpretHashExpression(HashExpression HashExpression) {
-            LockingDictionary<Instance, Instance> Items = new();
+            HashDictionary Items = new();
             foreach (KeyValuePair<Expression, Expression> Item in HashExpression.Expressions) {
-                Items[await InterpretExpressionAsync(Item.Key)] = await InterpretExpressionAsync(Item.Value);
+                await Items.Set(this, await InterpretExpressionAsync(Item.Key), await InterpretExpressionAsync(Item.Value));
             }
             return new HashInstance(Interpreter.Hash, Items, Interpreter.Nil);
         }

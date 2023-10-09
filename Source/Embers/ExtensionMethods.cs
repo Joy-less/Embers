@@ -176,14 +176,6 @@ namespace Embers
             }
             return LockingDict;
         }
-        public static async Task<Instance?> HashLookup(this LockingDictionary<Instance, Instance> Hash, Script Script, Instance Key) {
-            DynInteger FindHashKey = (await Key.TryCallInstanceMethod(Script, "hash")).Integer;
-            foreach (KeyValuePair<Instance, Instance> KVP in Hash) {
-                DynInteger HashKey = (await KVP.Key.TryCallInstanceMethod(Script, "hash")).Integer;
-                if (HashKey == FindHashKey) return KVP.Value;
-            }
-            return null;
-        }
         public static Method CloneTo(this Method Method, Module Target) {
             Method MethodClone = Method.Clone();
             MethodClone.ChangeParent(Target);

@@ -690,6 +690,15 @@ namespace Embers
                     throw new SyntaxErrorException($"{FindColon.Location}: Unexpected colon");
                 }
             }
+            // Allow e.g. 2.== 3
+            for (int i = 0; i < Tokens.Count; i++) {
+                Phase1Token Token = Tokens[i];
+                Phase1Token? NextToken = i + 1 < Tokens.Count ? Tokens[i + 1] : null;
+                if (Token.Type == Phase1TokenType.Dot && NextToken != null && NextToken.Type == Phase1TokenType.Operator) {
+                    NextToken.Type = Phase1TokenType.Identifier;
+                }
+            }
+            //
             return Tokens;
         }
     }

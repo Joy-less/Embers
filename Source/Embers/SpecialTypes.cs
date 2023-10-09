@@ -506,6 +506,44 @@ namespace Embers
                 }
             }
         }
+        public class HashDictionary {
+            public readonly LockingDictionary<Instance, Instance> Dict;
+            public HashDictionary() {
+                Dict = new();
+            }
+            public HashDictionary(LockingDictionary<Instance, Instance> dict) {
+                Dict = dict;
+            }
+            public async Task<Instance?> Lookup(Script Script, Instance Key) {
+                DynInteger FindHashKey = (await Key.TryCallInstanceMethod(Script, "hash")).Integer;
+                foreach (KeyValuePair<Instance, Instance> KVP in Dict) {
+                    DynInteger HashKey = (await KVP.Key.TryCallInstanceMethod(Script, "hash")).Integer;
+                    if (HashKey == FindHashKey) return KVP.Value;
+                }
+                return null;
+            }
+            public async Task<Instance?> ReverseLookup(Script Script, Instance Key) {
+                DynInteger FindHashKey = (await Key.TryCallInstanceMethod(Script, "hash")).Integer;
+                foreach (KeyValuePair<Instance, Instance> KVP in Dict) {
+                    DynInteger HashKey = (await KVP.Value.TryCallInstanceMethod(Script, "hash")).Integer;
+                    if (HashKey == FindHashKey) return KVP.Key;
+                }
+                return null;
+            }
+            public async Task Set(Script Script, Instance Key, Instance Value) {
+                DynInteger FindHashKey = (await Key.TryCallInstanceMethod(Script, "hash")).Integer;
+                Instance? RemoveExistingKey = null;
+                foreach (KeyValuePair<Instance, Instance> KVP in Dict) {
+                    DynInteger HashKey = (await KVP.Key.TryCallInstanceMethod(Script, "hash")).Integer;
+                    if (HashKey == FindHashKey) {
+                        RemoveExistingKey = KVP.Key;
+                        break;
+                    }
+                }
+                if (RemoveExistingKey != null) Dict.Remove(RemoveExistingKey);
+                Dict[Key] = Value;
+            }
+        }
         public class Cache<TKey, TValue> where TKey : notnull {
             public const int Limit = 50_000;
             private readonly LockingDictionary<TKey, TValue> CacheDictionary = new();
