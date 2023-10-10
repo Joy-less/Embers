@@ -10,12 +10,12 @@ Its minimalistic design should make Ruby suitable for use in game engines, moddi
 - Easy to embed, sandbox, and control in your C# application or game.
 - Source code is easy to understand, with everything in one place.
 - Each interpreter can have multiple scripts which can each run on their own thread and communicate.
-- Full compatibility with Unity and Godot.
+- Full compatibility with Godot and Unity.
 - Some obsolete functionality, such as numbers starting with 0 being octal integers, is omitted.
 - A great mascot.
 
 ## Drawbacks
-- Less optimised than Ruby. Benchmarks suggest it is several times slower.
+- Less performant than Ruby. Benchmarks suggest it is several times slower.
 - Does not have 100% compatibility with Ruby syntax and functionality.
 
 ## Note
@@ -78,9 +78,9 @@ end
 getc
 puts '\n---'
 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].each do |n|
-    Thread.new {
+    Thread.new do
         print n.to_s + ' '
-    }
+    end
 end
 getc
 puts '\n---'
@@ -105,11 +105,11 @@ MyScript.Evaluate("puts 3.double_number"); // 6
 ```
 ```csharp
 MyInterpreter.Integer.InstanceMethods.Add("catify", MyScript.CreateMethod(async Input => {
-    // Get target string
+    // Get target number
     Instance OnNumber = Input.Instance;
     Instance OnString = await OnNumber.InstanceMethods["to_s"].Call(Input.Script, OnNumber);
     // Catify
-    long CatifyFactor = Input.Arguments[0].Integer;
+    long CatifyFactor = (long)Input.Arguments[0].Integer;
     string CatifiedString = OnString.String;
     for (long i = 0; i < CatifyFactor; i++) {
         CatifiedString += " ~nya";
@@ -161,19 +161,19 @@ Script MyScript = new(MyInterpreter, AllowUnsafeApi: false);
 You can see which APIs can still be accessed in [`Api.cs`](Source/Embers/Api.cs).
 
 ### Serialisation
-If you don't want to parse your code every time it's run, and want it to be obfuscated in memory, you can serialise it ahead of time.
+If you don't want to parse your code every time it's run, or don't want it accessible in memory, you can serialise it ahead of time.
 ```csharp
 Console.WriteLine(Interpreter.Serialise("puts 'Hello there!'"));
 Console.ReadLine();
 ```
 This will output some C# code, which you can then run directly by wrapping it in `MyScript.Interpret(...);`:
 ```csharp
-MyScript.Interpret(new List<Embers.Phase2.Expression>() {new Embers.Phase2.MethodCallExpression(new Embers.Phase2.ObjectTokenExpression(new Embers.Phase2.Phase2Token(new DebugLocation(1, 0), Embers.Phase2.Phase2TokenType.LocalVariableOrMethod, "puts", new Embers.Phase1.Phase1Token(new DebugLocation(1, 0), Embers.Phase1.Phase1TokenType.Identifier, "puts", false, false, false))), new List<Embers.Phase2.Expression>() {new Embers.Phase2.ObjectTokenExpression(new Embers.Phase2.Phase2Token(new DebugLocation(1, 5), Embers.Phase2.Phase2TokenType.String, "Hello there!", new Embers.Phase1.Phase1Token(new DebugLocation(1, 5), Embers.Phase1.Phase1TokenType.String, "Hello there!", true, false, false)))}, null)});
+MyScript.Interpret(new System.Collections.Generic.List<Embers.Phase2.Expression>() {new Embers.Phase2.MethodCallExpression(new Embers.Phase2.ObjectTokenExpression(new Embers.Phase2.Phase2Token(new DebugLocation(1, 0), Embers.Phase2.Phase2TokenType.LocalVariableOrMethod, "puts", new Embers.Phase1.Phase1Token(new DebugLocation(1, 0), Embers.Phase1.Phase1TokenType.Identifier, "puts", false, false, false))), new System.Collections.Generic.List<Embers.Phase2.Expression>() {new Embers.Phase2.ObjectTokenExpression(new Embers.Phase2.Phase2Token(new DebugLocation(1, 5), Embers.Phase2.Phase2TokenType.String, "Hello there!", new Embers.Phase1.Phase1Token(new DebugLocation(1, 5), Embers.Phase1.Phase1TokenType.String, "Hello there!", true, false, false)))}, null)});
 ```
 Please note that pre-parsed code will not be compatible between different versions of Embers. It should be done just before building your project.
 
 ## Game engine support
-Embers is fully compatible with Unity, Godot, and other C# game engines. However, certain methods such as `puts` reference `Console`, which is hidden in Unity and Godot, so you will need to make some changes.
+Embers is fully compatible with Unity, Godot, and other C# game engines. However, certain methods such as `puts` reference `Console`, which is hidden in Godot and Unity, so you will need to make some changes.
 
 For example:
 
