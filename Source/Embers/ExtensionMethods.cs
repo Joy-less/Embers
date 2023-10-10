@@ -97,6 +97,17 @@ namespace Embers
             }
             return ListInspection;
         }
+        public static string InspectHash(this HashDictionary? Hash, string Separator = ", ") {
+            string HashInspection = "";
+            if (Hash != null) {
+                foreach (KeyValuePair<Instance, Instance> Match in Hash.KeyValues) {
+                    if (HashInspection.Length != 0)
+                        HashInspection += Separator;
+                    HashInspection += $"{Match.Key.Inspect()} => {Match.Value.Inspect()}";
+                }
+            }
+            return HashInspection;
+        }
         public static string Serialise<T>(this LockingDictionary<T, T> Dictionary) where T : Phase2Object {
             string Serialised = $"new {typeof(LockingDictionary<T, T>).GetPath()}() {{";
             bool IsFirst = true;
@@ -108,17 +119,6 @@ namespace Embers
             return Serialised + "}";
         }
         public static string Inspect<T>(this LockingDictionary<T, T>? Dictionary, string Separator = ", ") where T : Phase2Object {
-            string DictionaryInspection = "";
-            if (Dictionary != null) {
-                foreach (KeyValuePair<T, T> Object in Dictionary) {
-                    if (DictionaryInspection.Length != 0)
-                        DictionaryInspection += Separator;
-                    DictionaryInspection += $"{Object.Key.Inspect()} => {Object.Value.Inspect()}";
-                }
-            }
-            return DictionaryInspection;
-        }
-        public static string InspectInstances<T>(this LockingDictionary<T, T>? Dictionary, string Separator = ", ") where T : Instance {
             string DictionaryInspection = "";
             if (Dictionary != null) {
                 foreach (KeyValuePair<T, T> Object in Dictionary) {

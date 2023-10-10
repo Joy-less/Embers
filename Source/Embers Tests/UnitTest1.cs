@@ -247,7 +247,7 @@ namespace Embers_Tests
                 a true, 5, 8, ""hi"" => 2.4, ""hey"" => :test
                 return $b, $c
             ", Obj => Obj is ArrayInstance Objs && Objs.Array.Count == 2 && Objs.Array[0] is ArrayInstance Arr && Arr.Array[0].Boolean == true && Arr.Array[1].Integer == new DynInteger(5)
-                && Arr.Array[2].Integer == new DynInteger(8) && Objs.Array[1] is HashInstance Hash && Hash.Hash.Dict.Count == 2);
+                && Arr.Array[2].Integer == new DynInteger(8) && Objs.Array[1] is HashInstance Hash && Hash.Hash.Count == 2);
 
             // Ranges
             AssertEqual(@"

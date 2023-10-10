@@ -53,6 +53,15 @@ p ({:foo => 0, :bar => 1, :baz => 2}).hash == {:baz => 2, :bar => 1}.hash # => f
 
 puts 2.== 2
 puts 2.== 3
+
+p ({:a => :b, :c => :d}).delete :c # :d
+p ({:a => :b, :c => :d}).delete :b # nil
+
+a = [1, 2, 3]
+p a.delete_at 1 # 2
+p a # [1, 3]
+p a.delete 3 # 3
+p a # [1]
                     ")
                 );
                 Console.ReadLine();

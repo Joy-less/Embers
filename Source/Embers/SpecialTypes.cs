@@ -507,42 +507,82 @@ namespace Embers
             }
         }
         public class HashDictionary {
-            public readonly LockingDictionary<Instance, Instance> Dict;
+            private readonly LockingDictionary<DynInteger, HashSet<KeyValuePair<Instance, Instance>>> Dict;
             public HashDictionary() {
                 Dict = new();
             }
-            public HashDictionary(LockingDictionary<Instance, Instance> dict) {
+            public HashDictionary(LockingDictionary<DynInteger, HashSet<KeyValuePair<Instance, Instance>>> dict) {
                 Dict = dict;
             }
             public async Task<Instance?> Lookup(Script Script, Instance Key) {
-                DynInteger FindHashKey = (await Key.TryCallInstanceMethod(Script, "hash")).Integer;
-                foreach (KeyValuePair<Instance, Instance> KVP in Dict) {
-                    DynInteger HashKey = (await KVP.Key.TryCallInstanceMethod(Script, "hash")).Integer;
-                    if (HashKey == FindHashKey) return KVP.Value;
-                }
-                return null;
-            }
-            public async Task<Instance?> ReverseLookup(Script Script, Instance Key) {
-                DynInteger FindHashKey = (await Key.TryCallInstanceMethod(Script, "hash")).Integer;
-                foreach (KeyValuePair<Instance, Instance> KVP in Dict) {
-                    DynInteger HashKey = (await KVP.Value.TryCallInstanceMethod(Script, "hash")).Integer;
-                    if (HashKey == FindHashKey) return KVP.Key;
-                }
-                return null;
-            }
-            public async Task Set(Script Script, Instance Key, Instance Value) {
-                DynInteger FindHashKey = (await Key.TryCallInstanceMethod(Script, "hash")).Integer;
-                Instance? RemoveExistingKey = null;
-                foreach (KeyValuePair<Instance, Instance> KVP in Dict) {
-                    DynInteger HashKey = (await KVP.Key.TryCallInstanceMethod(Script, "hash")).Integer;
-                    if (HashKey == FindHashKey) {
-                        RemoveExistingKey = KVP.Key;
-                        break;
+                DynInteger HashKey = (await Key.TryCallInstanceMethod(Script, "hash")).Integer;
+                if (Dict.TryGetValue(HashKey, out HashSet<KeyValuePair<Instance, Instance>>? Entry)) {
+                    foreach (KeyValuePair<Instance, Instance> Match in Entry) {
+                        if ((await Match.Key.TryCallInstanceMethod(Script, "eql?", Key)).IsTruthy) {
+                            return Match.Value;
+                        }
                     }
                 }
-                if (RemoveExistingKey != null) Dict.Remove(RemoveExistingKey);
-                Dict[Key] = Value;
+                return null;
             }
+            public async Task<Instance?> ReverseLookup(Script Script, Instance Value) {
+                foreach (KeyValuePair<DynInteger, HashSet<KeyValuePair<Instance, Instance>>> Entry in Dict) {
+                    foreach (KeyValuePair<Instance, Instance> Match in Entry.Value) {
+                        if ((await Match.Value.TryCallInstanceMethod(Script, "==", Value)).IsTruthy) {
+                            return Match.Key;
+                        }
+                    }
+                }
+                return null;
+            }
+            public async Task Store(Script Script, Instance Key, Instance Value) {
+                DynInteger HashKey = (await Key.TryCallInstanceMethod(Script, "hash")).Integer;
+                if (!Dict.TryGetValue(HashKey, out HashSet<KeyValuePair<Instance, Instance>>? Entry)) {
+                    Entry = new HashSet<KeyValuePair<Instance, Instance>>();
+                    Dict[HashKey] = Entry;
+                }
+                lock (Entry) Entry.Add(new KeyValuePair<Instance, Instance>(Key, Value));
+            }
+            public async Task<Instance?> Remove(Script Script, Instance Key) {
+                DynInteger HashKey = (await Key.TryCallInstanceMethod(Script, "hash")).Integer;
+                if (Dict.TryGetValue(HashKey, out HashSet<KeyValuePair<Instance, Instance>>? Entry)) {
+                    foreach (KeyValuePair<Instance, Instance> Match in Entry) {
+                        if ((await Match.Key.TryCallInstanceMethod(Script, "eql?", Key)).IsTruthy) {
+                            lock (Entry) Entry.Remove(Match);
+                            return Match.Value;
+                        }
+                    }
+                }
+                return null;
+            }
+            public List<KeyValuePair<Instance, Instance>> KeyValues { get {
+                List<KeyValuePair<Instance, Instance>> KeyValues = new();
+                foreach (HashSet<KeyValuePair<Instance, Instance>> Entry in Dict.Values) {
+                    foreach (KeyValuePair<Instance, Instance> Match in Entry) {
+                        KeyValues.Add(Match);
+                    }
+                }
+                return KeyValues;
+            } }
+            public List<Instance> Keys { get {
+                List<Instance> Keys = new();
+                foreach (HashSet<KeyValuePair<Instance, Instance>> Entry in Dict.Values) {
+                    foreach (KeyValuePair<Instance, Instance> Match in Entry) {
+                        Keys.Add(Match.Key);
+                    }
+                }
+                return Keys;
+            } }
+            public List<Instance> Values { get {
+                List<Instance> Values = new();
+                foreach (HashSet<KeyValuePair<Instance, Instance>> Entry in Dict.Values) {
+                    foreach (KeyValuePair<Instance, Instance> Match in Entry) {
+                        Values.Add(Match.Value);
+                    }
+                }
+                return Values;
+            } }
+            public int Count => KeyValues.Count;
         }
         public class Cache<TKey, TValue> where TKey : notnull {
             public const int Limit = 50_000;

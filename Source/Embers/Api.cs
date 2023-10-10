@@ -205,6 +205,8 @@ namespace Embers
             Interpreter.Array.InstanceMethods["sort"] = Script.CreateMethod(Array.sort, 0);
             Interpreter.Array.InstanceMethods["sort!"] = Script.CreateMethod(Array.sort1, 0);
             Interpreter.Array.InstanceMethods["include?", "includes?", "contain?", "contains?"] = Script.CreateMethod(Array.include7, 1);
+            Interpreter.Array.InstanceMethods["delete", "remove"] = Script.CreateMethod(Array.delete, 1);
+            Interpreter.Array.InstanceMethods["delete_at", "remove_at"] = Script.CreateMethod(Array.delete_at, 1);
             Interpreter.Array.InstanceMethods["empty?"] = Script.CreateMethod(Array.empty7, 0);
             Interpreter.Array.InstanceMethods["reverse"] = Script.CreateMethod(Array.reverse, 0);
             Interpreter.Array.InstanceMethods["reverse!"] = Script.CreateMethod(Array.reverse1, 0);
@@ -218,6 +220,7 @@ namespace Embers
             Interpreter.Hash.InstanceMethods["has_value?"] = Script.CreateMethod(Hash.has_value7, 1);
             Interpreter.Hash.InstanceMethods["keys"] = Script.CreateMethod(Hash.keys, 0);
             Interpreter.Hash.InstanceMethods["values"] = Script.CreateMethod(Hash.values, 0);
+            Interpreter.Hash.InstanceMethods["delete", "remove"] = Script.CreateMethod(Hash.delete, 1);
             Interpreter.Hash.InstanceMethods["each"] = Script.CreateMethod(Hash.each, 0);
             Interpreter.Hash.InstanceMethods["invert"] = Script.CreateMethod(Hash.invert, 0);
             Interpreter.Hash.InstanceMethods["to_a"] = Script.CreateMethod(Hash.to_a, 0);
@@ -1731,6 +1734,36 @@ namespace Embers
                 }
                 return Input.Interpreter.False;
             }
+            public static async Task<Instance> delete(MethodInput Input) {
+                List<Instance> Array = Input.Instance.Array;
+                Instance DeleteItem = Input.Arguments[0];
+                Instance LastDeletedItem = Input.Interpreter.Nil;
+                for (int i = 0; i < Array.Count; i++) {
+                    Instance Item = Array[i];
+                    if ((await Item.TryCallInstanceMethod(Input.Script, "==", DeleteItem)).IsTruthy) {
+                        Array.RemoveAt(i);
+                        LastDeletedItem = Item;
+                    }
+                }
+                return LastDeletedItem;
+            }
+            public static async Task<Instance> delete_at(MethodInput Input) {
+                List<Instance> Array = Input.Instance.Array;
+                int DeleteIndex = _RealisticIndex(Input, Input.Arguments[0].Integer);
+                if (DeleteIndex >= 0 && DeleteIndex < Array.Count) {
+                    Instance RemovedItem = Array[DeleteIndex];
+                    Array.RemoveAt(DeleteIndex);
+                    return RemovedItem;
+                }
+                else if (DeleteIndex < 0 && DeleteIndex > -Array.Count) {
+                    Instance RemovedItem = Array[^-DeleteIndex];
+                    Array.RemoveAt(Array.Count - DeleteIndex);
+                    return RemovedItem;
+                }
+                else {
+                    return Input.Interpreter.Nil;
+                }
+            }
             public static async Task<Instance> empty7(MethodInput Input) {
                 return Input.Instance.Array.Count == 0 ? Input.Interpreter.True : Input.Interpreter.False;
             }
@@ -1765,16 +1798,16 @@ namespace Embers
                 Instance Key = Input.Arguments[0];
                 Instance Value = Input.Arguments[1];
 
-                // Set value
-                await Hash.Set(Input.Script, Key, Value);
+                // Store value
+                await Hash.Store(Input.Script, Key, Value);
                 return Value;
             }
             public static async Task<Instance> _Equals(MethodInput Input) {
                 Instance Left = Input.Instance;
                 Instance Right = Input.Arguments[0];
                 if (Right is HashInstance) {
-                    foreach (KeyValuePair<Instance, Instance> LeftKeyValue in Left.Hash.Dict) {
-                        foreach (KeyValuePair<Instance, Instance> RightKeyValue in Right.Hash.Dict) {
+                    foreach (KeyValuePair<Instance, Instance> LeftKeyValue in Left.Hash.KeyValues) {
+                        foreach (KeyValuePair<Instance, Instance> RightKeyValue in Right.Hash.KeyValues) {
                             bool KeysEqual = (await LeftKeyValue.Key.TryCallInstanceMethod(Input.Script, "==", RightKeyValue.Key)).IsTruthy;
                             if (!KeysEqual) return Input.Interpreter.False;
                             bool ValuesEqual = (await LeftKeyValue.Value.TryCallInstanceMethod(Input.Script, "==", RightKeyValue.Value)).IsTruthy;
@@ -1804,26 +1837,31 @@ namespace Embers
                 return Found != null ? Input.Interpreter.True : Input.Interpreter.False;
             }
             public static async Task<Instance> keys(MethodInput Input) {
-                return new ArrayInstance(Input.Interpreter.Array, Input.Instance.Hash.Dict.Keys.ToList());
+                return new ArrayInstance(Input.Interpreter.Array, Input.Instance.Hash.Keys);
             }
             public static async Task<Instance> values(MethodInput Input) {
-                return new ArrayInstance(Input.Interpreter.Array, Input.Instance.Hash.Dict.Values.ToList());
+                return new ArrayInstance(Input.Interpreter.Array, Input.Instance.Hash.Values);
+            }
+            public static async Task<Instance> delete(MethodInput Input) {
+                HashDictionary Hash = Input.Instance.Hash;
+                Instance Key = Input.Arguments[0];
+                return await Hash.Remove(Input.Script, Key) ?? Input.Interpreter.Nil;
             }
             public static async Task<Instance> each(MethodInput Input) {
                 if (Input.OnYield != null) {
                     HashDictionary Hash = Input.Instance.Hash;
                     
                     int TakesArguments = Input.OnYield.ArgumentNames.Count;
-                    for (int i = 0; i < Hash.Dict.Keys.Count; i++) {
-                        Instance Key = Hash.Dict.Keys.ElementAt(i);
+                    foreach (KeyValuePair<Instance, Instance> Match in Hash.KeyValues) {
+                        Redo:
                         try {
                             // x.each do |key, value|
                             if (TakesArguments == 2) {
-                                await Input.OnYield.Call(Input.Script, null, new List<Instance>() {Key, (await Hash.Lookup(Input.Script, Key))!}, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                await Input.OnYield.Call(Input.Script, null, new List<Instance>() {Match.Key, Match.Value}, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.each do |key|
                             else if (TakesArguments == 1) {
-                                await Input.OnYield.Call(Input.Script, null, Key, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                await Input.OnYield.Call(Input.Script, null, Match.Key, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.each do
                             else {
@@ -1834,8 +1872,7 @@ namespace Embers
                             break;
                         }
                         catch (RedoException) {
-                            i--;
-                            continue;
+                            goto Redo;
                         }
                         catch (NextException) {
                             continue;
@@ -1849,12 +1886,15 @@ namespace Embers
             }
             public static async Task<Instance> invert(MethodInput Input) {
                 HashInstance Hash = (HashInstance)Input.Instance;
-                LockingDictionary<Instance, Instance> Inverted = Hash.Hash.Dict.ToLockingDictionary(KV => KV.Value, KV => KV.Key);
-                return new HashInstance(Input.Interpreter.Hash, new HashDictionary(Inverted), Hash.DefaultValue);
+                HashDictionary Inverted = new();
+                foreach (KeyValuePair<Instance, Instance> Match in Hash.Hash.KeyValues) {
+                    await Inverted.Store(Input.Script, Match.Value, Match.Key);
+                }
+                return new HashInstance(Input.Interpreter.Hash, Inverted, Hash.DefaultValue);
             }
             public static async Task<Instance> to_a(MethodInput Input) {
                 List<Instance> Array = new();
-                foreach (KeyValuePair<Instance, Instance> Item in Input.Instance.Hash.Dict) {
+                foreach (KeyValuePair<Instance, Instance> Item in Input.Instance.Hash.KeyValues) {
                     Array.Add(new ArrayInstance(Input.Interpreter.Array, new List<Instance>() { Item.Key, Item.Value }));
                 }
                 return new ArrayInstance(Input.Interpreter.Array, Array);
@@ -1863,7 +1903,7 @@ namespace Embers
                 return Input.Instance;
             }
             public static async Task<Instance> empty7(MethodInput Input) {
-                return Input.Instance.Hash.Dict.Count == 0 ? Input.Interpreter.True : Input.Interpreter.False;
+                return Input.Instance.Hash.Count == 0 ? Input.Interpreter.True : Input.Interpreter.False;
             }
         }
         static class _Random {

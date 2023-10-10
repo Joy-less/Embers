@@ -508,7 +508,7 @@ namespace Embers
             public override object? Object { get { return Value; } }
             public override HashDictionary Hash { get { return Value; } }
             public override string Inspect() {
-                return $"{{{Value.Dict.InspectInstances()}}}";
+                return $"{{{Value.InspectHash()}}}";
             }
             public HashInstance(Class fromClass, HashDictionary value, Instance defaultValue) : base(fromClass) {
                 Value = value;
@@ -524,7 +524,7 @@ namespace Embers
             public override int GetHashCode() {
                 unchecked {
                     int CurrentHash = 0;
-                    foreach (KeyValuePair<Instance, Instance> Item in Value.Dict) {
+                    foreach (KeyValuePair<Instance, Instance> Item in Value.KeyValues) {
                         CurrentHash ^= Item.Key.GetHashCode() ^ Item.Value.GetHashCode();
                     }
                     return CurrentHash;
@@ -1354,7 +1354,7 @@ namespace Embers
         async Task<HashInstance> InterpretHashExpression(HashExpression HashExpression) {
             HashDictionary Items = new();
             foreach (KeyValuePair<Expression, Expression> Item in HashExpression.Expressions) {
-                await Items.Set(this, await InterpretExpressionAsync(Item.Key), await InterpretExpressionAsync(Item.Value));
+                await Items.Store(this, await InterpretExpressionAsync(Item.Key), await InterpretExpressionAsync(Item.Value));
             }
             return new HashInstance(Interpreter.Hash, Items, Interpreter.Nil);
         }

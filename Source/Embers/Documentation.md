@@ -285,6 +285,12 @@ array.sort {|a, b|} | array.sort! {|item|}
 array.include?(item) | array.includes?(item) | array.contain?(item) | array.contains?(item)
 	Returns true if the array contains the item.
 
+array.delete(item) | array.remove(item)
+	Removes each item from the array that is equal to the item and returns the last item found.
+
+array.delete_at(index) | array.remove_at(index)
+	Removes and returns the item from the array at the index if found, otherwise returns nil.
+
 array.empty?
 	Returns true if the array contains no items.
 
@@ -306,6 +312,9 @@ hash.keys
 
 hash.values
 	Returns an array of the values in the hash.
+
+hash.delete(key) | hash.remove(key)
+	Removes the key-value pair from the hash if found and returns the value or nil.
 
 hash.each {|key, value|}
 	Repeats the given block for each key-value pair in the hash.
