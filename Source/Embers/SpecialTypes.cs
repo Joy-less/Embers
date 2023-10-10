@@ -539,7 +539,7 @@ namespace Embers
                 DynInteger HashKey = (await Key.TryCallInstanceMethod(Script, "hash")).Integer;
                 if (!Dict.TryGetValue(HashKey, out HashSet<KeyValuePair<Instance, Instance>>? Entry)) {
                     Entry = new HashSet<KeyValuePair<Instance, Instance>>();
-                    Dict[HashKey] = Entry;
+                    lock (Dict) Dict[HashKey] = Entry;
                 }
                 lock (Entry) Entry.Add(new KeyValuePair<Instance, Instance>(Key, Value));
             }
