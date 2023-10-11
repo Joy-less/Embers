@@ -266,6 +266,7 @@ namespace Embers
             MathModule.Methods["lgamma"] = Script.CreateMethod(_Math.lgamma, 1);
             MathModule.Methods["to_rad"] = Script.CreateMethod(_Math.to_rad, 1);
             MathModule.Methods["to_deg"] = Script.CreateMethod(_Math.to_deg, 1);
+            MathModule.Methods["lerp"] = Script.CreateMethod(_Math.lerp, 3);
 
             // Exception
             Interpreter.Exception.InstanceMethods["initialize"] = Script.CreateMethod(_Exception.initialize, 0..1);
@@ -1934,7 +1935,7 @@ namespace Embers
                 }
                 // Float random
                 else {
-                    double IncludingMin = 0;
+                    const double IncludingMin = 0;
                     double ExcludingMax;
                     if (Input.Arguments.Count == 0) {
                         ExcludingMax = 1;
@@ -2070,17 +2071,15 @@ namespace Embers
                 // From https://www.johndcook.com/blog/csharp_erf
 
                 // constants
-                double a1 = 0.254829592;
-                double a2 = -0.284496736;
-                double a3 = 1.421413741;
-                double a4 = -1.453152027;
-                double a5 = 1.061405429;
-                double p = 0.3275911;
+                const double a1 = 0.254829592;
+                const double a2 = -0.284496736;
+                const double a3 = 1.421413741;
+                const double a4 = -1.453152027;
+                const double a5 = 1.061405429;
+                const double p = 0.3275911;
 
                 // Save the sign of x
-                int sign = 1;
-                if (x < 0)
-                    sign = -1;
+                int sign = x >= 0 ? 1 : -1;
                 x = Math.Abs(x);
 
                 // A&S formula 7.1.26
@@ -2129,6 +2128,12 @@ namespace Embers
             public static async Task<Instance> to_deg(MethodInput Input) {
                 double Radians = (double)Input.Arguments[0].Float;
                 return Input.Interpreter.GetFloat(Radians / (Math.PI / 180));
+            }
+            public static async Task<Instance> lerp(MethodInput Input) {
+                DynFloat A = Input.Arguments[0].Float;
+                DynFloat B = Input.Arguments[1].Float;
+                DynFloat T = Input.Arguments[2].Float;
+                return Input.Interpreter.GetFloat(A * (1 - T) + (B * T));
             }
         }
         static class _Exception {

@@ -17,6 +17,8 @@ my_arr = [1, 2, 3]
 alias my_arr.explode my_arr.clear
 my_arr.explode
 p my_arr
+
+puts Math.lerp(3, 5, 0.2) # 3.4
                     ")
                 );
                 Console.ReadLine();

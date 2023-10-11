@@ -356,6 +356,9 @@ Math.to_rad(degrees)
 Math.to_deg(radians)
 	Returns the radians in degrees.
 
+Math.lerp(a, b, t)
+	Returns the linear value between a and b at the ratio t.
+
 Math.sin, Math.cos, Math.tan, Math.asin, Math.acos, Math.atan, Math.atan2, Math.sinh, Math.cosh, Math.tanh, Math.asinh, Math.acosh,
 Math.atanh, Math.exp, Math.log, Math.log10, Math.log2, Math.frexp, Math.ldexp, Math.hypot, Math.erf, Math.erfc, Math.gamma, Math.lgamma
 	Various nerdy maths methods. Math.erf, Math.erfc, Math.gamma and Math.lgamma are only approximations.
