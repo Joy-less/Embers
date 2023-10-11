@@ -1562,24 +1562,25 @@ namespace Embers
             throw new RuntimeException($"{SuperStatement.Location}: No super method '{SuperMethodName}' to call");
         }
         async Task<Instance> InterpretAliasStatement(AliasStatement AliasStatement) {
-            Instance MethodToAlias = await InterpretExpressionAsync(AliasStatement.MethodToAlias, ReturnType.FoundVariable);
-            if (MethodToAlias is VariableReference MethodToAliasRef) {
-                // Get methods dictionary
-                ReactiveDictionary<string, Method> Methods;
-                if (MethodToAliasRef.Instance != null) {
-                    Methods = MethodToAliasRef.Instance!.InstanceMethods;
-                }
-                else if (MethodToAliasRef.Module != null) {
-                    Methods = MethodToAliasRef.Module!.Methods;
+            Instance MethodAlias = await InterpretExpressionAsync(AliasStatement.AliasAs, ReturnType.HypotheticalVariable);
+            if (MethodAlias is VariableReference MethodAliasRef) {
+                Instance MethodOrigin = await InterpretExpressionAsync(AliasStatement.MethodToAlias, ReturnType.FoundVariable);
+                if (MethodOrigin is VariableReference MethodOriginRef) {
+                    // Get target methods dictionary
+                    ReactiveDictionary<string, Method> TargetMethods = MethodAliasRef.Instance != null ? MethodAliasRef.Instance.InstanceMethods
+                        : (MethodAliasRef.Module != null ? MethodAliasRef.Module.Methods : CurrentInstance.InstanceMethods);
+                    // Get origin methods dictionary
+                    ReactiveDictionary<string, Method> OriginMethods = MethodOriginRef.Instance != null ? MethodOriginRef.Instance.InstanceMethods
+                        : (MethodOriginRef.Module != null ? MethodOriginRef.Module.Methods : CurrentInstance.InstanceMethods);
+                    // Create alias for method
+                    TargetMethods[AliasStatement.AliasAs.Token.Value!] = OriginMethods[MethodOriginRef.Token.Value!];
                 }
                 else {
-                    Methods = CurrentInstance.InstanceMethods;
+                    throw new SyntaxErrorException($"{AliasStatement.Location}: Expected method to alias, got '{MethodOrigin.Inspect()}'");
                 }
-                // Add alias for method
-                Methods[AliasStatement.AliasAs.Token.Value!] = Methods[MethodToAliasRef.Token.Value!];
             }
             else {
-                throw new SyntaxErrorException($"{AliasStatement.Location}: Expected method to alias, got '{MethodToAlias.Inspect()}'");
+                throw new SyntaxErrorException($"{AliasStatement.Location}: Expected method alias, got '{MethodAlias.Inspect()}'");
             }
             return Interpreter.Nil;
         }

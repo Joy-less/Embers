@@ -13,61 +13,10 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() =>
                     Script.Evaluate(@"
-puts ""Hello World"".hash
-puts ""Hello World"".hash
-puts ""Hello World 2"".hash
-puts ""Hello World 2"".hash
-puts ""Hello World"".object_id
-puts ""Hello World"".object_id
-
-class A
-    def ==(value)
-        true
-    end
-end
-class B
-    
-end
-
-z = A.new
-b = {z => 1, B.new => 2}
-
-p b[B.new]
-p b[z]
-p ({'a' => 2})['a']
-
-p [1.0.eql?(1.0), 1.0.eql? 1]
-
-puts '---'
-p [0, 1, 2].hash
-p [0, 1, 2].hash
-p [0, 1, 2].hash == [0, 1, 2].hash # => true
-p [0, 1, 2].hash == [0, 1, 3].hash # => false
-
-puts '---'
-p ({:foo => 0, :bar => 1, :baz => 2}).hash
-p ({:foo => 0, :bar => 1, :baz => 2}).hash
-p ({:foo => 0, :bar => 1, :baz => 2}).hash == {:foo => 0, :bar => 1, :baz => 2}.hash # => true
-p ({:foo => 0, :bar => 1, :baz => 2}).hash == {:baz => 2, :bar => 1, :foo => 0}.hash # => true
-p ({:foo => 0, :bar => 1, :baz => 2}).hash == {:baz => 2, :bar => 1}.hash # => false
-
-puts 2.== 2
-puts 2.== 3
-
-p ({:a => :b, :c => :d}).delete :c # :d
-p ({:a => :b, :c => :d}).delete :b # nil
-
-a = [1, 2, 3]
-p a.delete_at 1 # 2
-p a # [1, 3]
-p a.delete 3 # 3
-p a # [1]
-
-arr = [1, 2]
-hash = {1 => 2, 3 => 4}
-arr.clear
-hash.clear
-p arr, hash
+my_arr = [1, 2, 3]
+alias my_arr.explode my_arr.clear
+my_arr.explode
+p my_arr
                     ")
                 );
                 Console.ReadLine();
