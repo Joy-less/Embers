@@ -62,6 +62,12 @@ p a.delete_at 1 # 2
 p a # [1, 3]
 p a.delete 3 # 3
 p a # [1]
+
+arr = [1, 2]
+hash = {1 => 2, 3 => 4}
+arr.clear
+hash.clear
+p arr, hash
                     ")
                 );
                 Console.ReadLine();

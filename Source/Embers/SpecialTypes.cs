@@ -555,6 +555,9 @@ namespace Embers
                 }
                 return null;
             }
+            public void Clear() {
+                lock (Dict) Dict.Clear();
+            }
             public List<KeyValuePair<Instance, Instance>> KeyValues { get {
                 List<KeyValuePair<Instance, Instance>> KeyValues = new();
                 foreach (HashSet<KeyValuePair<Instance, Instance>> Entry in Dict.Values) {

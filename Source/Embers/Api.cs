@@ -207,6 +207,7 @@ namespace Embers
             Interpreter.Array.InstanceMethods["include?", "includes?", "contain?", "contains?"] = Script.CreateMethod(Array.include7, 1);
             Interpreter.Array.InstanceMethods["delete", "remove"] = Script.CreateMethod(Array.delete, 1);
             Interpreter.Array.InstanceMethods["delete_at", "remove_at"] = Script.CreateMethod(Array.delete_at, 1);
+            Interpreter.Array.InstanceMethods["clear"] = Script.CreateMethod(Array.clear, 0);
             Interpreter.Array.InstanceMethods["empty?"] = Script.CreateMethod(Array.empty7, 0);
             Interpreter.Array.InstanceMethods["reverse"] = Script.CreateMethod(Array.reverse, 0);
             Interpreter.Array.InstanceMethods["reverse!"] = Script.CreateMethod(Array.reverse1, 0);
@@ -221,6 +222,7 @@ namespace Embers
             Interpreter.Hash.InstanceMethods["keys"] = Script.CreateMethod(Hash.keys, 0);
             Interpreter.Hash.InstanceMethods["values"] = Script.CreateMethod(Hash.values, 0);
             Interpreter.Hash.InstanceMethods["delete", "remove"] = Script.CreateMethod(Hash.delete, 1);
+            Interpreter.Hash.InstanceMethods["clear"] = Script.CreateMethod(Hash.clear, 0);
             Interpreter.Hash.InstanceMethods["each"] = Script.CreateMethod(Hash.each, 0);
             Interpreter.Hash.InstanceMethods["invert"] = Script.CreateMethod(Hash.invert, 0);
             Interpreter.Hash.InstanceMethods["to_a"] = Script.CreateMethod(Hash.to_a, 0);
@@ -1764,6 +1766,10 @@ namespace Embers
                     return Input.Interpreter.Nil;
                 }
             }
+            public static async Task<Instance> clear(MethodInput Input) {
+                Input.Instance.Array.Clear();
+                return Input.Interpreter.Nil;
+            }
             public static async Task<Instance> empty7(MethodInput Input) {
                 return Input.Instance.Array.Count == 0 ? Input.Interpreter.True : Input.Interpreter.False;
             }
@@ -1846,6 +1852,10 @@ namespace Embers
                 HashDictionary Hash = Input.Instance.Hash;
                 Instance Key = Input.Arguments[0];
                 return await Hash.Remove(Input.Script, Key) ?? Input.Interpreter.Nil;
+            }
+            public static async Task<Instance> clear(MethodInput Input) {
+                Input.Instance.Hash.Clear();
+                return Input.Interpreter.Nil;
             }
             public static async Task<Instance> each(MethodInput Input) {
                 if (Input.OnYield != null) {

@@ -288,6 +288,9 @@ array.include?(item) | array.includes?(item) | array.contain?(item) | array.cont
 array.delete(item) | array.remove(item)
 	Removes each item from the array that is equal to the item and returns the last item found.
 
+array.clear
+	Removes every item from the array.
+
 array.delete_at(index) | array.remove_at(index)
 	Removes and returns the item from the array at the index if found, otherwise returns nil.
 
@@ -315,6 +318,9 @@ hash.values
 
 hash.delete(key) | hash.remove(key)
 	Removes the key-value pair from the hash if found and returns the value or nil.
+
+hash.clear
+	Removes every key-value pair from the hash.
 
 hash.each {|key, value|}
 	Repeats the given block for each key-value pair in the hash.
