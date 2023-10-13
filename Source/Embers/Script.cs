@@ -27,11 +27,9 @@ namespace Embers
         Instance CurrentInstance => (Instance)CurrentObject.First(obj => obj is Instance);
 
         public AccessModifier CurrentAccessModifier = AccessModifier.Public;
-
-        Method? CurrentOnYield;
-
+        private Method? CurrentOnYield;
         internal readonly ConditionalWeakTable<Exception, ExceptionInstance> ExceptionsTable = new();
-        public int ThreadCount { get; private set; }
+        public readonly HashSet<ScriptThread> ScriptThreads = new();
 
         public Instance CreateInstanceWithNew(Class Class) {
             if (Class.InheritsFrom(Interpreter.NilClass))
@@ -390,49 +388,43 @@ namespace Embers
             }
         }
         public class ScriptThread {
-            public ThreadPhase Phase { get; private set; }
-            public readonly Script FromScript;
+            public Task? Running { get; private set; }
+            public readonly Script ParentScript;
             public readonly Script ThreadScript;
             public Method? Method;
-            public ScriptThread(Script fromScript) {
-                FromScript = fromScript;
-                ThreadScript = new Script(FromScript.Interpreter, FromScript.AllowUnsafeApi);
-                Phase = ThreadPhase.Idle;
+            private static readonly TimeSpan ShortTimeSpan = TimeSpan.FromMilliseconds(5);
+            public ScriptThread(Script parentScript) {
+                ParentScript = parentScript;
+                ThreadScript = new Script(ParentScript.Interpreter, ParentScript.AllowUnsafeApi);
             }
             public async Task Run(Instances? Arguments = null, Method? OnYield = null) {
                 // If already running, wait until it's finished
-                if (Phase != ThreadPhase.Idle) {
-                    while (Phase != ThreadPhase.Completed)
-                        await Task.Delay(10);
+                if (Running != null) {
+                    await Running;
                     return;
                 }
-                // Increase thread counter
-                FromScript.ThreadCount++;
+                // Add thread to running threads
+                lock (ParentScript.ScriptThreads)
+                    ParentScript.ScriptThreads.Add(this);
                 try {
                     // Create a new script
-                    ThreadScript.CurrentObject = new Stack<object>(FromScript.CurrentObject);
-                    Phase = ThreadPhase.Running;
+                    ThreadScript.CurrentObject = new Stack<object>(ParentScript.CurrentObject);
                     // Call the method in the script
-                    Task CallTask = Method!.Call(ThreadScript, null, Arguments, OnYield);
-                    while (!ThreadScript.Stopping && !FromScript.Stopping && !CallTask.IsCompleted) {
-                        await Task.Delay(10);
+                    Running = Method!.Call(ThreadScript, null, Arguments, OnYield);
+                    while (!ThreadScript.Stopping && !ParentScript.Stopping && !Running.IsCompleted) {
+                        await Running.WaitAsync(ShortTimeSpan);
                     }
                     // Stop the script
                     ThreadScript.Stop();
-                    Phase = ThreadPhase.Completed;
                 }
                 finally {
                     // Decrease thread counter
-                    FromScript.ThreadCount--;
+                    lock (ParentScript.ScriptThreads)
+                        ParentScript.ScriptThreads.Remove(this);
                 }
             }
             public void Stop() {
                 ThreadScript.Stop();
-            }
-            public enum ThreadPhase {
-                Idle,
-                Running,
-                Completed
             }
         }
         public class RangeInstance : Instance {
@@ -2046,8 +2038,10 @@ namespace Embers
             return EvaluateAsync(Code).Result;
         }
         public async Task WaitForThreadsAsync() {
-            while (ThreadCount > 0)
-                await Task.Delay(10);
+            HashSet<ScriptThread> CurrentScriptThreads = new(ScriptThreads);
+            foreach (ScriptThread ScriptThread in CurrentScriptThreads)
+                if (ScriptThread.Running != null)
+                    await ScriptThread.Running;
         }
         public void WaitForThreads() {
             WaitForThreadsAsync().Wait();

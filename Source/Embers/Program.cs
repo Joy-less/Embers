@@ -19,6 +19,12 @@ my_arr.explode
 p my_arr
 
 puts Math.lerp(3, 5, 0.2) # 3.4
+
+a = Time.now.to_f
+10000.times do
+    Thread.new {1 + 2}.join
+end
+puts Time.now.to_f - a
                     ")
                 );
                 Console.ReadLine();
