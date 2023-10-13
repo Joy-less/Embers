@@ -172,7 +172,7 @@ string.gsub(replace, with) | string.gsub!(replace, with)
 	Returns the string where all instances of replace are replaced with with.
 
 string.eql?(other)
-	Returns true if other is a string and has the same contents.
+	Returns true if other is a string that has the same contents.
 ```
 ```
 integer.to_i
