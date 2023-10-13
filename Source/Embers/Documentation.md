@@ -404,6 +404,13 @@ time.to_f
 	Returns the amount of seconds since the epoch as a float.
 ```
 ```
+WeakRef.new(object)
+	Creates a weak reference to the object which can be used exactly like it, but will not prevent it from being garbage collected.
+
+weakref.weakref_alive?
+	Returns false if the object has been garbage collected.
+```
+```
 __LINE__
 	Returns the current script line as an integer.
 

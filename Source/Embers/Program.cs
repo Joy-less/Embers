@@ -26,10 +26,17 @@ class Test
   def initialize
   end
   def test_test
-    puts ""test""
+    5
   end
 end
-Test.new.initialize
+
+b = WeakRef.new(Test.new)
+z = ['a', 'b', 'c']
+while true
+    z *= 2
+    sleep 0.1
+    puts b.weakref_alive?
+end
                     ")
                 );
                 Console.ReadLine();

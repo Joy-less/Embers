@@ -36,6 +36,7 @@ namespace Embers
         public readonly Class RuntimeError;
         public readonly Class Thread;
         public readonly Class Time;
+        public readonly Class WeakRef;
 
         public readonly NilInstance Nil;
         public readonly TrueInstance True;
@@ -88,6 +89,7 @@ namespace Embers
             RuntimeError = MainScript.CreateClass("RuntimeError", InheritsFrom: StandardError);
             Thread = MainScript.CreateClass("Thread");
             Time = MainScript.CreateClass("Time");
+            WeakRef = MainScript.CreateClass("WeakRef");
 
             RandomSeed = InternalRandom.NextInt64();
             Random = new Random(RandomSeed.GetHashCode());

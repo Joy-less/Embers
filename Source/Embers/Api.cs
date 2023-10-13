@@ -290,6 +290,11 @@ namespace Embers
             Interpreter.Time.InstanceMethods["to_i"] = Script.CreateMethod(Time.to_i, 0);
             Interpreter.Time.InstanceMethods["to_f"] = Script.CreateMethod(Time.to_f, 0);
 
+            // WeakRef
+            Interpreter.WeakRef.InstanceMethods["initialize"] = Script.CreateMethod(WeakRef.initialize, 1);
+            Interpreter.WeakRef.InstanceMethods["method_missing"] = Script.CreateMethod(WeakRef.method_missing, null);
+            Interpreter.WeakRef.InstanceMethods["weakref_alive?"] = Script.CreateMethod(WeakRef.weakref_alive7, 0);
+
             //
             // UNSAFE APIS
             //
@@ -2284,6 +2289,27 @@ namespace Embers
                 Time = Time.AddSeconds(Seconds - TruncatedSeconds);
 
                 return new TimeInstance(Input.Interpreter.Time, Time);
+            }
+        }
+        static class WeakRef {
+            public static async Task<Instance> initialize(MethodInput Input) {
+                ((WeakRefInstance)Input.Instance).SetValue(new WeakReference<Instance>(Input.Arguments[0]));
+                return Input.Interpreter.Nil;
+            }
+            public static async Task<Instance> method_missing(MethodInput Input) {
+                WeakRefInstance WeakRef = (WeakRefInstance)Input.Instance;
+                string MethodName = Input.Arguments[0].String;
+                Instances Arguments = Input.Arguments.MultiInstance.GetIndexRange(1);
+                if (WeakRef.WeakRef.TryGetTarget(out Instance? Target)) {
+                    return await Target.CallInstanceMethod(Input.Script, MethodName, Arguments, Input.OnYield);
+                }
+                else {
+                    throw new RuntimeException($"{Input.Location}: Cannot call method on WeakRef because it is dead");
+                }
+            }
+            public static async Task<Instance> weakref_alive7(MethodInput Input) {
+                WeakRefInstance WeakRef = (WeakRefInstance)Input.Instance;
+                return WeakRef.WeakRef.TryGetTarget(out _) ? Input.Interpreter.True : Input.Interpreter.False;
             }
         }
         static class Net {

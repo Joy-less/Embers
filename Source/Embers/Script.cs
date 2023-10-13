@@ -60,6 +60,8 @@ namespace Embers
                 return new ThreadInstance(Class, this);
             else if (Class.InheritsFrom(Interpreter.Time))
                 return new TimeInstance(Class, new DateTime());
+            else if (Class.InheritsFrom(Interpreter.WeakRef))
+                return new WeakRefInstance(Class, new WeakReference<Instance>(Interpreter.Nil));
             else
                 return new Instance(Class);
         }
@@ -178,23 +180,25 @@ namespace Embers
             }
         }
         public class Instance {
-            public readonly Module? Module; // Will be null if instance is a pseudoinstance
+            /// <summary>Module will be null if instance is a PseudoInstance.</summary>
+            public readonly Module? Module;
             public long ObjectId { get; private set; }
             public ReactiveDictionary<string, Instance> InstanceVariables { get; protected set; } = new();
             public ReactiveDictionary<string, Method> InstanceMethods { get; protected set; } = new();
             public bool IsTruthy => Object is not (null or false);
             public virtual object? Object { get { return null; } }
-            public virtual bool Boolean { get { throw new RuntimeException("Instance is not a boolean"); } }
-            public virtual string String { get { throw new RuntimeException("Instance is not a string"); } }
-            public virtual DynInteger Integer { get { throw new RuntimeException("Instance is not an integer"); } }
-            public virtual DynFloat Float { get { throw new RuntimeException("Instance is not a float"); } }
-            public virtual Method Proc { get { throw new RuntimeException("Instance is not a proc"); } }
-            public virtual ScriptThread? Thread { get { throw new RuntimeException("Instance is not a thread"); } }
-            public virtual IntegerRange Range { get { throw new RuntimeException("Instance is not a range"); } }
-            public virtual List<Instance> Array { get { throw new RuntimeException("Instance is not an array"); } }
-            public virtual HashDictionary Hash { get { throw new RuntimeException("Instance is not a hash"); } }
-            public virtual Exception Exception { get { throw new RuntimeException("Instance is not an exception"); } }
-            public virtual DateTimeOffset Time { get { throw new RuntimeException("Instance is not a time"); } }
+            public virtual bool Boolean { get { throw new RuntimeException("Instance is not a Boolean"); } }
+            public virtual string String { get { throw new RuntimeException("Instance is not a String"); } }
+            public virtual DynInteger Integer { get { throw new RuntimeException("Instance is not an Integer"); } }
+            public virtual DynFloat Float { get { throw new RuntimeException("Instance is not a Float"); } }
+            public virtual Method Proc { get { throw new RuntimeException("Instance is not a Proc"); } }
+            public virtual ScriptThread? Thread { get { throw new RuntimeException("Instance is not a Thread"); } }
+            public virtual IntegerRange Range { get { throw new RuntimeException("Instance is not a Range"); } }
+            public virtual List<Instance> Array { get { throw new RuntimeException("Instance is not an Array"); } }
+            public virtual HashDictionary Hash { get { throw new RuntimeException("Instance is not a Hash"); } }
+            public virtual Exception Exception { get { throw new RuntimeException("Instance is not an Exception"); } }
+            public virtual DateTimeOffset Time { get { throw new RuntimeException("Instance is not a Time"); } }
+            public virtual WeakReference<Instance> WeakRef { get { throw new RuntimeException("Instance is not a WeakRef"); } }
             public virtual string Inspect() {
                 return $"#<{Module?.Name}:0x{GetHashCode():x16}>";
             }
@@ -601,6 +605,17 @@ namespace Embers
                 Value = value;
             }
         }
+        public class WeakRefInstance : Instance {
+            WeakReference<Instance> Value;
+            public override object? Object { get { return Value; } }
+            public override WeakReference<Instance> WeakRef { get { return Value; } }
+            public WeakRefInstance(Class fromClass, WeakReference<Instance> value) : base(fromClass) {
+                Value = value;
+            }
+            public void SetValue(WeakReference<Instance> value) {
+                Value = value;
+            }
+        }
         public class ModuleReference : Instance {
             public override object? Object { get { return Module!; } }
             public override string Inspect() {
@@ -866,7 +881,9 @@ namespace Embers
                 }
                 return Instances[0];
             }
-            public Instance this[Index i] => InstanceList != null ? InstanceList[i] : (i.Value == 0 && Instance != null ? Instance : throw new ApiException("Index was outside the range of the instances"));
+            public Instance this[Index i] => InstanceList != null
+                ? InstanceList[i]
+                : (i.Value == 0 && Instance != null ? Instance : throw new ApiException("Index was outside the range of the instances"));
             public IEnumerator<Instance> GetEnumerator() {
                 if (InstanceList != null) {
                     for (int i = 0; i < InstanceList.Count; i++) {
