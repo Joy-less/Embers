@@ -13,18 +13,13 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() =>
                     Script.Evaluate(@"
-my_arr = [1, 2, 3]
-alias my_arr.explode my_arr.clear
-my_arr.explode
-p my_arr
-
-puts Math.lerp(3, 5, 0.2) # 3.4
-
-a = Time.now.to_f
-10000.times do
-    Thread.new {1 + 2}.join
+class A
+    def method_missing(method, *args)
+        p method, args
+    end
 end
-puts Time.now.to_f - a
+
+A.new.a 'hi'
                     ")
                 );
                 Console.ReadLine();

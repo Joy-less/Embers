@@ -515,10 +515,10 @@ namespace Embers
                 Dict = dict;
             }
             public async Task<Instance?> Lookup(Script Script, Instance Key) {
-                DynInteger HashKey = (await Key.TryCallInstanceMethod(Script, "hash")).Integer;
+                DynInteger HashKey = (await Key.CallInstanceMethod(Script, "hash")).Integer;
                 if (Dict.TryGetValue(HashKey, out HashSet<KeyValuePair<Instance, Instance>>? Entry)) {
                     foreach (KeyValuePair<Instance, Instance> Match in Entry) {
-                        if ((await Match.Key.TryCallInstanceMethod(Script, "eql?", Key)).IsTruthy) {
+                        if ((await Match.Key.CallInstanceMethod(Script, "eql?", Key)).IsTruthy) {
                             return Match.Value;
                         }
                     }
@@ -528,7 +528,7 @@ namespace Embers
             public async Task<Instance?> ReverseLookup(Script Script, Instance Value) {
                 foreach (KeyValuePair<DynInteger, HashSet<KeyValuePair<Instance, Instance>>> Entry in Dict) {
                     foreach (KeyValuePair<Instance, Instance> Match in Entry.Value) {
-                        if ((await Match.Value.TryCallInstanceMethod(Script, "==", Value)).IsTruthy) {
+                        if ((await Match.Value.CallInstanceMethod(Script, "==", Value)).IsTruthy) {
                             return Match.Key;
                         }
                     }
@@ -536,7 +536,7 @@ namespace Embers
                 return null;
             }
             public async Task Store(Script Script, Instance Key, Instance Value) {
-                DynInteger HashKey = (await Key.TryCallInstanceMethod(Script, "hash")).Integer;
+                DynInteger HashKey = (await Key.CallInstanceMethod(Script, "hash")).Integer;
                 if (!Dict.TryGetValue(HashKey, out HashSet<KeyValuePair<Instance, Instance>>? Entry)) {
                     Entry = new HashSet<KeyValuePair<Instance, Instance>>();
                     lock (Dict) Dict[HashKey] = Entry;
@@ -544,10 +544,10 @@ namespace Embers
                 lock (Entry) Entry.Add(new KeyValuePair<Instance, Instance>(Key, Value));
             }
             public async Task<Instance?> Remove(Script Script, Instance Key) {
-                DynInteger HashKey = (await Key.TryCallInstanceMethod(Script, "hash")).Integer;
+                DynInteger HashKey = (await Key.CallInstanceMethod(Script, "hash")).Integer;
                 if (Dict.TryGetValue(HashKey, out HashSet<KeyValuePair<Instance, Instance>>? Entry)) {
                     foreach (KeyValuePair<Instance, Instance> Match in Entry) {
-                        if ((await Match.Key.TryCallInstanceMethod(Script, "eql?", Key)).IsTruthy) {
+                        if ((await Match.Key.CallInstanceMethod(Script, "eql?", Key)).IsTruthy) {
                             lock (Entry) Entry.Remove(Match);
                             return Match.Value;
                         }

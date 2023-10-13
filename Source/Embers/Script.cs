@@ -134,6 +134,30 @@ namespace Embers
                 }
                 return false;
             }
+            public async Task<Instance> CallMethod(Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
+                // Found
+                if (Methods.TryGetValue(MethodName, out Method? FindMethod)) {
+                    return await FindMethod.Call(Script, new ModuleReference(this), Arguments, OnYield);
+                }
+                else if (Methods.TryGetValue("method_missing", out Method? FindMissingMethod)) {
+                    // Get arguments (method_name, *args)
+                    Instances MethodMissingArguments;
+                    if (Arguments != null) {
+                        List<Instance> GivenArguments = Arguments.MultiInstance;
+                        GivenArguments.Insert(0, Script.Interpreter.GetSymbol(MethodName));
+                        MethodMissingArguments = new Instances(GivenArguments);
+                    }
+                    else {
+                        MethodMissingArguments = Script.Interpreter.GetSymbol(MethodName);
+                    }
+                    // Call method_missing
+                    return await FindMissingMethod.Call(Script, null, MethodMissingArguments, OnYield);
+                }
+                // Error
+                else {
+                    throw new RuntimeException($"{Script.ApproximateLocation}: Undefined method '{MethodName}' for {Name}");
+                }
+            }
         }
         public class Class : Module {
             public Class(string name, Module parent, Module? superClass = null) : base(name, parent, superClass) { }
@@ -142,7 +166,7 @@ namespace Embers
                 // Default method: new
                 Methods["new"] = new Method(async Input => {
                     Instance NewInstance = Input.Script.CreateInstanceWithNew((Class)Input.Instance.Module!);
-                    await NewInstance.TryCallInstanceMethod(Input.Script, "initialize", Input.Arguments, Input.OnYield);
+                    await NewInstance.CallInstanceMethod(Input.Script, "initialize", Input.Arguments, Input.OnYield);
                     return NewInstance;
                 }, null);
                 // Default method: initialize
@@ -254,10 +278,24 @@ namespace Embers
                     }
                 }
             }
-            public async Task<Instance> TryCallInstanceMethod(Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
+            public async Task<Instance> CallInstanceMethod(Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
                 // Found
                 if (InstanceMethods.TryGetValue(MethodName, out Method? FindMethod)) {
                     return await FindMethod.Call(Script, this, Arguments, OnYield);
+                }
+                else if (InstanceMethods.TryGetValue("method_missing", out Method? FindMissingMethod)) {
+                    // Get arguments (method_name, *args)
+                    Instances MethodMissingArguments;
+                    if (Arguments != null) {
+                        List<Instance> GivenArguments = Arguments.MultiInstance;
+                        GivenArguments.Insert(0, Script.Interpreter.GetSymbol(MethodName));
+                        MethodMissingArguments = new Instances(GivenArguments);
+                    }
+                    else {
+                        MethodMissingArguments = Script.Interpreter.GetSymbol(MethodName);
+                    }
+                    // Call method_missing
+                    return await FindMissingMethod.Call(Script, this, MethodMissingArguments, OnYield);
                 }
                 // Error
                 else {
@@ -852,7 +890,7 @@ namespace Embers
         }
 
         public async Task Warn(string Message) {
-            await CurrentInstance.TryCallInstanceMethod(this, "warn", new StringInstance(Interpreter.String, Message));
+            await CurrentInstance.CallInstanceMethod(this, "warn", new StringInstance(Interpreter.String, Message));
         }
         public Module CreateModule(string Name, Module? Parent = null, Module? InheritsFrom = null) {
             Parent ??= Interpreter.RootModule;
@@ -1014,60 +1052,31 @@ namespace Embers
         }
 
         async Task<Instance> InterpretMethodCallExpression(MethodCallExpression MethodCallExpression) {
-            Instance MethodPath = await InterpretExpressionAsync(MethodCallExpression.MethodPath, ReturnType.FoundVariable);
+            Instance MethodPath = await InterpretExpressionAsync(MethodCallExpression.MethodPath, ReturnType.HypotheticalVariable);
             if (MethodPath is VariableReference MethodReference) {
                 // Static method
                 if (MethodReference.Module != null) {
                     // Get class/module which owns method
                     Module MethodModule = MethodReference.Module;
-                    // Get instance of the class/module which owns method
-                    Instance MethodOwner;
-                    if (MethodCallExpression.MethodPath is PathExpression MethodCallPathExpression) {
-                        MethodOwner = await InterpretExpressionAsync(MethodCallPathExpression.ParentObject);
-                    }
-                    else {
-                        MethodOwner = new ModuleReference(MethodModule);
-                    }
                     // Call class method
-                    bool Found = MethodModule.Methods.TryGetValue(MethodReference.Token.Value!, out Method? StaticMethod);
-                    if (Found) {
-                        return await StaticMethod!.Call(
-                            this, MethodOwner, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToYieldMethod(this, CurrentOnYield)
-                        );
-                    }
-                    else {
-                        throw new RuntimeException($"{MethodReference.Token.Location}: Undefined method '{MethodReference.Token.Value!}' for {CurrentInstance.Module!.Name}");
-                    }
+                    return await MethodModule.CallMethod(this, MethodReference.Token.Value!,
+                        await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToYieldMethod(this, CurrentOnYield));
                 }
                 // Instance method
                 else {
+                    Instance MethodInstance;
                     // Local
                     if (MethodReference.IsLocalReference) {
-                        // Call local instance method
-                        bool Found = TryGetLocalInstanceMethod(MethodReference.Token.Value!, out Method? LocalInstanceMethod);
-                        if (Found) {
-                            return await LocalInstanceMethod!.Call(
-                                this, CurrentInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToYieldMethod(this, CurrentOnYield)
-                            );
-                        }
-                        else {
-                            throw new RuntimeException($"{MethodReference.Token.Location}: Undefined method '{MethodReference.Token.Value!}'");
-                        }
+                        MethodInstance = CurrentInstance;
                     }
                     // Path
                     else {
-                        Instance MethodInstance = MethodReference.Instance!;
-                        // Call instance method
-                        bool Found = MethodInstance.InstanceMethods.TryGetValue(MethodReference.Token.Value!, out Method? PathInstanceMethod);
-                        if (Found) {
-                            return await PathInstanceMethod!.Call(
-                                this, MethodInstance, await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToYieldMethod(this, CurrentOnYield)
-                            );
-                        }
-                        else {
-                            throw new RuntimeException($"{MethodReference.Token.Location}: Undefined method '{MethodReference.Token.Value!}' for {CurrentInstance.Module!.Name}");
-                        }
+                        MethodInstance = MethodReference.Instance!;
                     }
+                    // Call instance method
+                    return await MethodInstance.CallInstanceMethod(this, MethodReference.Token.Value!,
+                        await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToYieldMethod(this, CurrentOnYield)
+                    );
                 }
             }
             else {
@@ -1078,24 +1087,23 @@ namespace Embers
             // Path
             if (ObjectTokenExpression is PathExpression PathExpression) {
                 Instance ParentInstance = await InterpretExpressionAsync(PathExpression.ParentObject);
-                // Static method
+                // Class method
                 if (ParentInstance is ModuleReference ParentModule) {
                     // Method
                     if (ReturnType != ReturnType.HypotheticalVariable) {
-                        // Found
-                        if (ParentModule.Module!.Methods.TryGetValue(PathExpression.Token.Value!, out Method? FindMethod)) {
-                            // Call class/module method
-                            if (ReturnType == ReturnType.InterpretResult) {
-                                return await FindMethod.Call(this, ParentModule);
-                            }
-                            // Return method
-                            else {
+                        // Call class method
+                        if (ReturnType == ReturnType.InterpretResult) {
+                            return await ParentModule.Module!.CallMethod(this, PathExpression.Token.Value!);
+                        }
+                        else {
+                            // Return class method
+                            if (ParentModule.Module!.Methods.ContainsKey(PathExpression.Token.Value!)) {
                                 return new VariableReference(ParentModule.Module, PathExpression.Token);
                             }
-                        }
-                        // Error
-                        else {
-                            throw new RuntimeException($"{PathExpression.Token.Location}: Undefined method '{PathExpression.Token.Value!}' for {ParentModule.Module.Name}");
+                            // Error
+                            else {
+                                throw new RuntimeException($"{PathExpression.Token.Location}: Undefined method '{PathExpression.Token.Value!}' for {ParentModule.Module.Name}");
+                            }
                         }
                     }
                     // New method
@@ -1107,20 +1115,19 @@ namespace Embers
                 else {
                     // Method
                     if (ReturnType != ReturnType.HypotheticalVariable) {
-                        // Method
-                        if (ParentInstance.InstanceMethods.TryGetValue(PathExpression.Token.Value!, out Method? FindMethod)) {
-                            // Call instance method
-                            if (ReturnType == ReturnType.InterpretResult) {
-                                return await FindMethod.Call(this, ParentInstance);
-                            }
-                            // Return method
-                            else {
+                        // Call instance method
+                        if (ReturnType == ReturnType.InterpretResult) {
+                            return await ParentInstance.CallInstanceMethod(this, PathExpression.Token.Value!);
+                        }
+                        else {
+                            // Return instance method
+                            if (ParentInstance.InstanceMethods.ContainsKey(PathExpression.Token.Value!)) {
                                 return new VariableReference(ParentInstance, PathExpression.Token);
                             }
-                        }
-                        // Error
-                        else {
-                            throw new RuntimeException($"{PathExpression.Token.Location}: Undefined method '{PathExpression.Token.Value!}' for {ParentInstance.Inspect()}");
+                            // Error
+                            else {
+                                throw new RuntimeException($"{PathExpression.Token.Location}: Undefined method '{PathExpression.Token.Value!}' for {ParentInstance.Inspect()}");
+                            }
                         }
                     }
                     // New method
@@ -1315,13 +1322,8 @@ namespace Embers
                 if (Branch.Conditions.Count != 0) {
                     foreach (Expression Condition in Branch.Conditions) {
                         Instance ConditionObject = await InterpretExpressionAsync(Condition);
-                        if (ConditionObject.InstanceMethods.TryGetValue("===", out Method? TripleEquality)) {
-                            if ((await TripleEquality.Call(this, ConditionObject, Subject)).IsTruthy) {
-                                WhenApplies = true;
-                            }
-                        }
-                        else {
-                            throw new RuntimeException($"{Branch.Location}: Case 'when' instance must have an '===' method");
+                        if ((await ConditionObject.CallInstanceMethod(this, "===", Subject)).IsTruthy) {
+                            WhenApplies = true;
                         }
                     }
                 }
@@ -1382,12 +1384,7 @@ namespace Embers
         }
         async Task<Instance> InterpretForStatement(ForStatement ForStatement) {
             Instance InResult = await InterpretExpressionAsync(ForStatement.InExpression);
-            if (InResult.InstanceMethods.TryGetValue("each", out Method? EachMethod)) {
-                await EachMethod.Call(this, InResult, OnYield: ForStatement.BlockStatementsMethod);
-            }
-            else {
-                throw new RuntimeException($"{ForStatement.Location}: The instance must have an 'each' method to iterate with 'for'");
-            }
+            await InResult.CallInstanceMethod(this, "each", OnYield: ForStatement.BlockStatementsMethod);
             return Interpreter.Nil;
         }
         async Task<Instance> InterpretLogicalExpression(LogicalExpression LogicalExpression) {
@@ -1689,7 +1686,7 @@ namespace Embers
                 case Phase2TokenType.LocalVariableOrMethod:
                     // call instance.variable=
                     if (Variable.Instance != null) {
-                        await Variable.Instance.TryCallInstanceMethod(this, Variable.Token.Value! + "=", Value);
+                        await Variable.Instance.CallInstanceMethod(this, Variable.Token.Value! + "=", Value);
                     }
                     // set variable =
                     else {
@@ -1761,7 +1758,7 @@ namespace Embers
             for (int i = 0; i < MultipleAssignmentExpression.Left.Count; i++) {
                 Instance Right = AssigningFromArray == null
                     ? i != 0 ? await InterpretExpressionAsync(MultipleAssignmentExpression.Right[i]) : FirstRight
-                    : await AssigningFromArray.TryCallInstanceMethod(this, "[]", new IntegerInstance(Interpreter.Integer, i));
+                    : await AssigningFromArray.CallInstanceMethod(this, "[]", new IntegerInstance(Interpreter.Integer, i));
                 Instance Left = await InterpretExpressionAsync(MultipleAssignmentExpression.Left[i], ReturnType.HypotheticalVariable);
 
                 if (Left is VariableReference LeftVariable) {

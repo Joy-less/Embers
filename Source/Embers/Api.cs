@@ -507,7 +507,7 @@ namespace Embers
             public static async Task<Instance> _NotEquals(MethodInput Input) {
                 Instance Left = Input.Instance;
                 Instance Right = Input.Arguments[0];
-                return (await Left.TryCallInstanceMethod(Input.Script, "==", Right)).IsTruthy ? Input.Interpreter.False : Input.Interpreter.True;
+                return (await Left.CallInstanceMethod(Input.Script, "==", Right)).IsTruthy ? Input.Interpreter.False : Input.Interpreter.True;
             }
             public static async Task<Instance> _Spaceship(MethodInput Input) {
                 return Input.Interpreter.Nil;
@@ -564,7 +564,7 @@ namespace Embers
             }
             public static async Task<Instance> eql7(MethodInput Input) {
                 Instance Other = Input.Arguments[0];
-                return (await Input.Instance.TryCallInstanceMethod(Input.Script, "hash")).Integer == (await Other.TryCallInstanceMethod(Input.Script, "hash")).Integer
+                return (await Input.Instance.CallInstanceMethod(Input.Script, "hash")).Integer == (await Other.CallInstanceMethod(Input.Script, "hash")).Integer
                     ? Input.Interpreter.True : Input.Interpreter.False;
             }
             public static async Task<Instance> methods(MethodInput Input) {
@@ -1489,7 +1489,7 @@ namespace Embers
                     if (Count != Right.Array.Count) return Input.Interpreter.False;
 
                     for (int i = 0; i < Left.Array.Count; i++) {
-                        bool ValuesEqual = (await Left.Array[i].TryCallInstanceMethod(Input.Script, "==", Right.Array[i])).IsTruthy;
+                        bool ValuesEqual = (await Left.Array[i].CallInstanceMethod(Input.Script, "==", Right.Array[i])).IsTruthy;
                         if (!ValuesEqual) return Input.Interpreter.False;
                     }
                     return Input.Interpreter.True;
@@ -1557,7 +1557,7 @@ namespace Embers
                     Instance Minimum = Items[0];
                     for (int i = 1; i < Items.Count; i++) {
                         Instance Current = Items[i];
-                        if ((await Current.TryCallInstanceMethod(Input.Script, "<", Minimum)).IsTruthy) {
+                        if ((await Current.CallInstanceMethod(Input.Script, "<", Minimum)).IsTruthy) {
                             Minimum = Current;
                         }
                     }
@@ -1573,7 +1573,7 @@ namespace Embers
                     Instance Maximum = Items[0];
                     for (int i = 1; i < Items.Count; i++) {
                         Instance Current = Items[i];
-                        if ((await Current.TryCallInstanceMethod(Input.Script, ">", Maximum)).IsTruthy) {
+                        if ((await Current.CallInstanceMethod(Input.Script, ">", Maximum)).IsTruthy) {
                             Maximum = Current;
                         }
                     }
@@ -1704,7 +1704,7 @@ namespace Embers
                 }
                 else {
                     SortFunction = async (A, B) => {
-                        return (await A.TryCallInstanceMethod(Input.Script, "<=>", B)).Integer < 0;
+                        return (await A.CallInstanceMethod(Input.Script, "<=>", B)).Integer < 0;
                     };
                 }
                 // Sort array
@@ -1743,7 +1743,7 @@ namespace Embers
                 Instance LastDeletedItem = Input.Interpreter.Nil;
                 for (int i = 0; i < Array.Count; i++) {
                     Instance Item = Array[i];
-                    if ((await Item.TryCallInstanceMethod(Input.Script, "==", DeleteItem)).IsTruthy) {
+                    if ((await Item.CallInstanceMethod(Input.Script, "==", DeleteItem)).IsTruthy) {
                         Array.RemoveAt(i);
                         LastDeletedItem = Item;
                     }
@@ -1815,9 +1815,9 @@ namespace Embers
                 if (Right is HashInstance) {
                     foreach (KeyValuePair<Instance, Instance> LeftKeyValue in Left.Hash.KeyValues) {
                         foreach (KeyValuePair<Instance, Instance> RightKeyValue in Right.Hash.KeyValues) {
-                            bool KeysEqual = (await LeftKeyValue.Key.TryCallInstanceMethod(Input.Script, "==", RightKeyValue.Key)).IsTruthy;
+                            bool KeysEqual = (await LeftKeyValue.Key.CallInstanceMethod(Input.Script, "==", RightKeyValue.Key)).IsTruthy;
                             if (!KeysEqual) return Input.Interpreter.False;
-                            bool ValuesEqual = (await LeftKeyValue.Value.TryCallInstanceMethod(Input.Script, "==", RightKeyValue.Value)).IsTruthy;
+                            bool ValuesEqual = (await LeftKeyValue.Value.CallInstanceMethod(Input.Script, "==", RightKeyValue.Value)).IsTruthy;
                             if (!ValuesEqual) return Input.Interpreter.False;
                         }
                     }
