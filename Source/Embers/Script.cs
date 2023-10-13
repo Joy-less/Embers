@@ -656,24 +656,16 @@ namespace Embers
             }
         }
         public class Method {
-            public string? Name;
+            public string? Name { get; private set; }
             public Module? Parent {get; private set;}
             public Func<MethodInput, Task<Instance>> Function {get; private set;}
             public readonly IntRange ArgumentCountRange;
             public readonly List<MethodArgumentExpression> ArgumentNames;
             public readonly bool Unsafe;
-            public readonly AccessModifier AccessModifier;
+            public AccessModifier AccessModifier { get; private set; }
             public Method(Func<MethodInput, Task<Instance>> function, IntRange? argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false, AccessModifier accessModifier = AccessModifier.Public, Module? parent = null) {
                 Function = function;
                 ArgumentCountRange = argumentCountRange ?? new IntRange();
-                ArgumentNames = argumentNames ?? new();
-                Unsafe = IsUnsafe;
-                AccessModifier = accessModifier;
-                Parent = parent;
-            }
-            public Method(Func<MethodInput, Task<Instance>> function, Range argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false, AccessModifier accessModifier = AccessModifier.Public, Module? parent = null) {
-                Function = function;
-                ArgumentCountRange = new IntRange(argumentCountRange);
                 ArgumentNames = argumentNames ?? new();
                 Unsafe = IsUnsafe;
                 AccessModifier = accessModifier;
@@ -757,6 +749,10 @@ namespace Embers
                 else {
                     throw new RuntimeException($"{Script.ApproximateLocation}: Wrong number of arguments for '{Name}' (given {Arguments.Count}, expected {ArgumentCountRange})");
                 }
+            }
+            public void SetName(string? name) {
+                Name = name;
+                if (Name == "initialize") AccessModifier = AccessModifier.Private;
             }
             public void ChangeFunction(Func<MethodInput, Task<Instance>> function) {
                 Function = function;
@@ -905,7 +901,7 @@ namespace Embers
             return NewClass;
         }
         public Method CreateMethod(Func<MethodInput, Task<Instance>> Function, Range ArgumentCountRange, bool IsUnsafe = false) {
-            Method NewMethod = new(Function, ArgumentCountRange, IsUnsafe: IsUnsafe, accessModifier: CurrentAccessModifier, parent: CurrentModule);
+            Method NewMethod = new(Function, new IntRange(ArgumentCountRange), IsUnsafe: IsUnsafe, accessModifier: CurrentAccessModifier, parent: CurrentModule);
             return NewMethod;
         }
         public Method CreateMethod(Func<MethodInput, Task<Instance>> Function, IntRange? ArgumentCountRange, bool IsUnsafe = false) {

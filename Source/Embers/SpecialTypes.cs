@@ -502,7 +502,7 @@ namespace Embers
             }
             static void TrySetMethodName(TKey Key, TValue Value) {
                 if (Key is string MethodName && Value is Method Method) {
-                    Method.Name = MethodName;
+                    Method.SetName(MethodName);
                 }
             }
         }

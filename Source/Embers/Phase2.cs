@@ -301,16 +301,18 @@ namespace Embers
                 return $"new {PathToSelf}({Location.Serialise()}, {Statements.Serialise()}, {ArgumentCount.Serialise()}, {Arguments.Serialise()}, {Name.Serialise()})";
             }
             public Method ToMethod(AccessModifier AccessModifier, Module? Parent) {
-                return new Method(async Input => {
+                Method Method = new(async Input => {
                     return await Input.Script.InternalInterpretAsync(Statements, Input.OnYield);
-                }, ArgumentCount, Arguments, accessModifier: AccessModifier, parent: Parent)
-                { Name = Name };
+                }, ArgumentCount, Arguments, accessModifier: AccessModifier, parent: Parent);
+                Method.SetName(Name);
+                return Method;
             }
             public Method? ToYieldMethod(Script Script, Method? OnYield) {
-                return Script.ToYieldMethod(new Method(async Input => {
+                Method? Method = Script.ToYieldMethod(new Method(async Input => {
                     return await Input.Script.InternalInterpretAsync(Statements, OnYield);
-                }, ArgumentCount, Arguments, accessModifier: AccessModifier.Public)
-                { Name = Name });
+                }, ArgumentCount, Arguments, accessModifier: AccessModifier.Public));
+                Method?.SetName(Name);
+                return Method;
             }
         }
         public class SelfExpression : Expression {

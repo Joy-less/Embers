@@ -20,6 +20,16 @@ class A
 end
 
 A.new.a 'hi'
+
+
+class Test
+  def initialize
+  end
+  def test_test
+    puts ""test""
+  end
+end
+Test.new.initialize
                     ")
                 );
                 Console.ReadLine();
