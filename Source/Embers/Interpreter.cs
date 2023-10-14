@@ -47,24 +47,6 @@ namespace Embers
 
             Api = new Api(this);
 
-            /*NilClass = MainScript.CreateClass("NilClass"); Nil = new NilInstance(NilClass); NilClass.InstanceMethods.Remove("initialize"); NilClass.Methods.Remove("new");
-            TrueClass = MainScript.CreateClass("TrueClass"); True = new TrueInstance(TrueClass); TrueClass.InstanceMethods.Remove("initialize"); TrueClass.Methods.Remove("new");
-            FalseClass = MainScript.CreateClass("FalseClass"); False = new FalseInstance(FalseClass); FalseClass.InstanceMethods.Remove("initialize"); FalseClass.Methods.Remove("new");
-            String = MainScript.CreateClass("String");
-            Symbol = MainScript.CreateClass("Symbol"); Symbol.InstanceMethods.Remove("initialize"); Symbol.Methods.Remove("new");
-            Integer = MainScript.CreateClass("Integer");
-            Float = MainScript.CreateClass("Float");
-            Proc = MainScript.CreateClass("Proc");
-            Range = MainScript.CreateClass("Range");
-            Array = MainScript.CreateClass("Array");
-            Hash = MainScript.CreateClass("Hash");
-            Exception = MainScript.CreateClass("Exception");
-            StandardError = MainScript.CreateClass("StandardError", InheritsFrom: Exception);
-            RuntimeError = MainScript.CreateClass("RuntimeError", InheritsFrom: StandardError);
-            Thread = MainScript.CreateClass("Thread");
-            Time = MainScript.CreateClass("Time");
-            WeakRef = MainScript.CreateClass("WeakRef");*/
-
             RandomSeed = InternalRandom.NextInt64();
             Random = new Random(RandomSeed.GetHashCode());
         }
