@@ -469,5 +469,11 @@ File.dirname(file_path)
 ```
 ```
 Net::HTTP.get(uri)
-	Fetches and returns the HTML content of the given URI as a string. Assumes https:// if the scheme is not included.
+	Fetches and returns the content of the given URI as a Net::HTTP::HTTPResponse. Assumes https:// if the scheme is not included.
+
+http_response.body
+	Returns the HTML content of the HTTP Response.
+
+http_response.code
+	Returns the success code of the HTTP Response.
 ```

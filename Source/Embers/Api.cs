@@ -433,10 +433,10 @@ namespace Embers
             // Net::HTTP
             HTTP = Script.CreateModule("HTTP", Net);
             HTTP.Methods["get"] = Script.CreateMethod(_Net._HTTP.get, 1, IsUnsafe: true);
-            // Net::HTTP::Response
-            HTTPResponse = Script.CreateClass("Response", HTTP);
-            HTTPResponse.InstanceMethods["body"] = Script.CreateMethod(_Net._HTTP._Response.body, 0, IsUnsafe: true);
-            HTTPResponse.InstanceMethods["code"] = Script.CreateMethod(_Net._HTTP._Response.code, 0, IsUnsafe: true);
+            // Net::HTTP::HTTPResponse
+            HTTPResponse = Script.CreateClass("HTTPResponse", HTTP);
+            HTTPResponse.InstanceMethods["body"] = Script.CreateMethod(_Net._HTTP._HTTPResponse.body, 0, IsUnsafe: true);
+            HTTPResponse.InstanceMethods["code"] = Script.CreateMethod(_Net._HTTP._HTTPResponse.code, 0, IsUnsafe: true);
         }
 
         // API
@@ -2446,7 +2446,7 @@ namespace Embers
 
                     return new HttpResponseInstance(Input.Api.HTTPResponse, Response);
                 }
-                public static class _Response {
+                public static class _HTTPResponse {
                     public static async Task<Instance> body(MethodInput Input) {
                         return new StringInstance(Input.Api.String, await Input.Instance.HttpResponse.Content.ReadAsStringAsync());
                     }
