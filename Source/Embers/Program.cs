@@ -38,9 +38,14 @@ while true
     sleep 0.1
     puts b.weakref_alive?
 end
-=end
 
 puts (true ? 5 : 2) + 6
+=end
+
+res = Net::HTTP.get('httpbin.org/')
+puts res.class
+puts 'body length: ' + res.body.length.to_s
+puts 'code: ' + res.code.to_s
                     ")
                 );
                 Console.ReadLine();

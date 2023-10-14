@@ -135,6 +135,9 @@ string.to_sym
 string.to_a
 	Returns an array containing each character of the string.
 
+string.length
+	Returns the length of the string.
+
 string.chomp | string.chomp!
 	Returns the string with a single newline removed from the end.
 

@@ -35,6 +35,7 @@ MyScript.Evaluate("puts 'hi!'");
 ### Returning values
 ```csharp
 using static Embers.Script;
+using static Embers.Api;
 
 // ...
 
@@ -115,7 +116,7 @@ MyInterpreter.Integer.InstanceMethods.Add("catify", MyScript.CreateMethod(async 
         CatifiedString += " ~nya";
     }
     // Return result
-    return new StringInstance(Input.Interpreter.String, CatifiedString);
+    return new StringInstance(Input.Api.String, CatifiedString);
 }, 1));
 MyScript.Evaluate("puts 3.catify 2"); // 3 ~nya ~nya
 ```

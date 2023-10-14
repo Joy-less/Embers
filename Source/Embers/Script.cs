@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using System.Linq;
 using static Embers.Phase2;
 using static Embers.SpecialTypes;
+using static Embers.Api;
 
 #nullable enable
 #pragma warning disable CS1998
@@ -15,6 +16,7 @@ namespace Embers
     {
         public readonly Interpreter Interpreter;
         public readonly bool AllowUnsafeApi;
+        public Api Api => Interpreter.Api;
         public bool Running { get; private set; }
         public bool Stopping { get; private set; }
         public DebugLocation ApproximateLocation { get; private set; } = DebugLocation.Unknown;
@@ -31,47 +33,11 @@ namespace Embers
         internal readonly ConditionalWeakTable<Exception, ExceptionInstance> ExceptionsTable = new();
         public readonly HashSet<ScriptThread> ScriptThreads = new();
 
-        public Instance CreateInstanceWithNew(Class Class) {
-            if (Class.InheritsFrom(Interpreter.NilClass))
-                return new NilInstance(Class);
-            else if (Class.InheritsFrom(Interpreter.TrueClass))
-                return new TrueInstance(Class);
-            else if (Class.InheritsFrom(Interpreter.FalseClass))
-                return new FalseInstance(Class);
-            else if (Class.InheritsFrom(Interpreter.String))
-                return new StringInstance(Class, "");
-            else if (Class.InheritsFrom(Interpreter.Symbol))
-                return Interpreter.GetSymbol("");
-            else if (Class.InheritsFrom(Interpreter.Integer))
-                return Interpreter.GetInteger(0);
-            else if (Class.InheritsFrom(Interpreter.Float))
-                return Interpreter.GetFloat(0);
-            else if (Class.InheritsFrom(Interpreter.Proc))
-                throw new RuntimeException($"{ApproximateLocation}: Tried to create Proc instance without a block");
-            else if (Class.InheritsFrom(Interpreter.Range))
-                throw new RuntimeException($"{ApproximateLocation}: Tried to create Range instance with new");
-            else if (Class.InheritsFrom(Interpreter.Array))
-                return new ArrayInstance(Class, new List<Instance>());
-            else if (Class.InheritsFrom(Interpreter.Hash))
-                return new HashInstance(Class, new HashDictionary(), Interpreter.Nil);
-            else if (Class.InheritsFrom(Interpreter.Exception))
-                return new ExceptionInstance(Class, "");
-            else if (Class.InheritsFrom(Interpreter.Thread))
-                return new ThreadInstance(Class, this);
-            else if (Class.InheritsFrom(Interpreter.Time))
-                return new TimeInstance(Class, new DateTime());
-            else if (Class.InheritsFrom(Interpreter.WeakRef))
-                return new WeakRefInstance(Class, new WeakReference<Instance>(Interpreter.Nil));
-            else
-                return new Instance(Class);
-        }
-
         public class Block {
             public readonly LockingDictionary<string, Instance> LocalVariables = new();
             public readonly ReactiveDictionary<string, Instance> Constants = new();
         }
         public class Scope : Block {
-            
         }
         public class MethodScope : Scope {
             public readonly Method? Method;
@@ -146,11 +112,11 @@ namespace Embers
                     Instances MethodMissingArguments;
                     if (Arguments != null) {
                         List<Instance> GivenArguments = Arguments.MultiInstance;
-                        GivenArguments.Insert(0, Script.Interpreter.GetSymbol(MethodName));
+                        GivenArguments.Insert(0, Script.Api.GetSymbol(MethodName));
                         MethodMissingArguments = new Instances(GivenArguments);
                     }
                     else {
-                        MethodMissingArguments = Script.Interpreter.GetSymbol(MethodName);
+                        MethodMissingArguments = Script.Api.GetSymbol(MethodName);
                     }
                     // Call method_missing
                     return await FindMissingMethod.Call(Script, null, MethodMissingArguments, OnYield);
@@ -167,13 +133,13 @@ namespace Embers
             protected override void Setup() {
                 // Default method: new
                 Methods["new"] = new Method(async Input => {
-                    Instance NewInstance = Input.Script.CreateInstanceWithNew((Class)Input.Instance.Module!);
+                    Instance NewInstance = Input.Api.CreateInstanceFromClass(Input.Script, (Class)Input.Instance.Module!);
                     await NewInstance.CallInstanceMethod(Input.Script, "initialize", Input.Arguments, Input.OnYield);
                     return NewInstance;
                 }, null);
                 // Default method: initialize
                 InstanceMethods["initialize"] = new Method(async Input => {
-                    return Input.Interpreter.Nil;
+                    return Input.Api.Nil;
                 }, 0);
                 // Base setup
                 base.Setup();
@@ -199,6 +165,7 @@ namespace Embers
             public virtual Exception Exception { get { throw new RuntimeException("Instance is not an Exception"); } }
             public virtual DateTimeOffset Time { get { throw new RuntimeException("Instance is not a Time"); } }
             public virtual WeakReference<Instance> WeakRef { get { throw new RuntimeException("Instance is not a WeakRef"); } }
+            public virtual System.Net.Http.HttpResponseMessage HttpResponse { get { throw new RuntimeException("Instance is not a HttpResponse"); } }
             public virtual string Inspect() {
                 return $"#<{Module?.Name}:0x{GetHashCode():x16}>";
             }
@@ -207,7 +174,7 @@ namespace Embers
             }
             public Instance Clone(Interpreter Interpreter) {
                 Instance Clone = (Instance)MemberwiseClone();
-                Clone.ObjectId = Interpreter.GenerateObjectId;
+                Clone.ObjectId = Interpreter.GenerateObjectId();
                 Clone.InstanceVariables = new();
                 InstanceVariables.CopyTo(Clone.InstanceVariables);
                 Clone.InstanceMethods = new();
@@ -239,31 +206,31 @@ namespace Embers
                         }
                         LastChara = Chara;
                     }
-                    return new StringInstance(Script.Interpreter.String, String);
+                    return new StringInstance(Script.Api.String, String);
                 }
 
                 return Token.Type switch {
-                    Phase2TokenType.Nil => Script.Interpreter.Nil,
-                    Phase2TokenType.True => Script.Interpreter.True,
-                    Phase2TokenType.False => Script.Interpreter.False,
-                    Phase2TokenType.String => new StringInstance(Script.Interpreter.String, Token.Value!),
-                    Phase2TokenType.Symbol => Script.Interpreter.GetSymbol(Token.Value!),
-                    Phase2TokenType.Integer => Script.Interpreter.GetInteger(Token.ValueAsInteger),
-                    Phase2TokenType.Float => Script.Interpreter.GetFloat(Token.ValueAsFloat),
+                    Phase2TokenType.Nil => Script.Api.Nil,
+                    Phase2TokenType.True => Script.Api.True,
+                    Phase2TokenType.False => Script.Api.False,
+                    Phase2TokenType.String => new StringInstance(Script.Api.String, Token.Value!),
+                    Phase2TokenType.Symbol => Script.Api.GetSymbol(Token.Value!),
+                    Phase2TokenType.Integer => Script.Api.GetInteger(Token.ValueAsInteger),
+                    Phase2TokenType.Float => Script.Api.GetFloat(Token.ValueAsFloat),
                     _ => throw new InternalErrorException($"{Token.Location}: Cannot create new object from token type {Token.Type}")
                 };
             }
             public Instance(Module fromModule) {
                 Module = fromModule;
                 if (this is not PseudoInstance) {
-                    ObjectId = fromModule.Interpreter.GenerateObjectId;
+                    ObjectId = fromModule.Interpreter.GenerateObjectId();
                 }
                 Setup();
             }
             public Instance(Interpreter interpreter) {
                 Module = null;
                 if (this is not PseudoInstance) {
-                    ObjectId = interpreter.GenerateObjectId;
+                    ObjectId = interpreter.GenerateObjectId();
                 }
                 Setup();
             }
@@ -292,11 +259,11 @@ namespace Embers
                     Instances MethodMissingArguments;
                     if (Arguments != null) {
                         List<Instance> GivenArguments = Arguments.MultiInstance;
-                        GivenArguments.Insert(0, Script.Interpreter.GetSymbol(MethodName));
+                        GivenArguments.Insert(0, Script.Api.GetSymbol(MethodName));
                         MethodMissingArguments = new Instances(GivenArguments);
                     }
                     else {
-                        MethodMissingArguments = Script.Interpreter.GetSymbol(MethodName);
+                        MethodMissingArguments = Script.Api.GetSymbol(MethodName);
                     }
                     // Call method_missing
                     return await FindMissingMethod.Call(Script, this, MethodMissingArguments, OnYield);
@@ -305,328 +272,6 @@ namespace Embers
                 else {
                     throw new RuntimeException($"{Script.ApproximateLocation}: Undefined method '{MethodName}' for {LightInspect()}");
                 }
-            }
-        }
-        public class NilInstance : Instance {
-            public override string Inspect() {
-                return "nil";
-            }
-            public override string LightInspect() {
-                return "";
-            }
-            public NilInstance(Class fromClass) : base(fromClass) { }
-        }
-        public class TrueInstance : Instance {
-            public override object? Object { get { return true; } }
-            public override bool Boolean { get { return true; } }
-            public override string Inspect() {
-                return "true";
-            }
-            public TrueInstance(Class fromClass) : base(fromClass) { }
-        }
-        public class FalseInstance : Instance {
-            public override object? Object { get { return false; } }
-            public override bool Boolean { get { return false; } }
-            public override string Inspect() {
-                return "false";
-            }
-            public FalseInstance(Class fromClass) : base(fromClass) { }
-        }
-        public class StringInstance : Instance {
-            string Value;
-            public override object? Object { get { return Value; } }
-            public override string String { get { return Value; } }
-            public override string Inspect() {
-                return '"' + Value.Replace("\n", "\\n").Replace("\r", "\\r") + '"';
-            }
-            public override string LightInspect() {
-                return Value;
-            }
-            public StringInstance(Class fromClass, string value) : base(fromClass) {
-                Value = value;
-            }
-            public void SetValue(string value) {
-                Value = value;
-            }
-            public override int GetHashCode() {
-                return Value.GetHashCode();
-            }
-        }
-        public class SymbolInstance : Instance {
-            readonly string Value;
-            readonly bool IsStringSymbol;
-            public override object? Object { get { return Value; } }
-            public override string String { get { return Value; } }
-            public override string Inspect() {
-                if (IsStringSymbol) {
-                    return ":\"" + Value.Replace("\n", "\\n").Replace("\r", "\\r") + "\"";
-                }
-                else {
-                    return ":" + Value;
-                }
-            }
-            public override string LightInspect() {
-                return Value;
-            }
-            public SymbolInstance(Class fromClass, string value) : base(fromClass) {
-                Value = value;
-                IsStringSymbol = Value.Any("(){}[]<>=+-*/%.,;@#&|~^$".Contains) || Value.Any(char.IsWhiteSpace) || (Value.Length != 0 && Value[0].IsAsciiDigit()) || Value[..^1].Any("?!".Contains);
-            }
-        }
-        public class IntegerInstance : Instance {
-            readonly DynInteger Value;
-            public override object? Object { get { return Value; } }
-            public override DynInteger Integer { get { return Value; } }
-            public override DynFloat Float { get { return Value; } }
-            public override string Inspect() {
-                return Value.ToString();
-            }
-            public IntegerInstance(Class fromClass, DynInteger value) : base(fromClass) {
-                Value = value;
-            }
-        }
-        public class FloatInstance : Instance {
-            readonly DynFloat Value;
-            public override object? Object { get { return Value; } }
-            public override DynFloat Float { get { return Value; } }
-            public override DynInteger Integer { get { return (DynInteger)Value; } }
-            public override string Inspect() {
-                if (Value.IsDouble) {
-                    if (double.IsPositiveInfinity(Value.Double))
-                        return "Infinity";
-                    else if (double.IsNegativeInfinity(Value.Double))
-                        return "-Infinity";
-                }
-
-                string FloatString = Value.ToString();
-                if (!FloatString.Contains('.'))
-                    FloatString += ".0";
-                return FloatString;
-            }
-            public FloatInstance(Class fromClass, DynFloat value) : base(fromClass) {
-                Value = value;
-            }
-        }
-        public class ProcInstance : Instance {
-            Method Value;
-            public override object? Object { get { return Value; } }
-            public override Method Proc { get { return Value; } }
-            public ProcInstance(Class fromClass, Method value) : base(fromClass) {
-                Value = value;
-            }
-            public void SetValue(Method value) {
-                Value = value;
-            }
-        }
-        public class ThreadInstance : Instance {
-            public readonly ScriptThread ScriptThread;
-            public override object? Object { get { return ScriptThread; } }
-            public override ScriptThread Thread { get { return ScriptThread; } }
-            public ThreadInstance(Class fromClass, Script fromScript) : base(fromClass) {
-                ScriptThread = new(fromScript);
-            }
-            public void SetMethod(Method method) {
-                Thread.Method = method;
-            }
-        }
-        public class ScriptThread {
-            public Task? Running { get; private set; }
-            public readonly Script ParentScript;
-            public readonly Script ThreadScript;
-            public Method? Method;
-            private static readonly TimeSpan ShortTimeSpan = TimeSpan.FromMilliseconds(5);
-            public ScriptThread(Script parentScript) {
-                ParentScript = parentScript;
-                ThreadScript = new Script(ParentScript.Interpreter, ParentScript.AllowUnsafeApi);
-            }
-            public async Task Run(Instances? Arguments = null, Method? OnYield = null) {
-                // If already running, wait until it's finished
-                if (Running != null) {
-                    await Running;
-                    return;
-                }
-                // Add thread to running threads
-                lock (ParentScript.ScriptThreads)
-                    ParentScript.ScriptThreads.Add(this);
-                try {
-                    // Create a new script
-                    ThreadScript.CurrentObject = new Stack<object>(ParentScript.CurrentObject);
-                    // Call the method in the script
-                    Running = Method!.Call(ThreadScript, null, Arguments, OnYield);
-                    while (!ThreadScript.Stopping && !ParentScript.Stopping && !Running.IsCompleted) {
-                        await Running.WaitAsync(ShortTimeSpan);
-                    }
-                    // Stop the script
-                    ThreadScript.Stop();
-                }
-                finally {
-                    // Decrease thread counter
-                    lock (ParentScript.ScriptThreads)
-                        ParentScript.ScriptThreads.Remove(this);
-                }
-            }
-            public void Stop() {
-                ThreadScript.Stop();
-            }
-        }
-        public class RangeInstance : Instance {
-            public IntegerInstance? Min;
-            public IntegerInstance? Max;
-            public Instance AppliedMin;
-            public Instance AppliedMax;
-            public bool IncludesMax;
-            public override object? Object { get { return ToIntegerRange; } }
-            public override IntegerRange Range { get { return ToIntegerRange; } }
-            public override string Inspect() {
-                return $"{(Min != null ? Min.Inspect() : "")}{(IncludesMax ? ".." : "...")}{(Max != null ? Max.Inspect() : "")}";
-            }
-            public RangeInstance(Class fromClass, IntegerInstance? min, IntegerInstance? max, bool includesMax) : base(fromClass) {
-                Min = min;
-                Max = max;
-                IncludesMax = includesMax;
-                (AppliedMin, AppliedMax) = Setup();
-                Setup();
-            }
-            public void SetValue(IntegerInstance min, IntegerInstance max, bool includesMax) {
-                Min = min;
-                Max = max;
-                IncludesMax = includesMax;
-                Setup();
-            }
-            (Instance, Instance) Setup() {
-                if (Min == null) {
-                    AppliedMin = Max!.Module!.Interpreter.Nil;
-                    AppliedMax = IncludesMax ? Max : Max.Module!.Interpreter.GetInteger(Max.Integer - 1);
-                }
-                else if (Max == null) {
-                    AppliedMin = Min;
-                    AppliedMax = Min!.Module!.Interpreter.Nil;
-                }
-                else {
-                    AppliedMin = Min;
-                    AppliedMax = IncludesMax ? Max : Max.Module!.Interpreter.GetInteger(Max.Integer - 1);
-                }
-                return (AppliedMin, AppliedMax);
-            }
-            IntegerRange ToIntegerRange => new(AppliedMin is IntegerInstance ? (long)AppliedMin.Integer : null, AppliedMax is IntegerInstance ? (long)AppliedMax.Integer : null);
-        }
-        public class ArrayInstance : Instance {
-            List<Instance> Value;
-            public override object? Object { get { return Value; } }
-            public override List<Instance> Array { get { return Value; } }
-            public override string Inspect() {
-                return $"[{Value.InspectInstances()}]";
-            }
-            public override string LightInspect() {
-                return Value.LightInspectInstances("\n");
-            }
-            public ArrayInstance(Class fromClass, List<Instance> value) : base(fromClass) {
-                Value = value;
-            }
-            public void SetValue(List<Instance> value) {
-                Value = value;
-            }
-            public override int GetHashCode() {
-                unchecked {
-                    int CurrentHash = 19;
-                    foreach (Instance Item in Value) {
-                        CurrentHash = CurrentHash * 31 + Item.GetHashCode();
-                    }
-                    return CurrentHash;
-                }
-            }
-        }
-        public class HashInstance : Instance {
-            HashDictionary Value;
-            public Instance DefaultValue;
-            public override object? Object { get { return Value; } }
-            public override HashDictionary Hash { get { return Value; } }
-            public override string Inspect() {
-                return $"{{{Value.InspectHash()}}}";
-            }
-            public HashInstance(Class fromClass, HashDictionary value, Instance defaultValue) : base(fromClass) {
-                Value = value;
-                DefaultValue = defaultValue;
-            }
-            public void SetValue(HashDictionary value, Instance defaultValue) {
-                Value = value;
-                DefaultValue = defaultValue;
-            }
-            public void SetValue(HashDictionary value) {
-                Value = value;
-            }
-            public override int GetHashCode() {
-                unchecked {
-                    int CurrentHash = 0;
-                    foreach (KeyValuePair<Instance, Instance> Item in Value.KeyValues) {
-                        CurrentHash ^= Item.Key.GetHashCode() ^ Item.Value.GetHashCode();
-                    }
-                    return CurrentHash;
-                }
-            }
-        }
-        public class HashArgumentsInstance : Instance {
-            public readonly HashInstance Value;
-            public override string Inspect() {
-                return $"Hash arguments instance: {{{Value.Inspect()}}}";
-            }
-            public HashArgumentsInstance(HashInstance value, Interpreter interpreter) : base(interpreter) {
-                Value = value;
-            }
-        }
-        public class ExceptionInstance : Instance {
-            Exception Value;
-            public override object? Object { get { return Value; } }
-            public override Exception Exception { get { return Value; } }
-            public ExceptionInstance(Class fromClass, string message) : base(fromClass) {
-                Value = new Exception(message);
-            }
-            public ExceptionInstance(Class fromClass, Exception exception) : base(fromClass) {
-                Value = exception;
-            }
-            public void SetValue(string message) {
-                Value = new Exception(message);
-            }
-            public void SetValue(Exception exception) {
-                Value = exception;
-            }
-        }
-        public class TimeInstance : Instance {
-            DateTimeOffset Value;
-            public override object? Object { get { return Value; } }
-            public override DateTimeOffset Time { get { return Value; } }
-            public override string Inspect() {
-                return Value.ToString(System.Globalization.CultureInfo.GetCultureInfo("ja-JP")); // yyyy/mm/dd format
-            }
-            public TimeInstance(Class fromClass, DateTimeOffset value) : base(fromClass) {
-                Value = value;
-            }
-            public void SetValue(DateTimeOffset value) {
-                Value = value;
-            }
-        }
-        public class WeakRefInstance : Instance {
-            WeakReference<Instance> Value;
-            public override object? Object { get { return Value; } }
-            public override WeakReference<Instance> WeakRef { get { return Value; } }
-            public WeakRefInstance(Class fromClass, WeakReference<Instance> value) : base(fromClass) {
-                Value = value;
-            }
-            public void SetValue(WeakReference<Instance> value) {
-                Value = value;
-            }
-        }
-        public class ModuleReference : Instance {
-            public override object? Object { get { return Module!; } }
-            public override string Inspect() {
-                return Module!.Name;
-            }
-            public override string LightInspect() {
-                return Module!.Name;
-            }
-            public ModuleReference(Module module) : base(module) {
-                // Copy changes to the parent module
-                InstanceMethods = module.InstanceMethods;
             }
         }
         public abstract class PseudoInstance : Instance {
@@ -668,6 +313,46 @@ namespace Embers
             }
             public MethodReference(Method method, Interpreter interpreter) : base(interpreter) {
                 Method = method;
+            }
+        }
+        public class ScriptThread {
+            public Task? Running { get; private set; }
+            public readonly Script ParentScript;
+            public readonly Script ThreadScript;
+            public Method? Method;
+            private static readonly TimeSpan ShortTimeSpan = TimeSpan.FromMilliseconds(5);
+            public ScriptThread(Script parentScript) {
+                ParentScript = parentScript;
+                ThreadScript = new Script(ParentScript.Interpreter, ParentScript.AllowUnsafeApi);
+            }
+            public async Task Run(Instances? Arguments = null, Method? OnYield = null) {
+                // If already running, wait until it's finished
+                if (Running != null) {
+                    await Running;
+                    return;
+                }
+                // Add thread to running threads
+                lock (ParentScript.ScriptThreads)
+                    ParentScript.ScriptThreads.Add(this);
+                try {
+                    // Create a new script
+                    ThreadScript.CurrentObject = new Stack<object>(ParentScript.CurrentObject);
+                    // Call the method in the script
+                    Running = Method!.Call(ThreadScript, null, Arguments, OnYield);
+                    while (!ThreadScript.Stopping && !ParentScript.Stopping && !Running.IsCompleted) {
+                        await Running.WaitAsync(ShortTimeSpan);
+                    }
+                    // Stop the script
+                    ThreadScript.Stop();
+                }
+                finally {
+                    // Decrease thread counter
+                    lock (ParentScript.ScriptThreads)
+                        ParentScript.ScriptThreads.Remove(this);
+                }
+            }
+            public void Stop() {
+                ThreadScript.Stop();
             }
         }
         public class Method {
@@ -736,7 +421,7 @@ namespace Embers
                         if (BreakHandleType == BreakHandleType.Rethrow)
                             throw;
                         else if (BreakHandleType == BreakHandleType.Destroy)
-                            ReturnValue = Script.Interpreter.Nil;
+                            ReturnValue = Script.Api.Nil;
                         else
                             throw new SyntaxErrorException($"{Script.ApproximateLocation}: Invalid break (break must be in a loop)");
                     }
@@ -806,7 +491,7 @@ namespace Embers
                                 ArgumentIndex++;
                             }
                             // Create array from splat arguments
-                            ArrayInstance SplatArgumentsArray = new(Input.Interpreter.Array, SplatArguments);
+                            ArrayInstance SplatArgumentsArray = new(Input.Api.Array, SplatArguments);
                             // Add array to scope
                             Scope.LocalVariables[ArgumentIdentifier] = SplatArgumentsArray;
                         }
@@ -822,7 +507,7 @@ namespace Embers
                     }
                     // Optional argument not given
                     else {
-                        Instance DefaultValue = ArgumentName.DefaultValue != null ? (await Input.Script.InterpretExpressionAsync(ArgumentName.DefaultValue)) : Input.Script.Interpreter.Nil;
+                        Instance DefaultValue = ArgumentName.DefaultValue != null ? (await Input.Script.InterpretExpressionAsync(ArgumentName.DefaultValue)) : Input.Api.Nil;
                         Scope.LocalVariables[ArgumentIdentifier] = DefaultValue;
                     }
                     ArgumentNameIndex++;
@@ -833,6 +518,7 @@ namespace Embers
         public class MethodInput {
             public readonly Script Script;
             public readonly Interpreter Interpreter;
+            public readonly Api Api;
             public readonly Instances Arguments;
             public readonly Method? OnYield;
             public Instance Instance => InputInstance!;
@@ -840,6 +526,7 @@ namespace Embers
             public MethodInput(Script script, Instance? instance, Instances arguments, Method? onYield = null) {
                 Script = script;
                 Interpreter = script.Interpreter;
+                Api = Interpreter.Api;
                 InputInstance = instance;
                 Arguments = arguments;
                 OnYield = onYield;
@@ -903,7 +590,7 @@ namespace Embers
         }
 
         public async Task Warn(string Message) {
-            await CurrentInstance.CallInstanceMethod(this, "warn", new StringInstance(Interpreter.String, Message));
+            await CurrentInstance.CallInstanceMethod(this, "warn", new StringInstance(Api.String, Message));
         }
         public Module CreateModule(string Name, Module? Parent = null, Module? InheritsFrom = null) {
             Parent ??= Interpreter.RootModule;
@@ -1226,7 +913,7 @@ namespace Embers
                                     }
                                 }
                                 else {
-                                    return Interpreter.Nil;
+                                    return Api.Nil;
                                 }
                             }
                             // Constant
@@ -1271,7 +958,7 @@ namespace Embers
                                     }
                                 }
                                 else {
-                                    return Interpreter.Nil;
+                                    return Api.Nil;
                                 }
                             }
                             // Class variable
@@ -1306,7 +993,7 @@ namespace Embers
             if (IfExpression.Condition == null || (await InterpretExpressionAsync(IfExpression.Condition)).IsTruthy != IfExpression.Inverse) {
                 return await InternalInterpretAsync(IfExpression.Statements, CurrentOnYield);
             }
-            return Interpreter.Nil;
+            return Api.Nil;
         }
         async Task<Instance> InterpretRescueExpression(RescueExpression RescueExpression) {
             try {
@@ -1315,7 +1002,7 @@ namespace Embers
             catch (Exception Ex) when (Ex is not NonErrorException) {
                 await InterpretExpressionAsync(RescueExpression.RescueStatement);
             }
-            return Interpreter.Nil;
+            return Api.Nil;
         }
         async Task<Instance> InterpretTernaryExpression(TernaryExpression TernaryExpression) {
             bool ConditionIsTruthy = (await InterpretExpressionAsync(TernaryExpression.Condition)).IsTruthy;
@@ -1349,21 +1036,21 @@ namespace Embers
                     return await InternalInterpretAsync(Branch.Statements, CurrentOnYield);
                 }
             }
-            return Interpreter.Nil;
+            return Api.Nil;
         }
         async Task<ArrayInstance> InterpretArrayExpression(ArrayExpression ArrayExpression) {
             List<Instance> Items = new();
             foreach (Expression Item in ArrayExpression.Expressions) {
                 Items.Add(await InterpretExpressionAsync(Item));
             }
-            return new ArrayInstance(Interpreter.Array, Items);
+            return new ArrayInstance(Api.Array, Items);
         }
         async Task<HashInstance> InterpretHashExpression(HashExpression HashExpression) {
             HashDictionary Items = new();
             foreach (KeyValuePair<Expression, Expression> Item in HashExpression.Expressions) {
                 await Items.Store(this, await InterpretExpressionAsync(Item.Key), await InterpretExpressionAsync(Item.Value));
             }
-            return new HashInstance(Interpreter.Hash, Items, Interpreter.Nil);
+            return new HashInstance(Api.Hash, Items, Api.Nil);
         }
         async Task<Instance> InterpretWhileExpression(WhileExpression WhileExpression) {
             while ((await InterpretExpressionAsync(WhileExpression.Condition!)).IsTruthy != WhileExpression.Inverse) {
@@ -1386,19 +1073,19 @@ namespace Embers
                     throw new SyntaxErrorException($"{ApproximateLocation}: {Ex.GetType().Name} not valid in while loop");
                 }
             }
-            return Interpreter.Nil;
+            return Api.Nil;
         }
         async Task<Instance> InterpretWhileStatement(WhileStatement WhileStatement) {
             // Run statements
             await CreateTemporaryScope(async () =>
                 await InterpretExpressionAsync(WhileStatement.WhileExpression)
             );
-            return Interpreter.Nil;
+            return Api.Nil;
         }
         async Task<Instance> InterpretForStatement(ForStatement ForStatement) {
             Instance InResult = await InterpretExpressionAsync(ForStatement.InExpression);
             await InResult.CallInstanceMethod(this, "each", OnYield: ForStatement.BlockStatementsMethod);
-            return Interpreter.Nil;
+            return Api.Nil;
         }
         async Task<Instance> InterpretLogicalExpression(LogicalExpression LogicalExpression) {
             Instance Left = await InterpretExpressionAsync(LogicalExpression.Left);
@@ -1423,14 +1110,14 @@ namespace Embers
                     else if (!Left.IsTruthy && Right.IsTruthy)
                         return Right;
                     else
-                        return Interpreter.False;
+                        return Api.False;
                 default:
                     throw new InternalErrorException($"{LogicalExpression.Location}: Unhandled logical expression type: '{LogicalExpression.LogicType}'");
             }
         }
         async Task<Instance> InterpretNotExpression(NotExpression NotExpression) {
             Instance Right = await InterpretExpressionAsync(NotExpression.Right);
-            return Right.IsTruthy ? Interpreter.False : Interpreter.True;
+            return Right.IsTruthy ? Api.False : Api.True;
         }
         async Task<Instance> InterpretDefineMethodStatement(DefineMethodStatement DefineMethodStatement) {
             Instance MethodNameObject = await InterpretExpressionAsync(DefineMethodStatement.MethodName, ReturnType.HypotheticalVariable);
@@ -1468,7 +1155,7 @@ namespace Embers
             else {
                 throw new InternalErrorException($"{DefineMethodStatement.Location}: Invalid method name: {MethodNameObject}");
             }
-            return Interpreter.Nil;
+            return Api.Nil;
         }
         async Task<Instance> InterpretDefineClassStatement(DefineClassStatement DefineClassStatement) {
             Instance ClassNameObject = await InterpretExpressionAsync(DefineClassStatement.ClassName, ReturnType.HypotheticalVariable);
@@ -1531,7 +1218,7 @@ namespace Embers
             else {
                 throw new InternalErrorException($"{DefineClassStatement.Location}: Invalid class/module name: {ClassNameObject}");
             }
-            return Interpreter.Nil;
+            return Api.Nil;
         }
         async Task<Instance> InterpretYieldStatement(YieldStatement YieldStatement) {
             if (CurrentOnYield != null) {
@@ -1543,7 +1230,7 @@ namespace Embers
             else {
                 throw new RuntimeException($"{YieldStatement.Location}: No block given to yield to");
             }
-            return Interpreter.Nil;
+            return Api.Nil;
         }
         async Task<Instance> InterpretSuperStatement(SuperStatement SuperStatement) {
             Module CurrentModule = this.CurrentModule;
@@ -1584,7 +1271,7 @@ namespace Embers
             else {
                 throw new SyntaxErrorException($"{AliasStatement.Location}: Expected method alias, got '{MethodAlias.Inspect()}'");
             }
-            return Interpreter.Nil;
+            return Api.Nil;
         }
         async Task<Instance> InterpretRangeExpression(RangeExpression RangeExpression) {
             Instance? RawMin = null;
@@ -1593,13 +1280,13 @@ namespace Embers
             if (RangeExpression.Max != null) RawMax = await InterpretExpressionAsync(RangeExpression.Max);
 
             if (RawMin is IntegerInstance Min && RawMax is IntegerInstance Max) {
-                return new RangeInstance(Interpreter.Range, Min, Max, RangeExpression.IncludesMax);
+                return new RangeInstance(Api.Range, Min, Max, RangeExpression.IncludesMax);
             }
             else if (RawMin == null && RawMax is IntegerInstance MaxOnly) {
-                return new RangeInstance(Interpreter.Range, null, MaxOnly, RangeExpression.IncludesMax);
+                return new RangeInstance(Api.Range, null, MaxOnly, RangeExpression.IncludesMax);
             }
             else if (RawMax == null && RawMin is IntegerInstance MinOnly) {
-                return new RangeInstance(Interpreter.Range, MinOnly, null, RangeExpression.IncludesMax);
+                return new RangeInstance(Api.Range, MinOnly, null, RangeExpression.IncludesMax);
             }
             else {
                 throw new RuntimeException($"{RangeExpression.Location}: Range bounds must be integers (got '{RawMin?.LightInspect()}' and '{RawMax?.LightInspect()}')");
@@ -1626,7 +1313,7 @@ namespace Embers
                     );
                 }
             }
-            return Interpreter.Nil;
+            return Api.Nil;
         }
         async Task<Instance> InterpretBeginBranchesStatement(BeginBranchesStatement BeginBranchesStatement) {
             // Begin
@@ -1651,11 +1338,11 @@ namespace Embers
                     if (Branch is RescueStatement RescueStatement) {
                         // Get or create the exception to rescue
                         ExceptionsTable.TryGetValue(ExceptionToRescue, out ExceptionInstance? ExceptionInstance);
-                        ExceptionInstance ??= new ExceptionInstance(Interpreter.RuntimeError, ExceptionToRescue);
+                        ExceptionInstance ??= new ExceptionInstance(Api.RuntimeError, ExceptionToRescue);
                         // Get the rescuing exception type
                         Module RescuingExceptionModule = RescueStatement.Exception != null
                             ? (await InterpretExpressionAsync(RescueStatement.Exception)).Module!
-                            : Interpreter.StandardError;
+                            : Api.StandardError;
 
                         // Check whether rescue applies to this exception
                         bool CanRescue = false;
@@ -1692,7 +1379,7 @@ namespace Embers
                 }
             }
 
-            return Interpreter.Nil;
+            return Api.Nil;
         }
         async Task AssignToVariable(VariableReference Variable, Instance Value) {
             switch (Variable.Token.Type) {
@@ -1771,7 +1458,7 @@ namespace Embers
             for (int i = 0; i < MultipleAssignmentExpression.Left.Count; i++) {
                 Instance Right = AssigningFromArray == null
                     ? i != 0 ? await InterpretExpressionAsync(MultipleAssignmentExpression.Right[i]) : FirstRight
-                    : await AssigningFromArray.CallInstanceMethod(this, "[]", new IntegerInstance(Interpreter.Integer, i));
+                    : await AssigningFromArray.CallInstanceMethod(this, "[]", new IntegerInstance(Api.Integer, i));
                 Instance Left = await InterpretExpressionAsync(MultipleAssignmentExpression.Left[i], ReturnType.HypotheticalVariable);
 
                 if (Left is VariableReference LeftVariable) {
@@ -1795,7 +1482,7 @@ namespace Embers
                     throw new RuntimeException($"{MultipleAssignmentExpression.Left[i].Location}: {Left.GetType()} cannot be the target of an assignment");
                 }
             }
-            return new ArrayInstance(Interpreter.Array, AssignedValues);
+            return new ArrayInstance(Api.Array, AssignedValues);
         }
         async Task<Instance> InterpretUndefineMethodStatement(UndefineMethodStatement UndefineMethodStatement) {
             string MethodName = UndefineMethodStatement.MethodName.Token.Value!;
@@ -1805,7 +1492,7 @@ namespace Embers
             if (!CurrentModule.InstanceMethods.Remove(MethodName)) {
                 throw new RuntimeException($"{UndefineMethodStatement.MethodName.Token.Location}: Undefined method '{MethodName}' for {CurrentModule.Name}");
             }
-            return Interpreter.Nil;
+            return Api.Nil;
         }
         async Task<Instance> InterpretDefinedExpression(DefinedExpression DefinedExpression) {
             if (DefinedExpression.Expression is MethodCallExpression DefinedMethod) {
@@ -1813,75 +1500,75 @@ namespace Embers
                     await InterpretExpressionAsync(DefinedMethod.MethodPath, ReturnType.FoundVariable);
                 }
                 catch (RuntimeException) {
-                    return Interpreter.Nil;
+                    return Api.Nil;
                 }
-                return new StringInstance(Interpreter.String, "method");
+                return new StringInstance(Api.String, "method");
             }
             if (DefinedExpression.Expression is PathExpression DefinedPath) {
                 try {
                     await InterpretExpressionAsync(DefinedPath, ReturnType.FoundVariable);
                 }
                 catch (RuntimeException) {
-                    return Interpreter.Nil;
+                    return Api.Nil;
                 }
-                return new StringInstance(Interpreter.String, "method");
+                return new StringInstance(Api.String, "method");
             }
             else if (DefinedExpression.Expression is ObjectTokenExpression ObjectToken) {
                 if (ObjectToken.Token.Type == Phase2TokenType.LocalVariableOrMethod) {
                     if (TryGetLocalVariable(ObjectToken.Token.Value!, out _)) {
-                        return new StringInstance(Interpreter.String, "local-variable");
+                        return new StringInstance(Api.String, "local-variable");
                     }
                     else if (TryGetLocalInstanceMethod(ObjectToken.Token.Value!, out _)) {
-                        return new StringInstance(Interpreter.String, "method");
+                        return new StringInstance(Api.String, "method");
                     }
                     else {
-                        return Interpreter.Nil;
+                        return Api.Nil;
                     }
                 }
                 else if (ObjectToken.Token.Type == Phase2TokenType.GlobalVariable) {
                     if (Interpreter.GlobalVariables.ContainsKey(ObjectToken.Token.Value!)) {
-                        return new StringInstance(Interpreter.String, "global-variable");
+                        return new StringInstance(Api.String, "global-variable");
                     }
                     else {
-                        return Interpreter.Nil;
+                        return Api.Nil;
                     }
                 }
                 else if (ObjectToken.Token.Type == Phase2TokenType.ConstantOrMethod) {
                     if (TryGetLocalConstant(ObjectToken.Token.Value!, out _)) {
-                        return new StringInstance(Interpreter.String, "constant");
+                        return new StringInstance(Api.String, "constant");
                     }
                     else if (TryGetLocalInstanceMethod(ObjectToken.Token.Value!, out _)) {
-                        return new StringInstance(Interpreter.String, "method");
+                        return new StringInstance(Api.String, "method");
                     }
                     else {
-                        return Interpreter.Nil;
+                        return Api.Nil;
                     }
                 }
                 else if (ObjectToken.Token.Type == Phase2TokenType.InstanceVariable) {
                     if (CurrentInstance.InstanceVariables.ContainsKey(ObjectToken.Token.Value!)) {
-                        return new StringInstance(Interpreter.String, "instance-variable");
+                        return new StringInstance(Api.String, "instance-variable");
                     }
                     else {
-                        return Interpreter.Nil;
+                        return Api.Nil;
                     }
                 }
                 else if (ObjectToken.Token.Type == Phase2TokenType.ClassVariable) {
                     if (CurrentModule.ClassVariables.ContainsKey(ObjectToken.Token.Value!)) {
-                        return new StringInstance(Interpreter.String, "class-variable");
+                        return new StringInstance(Api.String, "class-variable");
                     }
                     else {
-                        return Interpreter.Nil;
+                        return Api.Nil;
                     }
                 }
                 else {
-                    return new StringInstance(Interpreter.String, "expression");
+                    return new StringInstance(Api.String, "expression");
                 }
             }
             else if (DefinedExpression.Expression is SelfExpression) {
-                return new StringInstance(Interpreter.String, "self");
+                return new StringInstance(Api.String, "self");
             }
             else if (DefinedExpression.Expression is SuperStatement) {
-                return new StringInstance(Interpreter.String, "super");
+                return new StringInstance(Api.String, "super");
             }
             else {
                 throw new InternalErrorException($"{DefinedExpression.Location}: Unknown expression type for defined?: {DefinedExpression.Expression.GetType().Name}");
@@ -1895,7 +1582,7 @@ namespace Embers
         }
         async Task<Instance> InterpretEnvironmentInfoExpression(EnvironmentInfoExpression EnvironmentInfoExpression) {
             if (EnvironmentInfoExpression.Type == EnvironmentInfoType.__LINE__) {
-                return new IntegerInstance(Interpreter.Integer, ApproximateLocation.Line);
+                return new IntegerInstance(Api.Integer, ApproximateLocation.Line);
             }
             else {
                 throw new InternalErrorException($"{ApproximateLocation}: Environment info type not handled: '{EnvironmentInfoExpression.Type}'");
@@ -1946,7 +1633,7 @@ namespace Embers
                 ReturnStatement ReturnStatement => throw new ReturnException(
                                                         ReturnStatement.ReturnValue != null
                                                         ? await InterpretExpressionAsync(ReturnStatement.ReturnValue)
-                                                        : Interpreter.Nil),
+                                                        : Api.Nil),
                 LoopControlStatement LoopControlStatement => LoopControlStatement.Type switch {
                     LoopControlType.Break => throw new BreakException(),
                     LoopControlType.Retry => throw new RetryException(),
@@ -1980,7 +1667,7 @@ namespace Embers
                 // Set on yield
                 CurrentOnYield = OnYield;
                 // Interpret statements
-                Instance LastInstance = Interpreter.Nil;
+                Instance LastInstance = Api.Nil;
                 for (int Index = 0; Index < Statements.Count; Index++) {
                     // Interpret expression and store the result
                     Expression Statement = Statements[Index];
@@ -2020,10 +1707,10 @@ namespace Embers
                 return Ex.Instance;
             }
             catch (ExitException) {
-                return Interpreter.Nil;
+                return Api.Nil;
             }
             catch (StopException) {
-                return Interpreter.Nil;
+                return Api.Nil;
             }
             finally {
                 // Deactivate debounce

@@ -1,5 +1,6 @@
 using Embers;
 using static Embers.Script;
+using static Embers.Api;
 using static Embers.SpecialTypes;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 

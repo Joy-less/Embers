@@ -827,7 +827,7 @@ namespace Embers
                         goto Redo;
                     }
                     catch (NextException) {
-                        return Input.Interpreter.Nil;
+                        return Input.Api.Nil;
                     }
                 }, null, VariableNames);
             }

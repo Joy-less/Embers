@@ -155,11 +155,11 @@ namespace Embers
                 Stack.Push(With[i]);
             }
         }
-        public static void EnsureArrayIndex<T>(this List<T> List, Interpreter Interpreter, int Index) where T : Instance {
+        public static void EnsureArrayIndex<T>(this List<T> List, Api Api, int Index) where T : Instance {
             int Count = Index + 1;
             List.EnsureCapacity(Count);
             for (int i = List.Count; i < Count; i++) {
-                List.Add((T)(object)Interpreter.Nil);
+                List.Add((T)(object)Api.Nil);
             }
         }
         public static LockingDictionary<T, T> ListAsHash<T>(this List<T> HashItemsList) where T : notnull {
