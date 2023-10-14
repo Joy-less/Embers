@@ -228,8 +228,9 @@ namespace Embers_Tests
                 a = -1
                 b = - 2
                 c = (- 3.4)
-                return a, b, c
-            ", new object[] {new DynInteger(-1L), new DynInteger(-2L), new DynFloat(-3.4d)});
+                d = (true ? 5 : 2) + 6
+                return a, b, c, d
+            ", new object[] {new DynInteger(-1L), new DynInteger(-2L), new DynFloat(-3.4d), new DynInteger(11)});
 
             // Hashes
             AssertEqual(@"

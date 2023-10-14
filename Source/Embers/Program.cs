@@ -13,6 +13,7 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() =>
                     Script.Evaluate(@"
+=begin
 class A
     def method_missing(method, *args)
         p method, args
@@ -37,6 +38,9 @@ while true
     sleep 0.1
     puts b.weakref_alive?
 end
+=end
+
+puts (true ? 5 : 2) + 6
                     ")
                 );
                 Console.ReadLine();
