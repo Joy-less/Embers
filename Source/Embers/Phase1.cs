@@ -319,9 +319,12 @@ namespace Embers
                         Number = Number[2..].ParseHexInteger().ToString();
                     }
                     // Unary
-                    if (LastTokenWas(Phase1TokenType.Operator) && Tokens[^1].Value == "-" && !Tokens[^1].FollowedByWhitespace) {
-                        Tokens.RemoveAt(Tokens.Count - 1);
-                        Number = "-" + Number;
+                    if (LastTokenWas(Phase1TokenType.Operator)) {
+                        Phase1Token LastToken = Tokens[^1];
+                        if (LastToken.Value is "+" or "-" && !LastToken.FollowedByWhitespace) {
+                            Tokens.RemoveAt(Tokens.Count - 1);
+                            Number = LastToken.Value + Number;
+                        }
                     }
                     // Add integer to tokens
                     Tokens.Add(new(Location, Phase1TokenType.Integer, Number, FollowsWhitespace, FollowedByWhitespace));
