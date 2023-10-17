@@ -237,6 +237,7 @@ namespace Embers
             Integer.InstanceMethods["floor"] = Script.CreateMethod(_Float.floor, 0);
             Integer.InstanceMethods["ceil"] = Script.CreateMethod(_Float.ceil, 0);
             Integer.InstanceMethods["truncate"] = Script.CreateMethod(_Float.truncate, 0);
+            Integer.InstanceMethods["abs"] = Script.CreateMethod(_Integer.abs, 0);
 
             // Float
             Float = Script.CreateClass("Float");
@@ -262,6 +263,7 @@ namespace Embers
             Float.InstanceMethods["floor"] = Script.CreateMethod(_Float.floor, 0);
             Float.InstanceMethods["ceil"] = Script.CreateMethod(_Float.ceil, 0);
             Float.InstanceMethods["truncate"] = Script.CreateMethod(_Float.truncate, 0);
+            Float.InstanceMethods["abs"] = Script.CreateMethod(_Float.abs, 0);
 
             // Proc
             Proc = Script.CreateClass("Proc");
@@ -364,6 +366,7 @@ namespace Embers
             Math.Methods["to_rad"] = Script.CreateMethod(_Math.to_rad, 1);
             Math.Methods["to_deg"] = Script.CreateMethod(_Math.to_deg, 1);
             Math.Methods["lerp"] = Script.CreateMethod(_Math.lerp, 3);
+            Math.Methods["abs"] = Script.CreateMethod(_Math.abs, 1);
 
             // Exception
             Exception = Script.CreateClass("Exception");
@@ -1142,26 +1145,6 @@ namespace Embers
             public static async Task<Instance> to_f(MethodInput Input) {
                 return Input.Api.GetFloat(Input.Instance.Float);
             }
-            public static async Task<Instance> clamp(MethodInput Input) {
-                DynInteger Number = Input.Instance.Integer;
-                Instance Min = Input.Arguments[0];
-                Instance Max = Input.Arguments[1];
-                if ((DynFloat)Number < Min.Float) {
-                    if (Min is IntegerInstance)
-                        return Input.Api.GetInteger(Min.Integer);
-                    else
-                        return Input.Api.GetFloat(Min.Float);
-                }
-                else if ((DynFloat)Number > Max.Float) {
-                    if (Max is IntegerInstance)
-                        return Input.Api.GetInteger(Max.Integer);
-                    else
-                        return Input.Api.GetFloat(Max.Float);
-                }
-                else {
-                    return Input.Instance;
-                }
-            }
             public static async Task<Instance> times(MethodInput Input) {
                 if (Input.OnYield != null) {
                     DynInteger Times = Input.Instance.Integer;
@@ -1194,6 +1177,30 @@ namespace Embers
                     }
                 }
                 return Input.Api.Nil;
+            }
+            public static async Task<Instance> clamp(MethodInput Input) {
+                DynInteger Number = Input.Instance.Integer;
+                Instance Min = Input.Arguments[0];
+                Instance Max = Input.Arguments[1];
+                if ((DynFloat)Number < Min.Float) {
+                    if (Min is IntegerInstance)
+                        return Input.Api.GetInteger(Min.Integer);
+                    else
+                        return Input.Api.GetFloat(Min.Float);
+                }
+                else if ((DynFloat)Number > Max.Float) {
+                    if (Max is IntegerInstance)
+                        return Input.Api.GetInteger(Max.Integer);
+                    else
+                        return Input.Api.GetFloat(Max.Float);
+                }
+                else {
+                    return Input.Instance;
+                }
+            }
+            public static async Task<Instance> abs(MethodInput Input) {
+                Instance Number = Input.Instance;
+                return Number.Integer >= 0 ? Number : Input.Api.GetInteger(-Number.Integer);
             }
         }
         static class _Float {
@@ -1346,6 +1353,10 @@ namespace Embers
             public static async Task<Instance> truncate(MethodInput Input) {
                 long Result = (long)System.Math.Truncate((double)Input.Instance.Float);
                 return Input.Api.GetInteger(Result);
+            }
+            public static async Task<Instance> abs(MethodInput Input) {
+                Instance Number = Input.Instance;
+                return Number.Float >= 0 ? Number : Input.Api.GetFloat(-Number.Float);
             }
         }
         static class _File {
@@ -2262,6 +2273,18 @@ namespace Embers
                 DynFloat B = Input.Arguments[1].Float;
                 DynFloat T = Input.Arguments[2].Float;
                 return Input.Api.GetFloat(A * (1 - T) + (B * T));
+            }
+            public static async Task<Instance> abs(MethodInput Input) {
+                Instance Number = Input.Arguments[0];
+                if (Number.Float >= 0) {
+                    return Number;
+                }
+                else if (Number is IntegerInstance) {
+                    return Input.Api.GetInteger(-Number.Integer);
+                }
+                else {
+                    return Input.Api.GetFloat(-Number.Float);
+                }
             }
         }
         static class _Exception {

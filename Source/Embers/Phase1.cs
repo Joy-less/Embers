@@ -318,6 +318,11 @@ namespace Embers
                         if (Number.Length == 2) throw new SyntaxErrorException($"{Location}: '0x' is not a valid number");
                         Number = Number[2..].ParseHexInteger().ToString();
                     }
+                    // Unary
+                    if (LastTokenWas(Phase1TokenType.Operator) && Tokens[^1].Value == "-" && !Tokens[^1].FollowedByWhitespace) {
+                        Tokens.RemoveAt(Tokens.Count - 1);
+                        Number = "-" + Number;
+                    }
                     // Add integer to tokens
                     Tokens.Add(new(Location, Phase1TokenType.Integer, Number, FollowsWhitespace, FollowedByWhitespace));
                     i--;

@@ -2331,31 +2331,8 @@ namespace Embers
 
                 if (UnknownObject is Phase2Token Token) {
                     if (Token.Type == Phase2TokenType.Operator && (Token.Value! == "+" || Token.Value! == "-")) {
-                        // Get next object token
-                        ObjectTokenExpression? NextObjectToken = null;
-                        if (NextUnknownObject is ObjectTokenExpression NextExpression) {
-                            if (NextExpression is PathExpression NextPathExpression) {
-                                if (NextPathExpression.ParentObject is ObjectTokenExpression NextPathObjectExpression) {
-                                    NextObjectToken = NextPathObjectExpression;
-                                }
-                            }
-                            else if (NextExpression is ObjectTokenExpression NextObjectExpression) {
-                                NextObjectToken = NextObjectExpression;
-                            }
-                        }
-                        else if (NextUnknownObject is MethodCallExpression NextMethodExpression) {
-                            if (NextMethodExpression.MethodPath is PathExpression NextMethodPathExpression) {
-                                if (NextMethodPathExpression.ParentObject is ObjectTokenExpression NextMethodPathObjectExpression) {
-                                    NextObjectToken = NextMethodPathObjectExpression;
-                                }
-                            }
-                            else if (NextMethodExpression.MethodPath is ObjectTokenExpression NextMethodObjectExpression) {
-                                NextObjectToken = NextMethodObjectExpression;
-                            }
-                        }
-
                         // Add method call expression for unary operator
-                        if (NextObjectToken != null) {
+                        if (NextUnknownObject is ObjectTokenExpression NextObjectToken) {
                             /*If previous object is not an expression, then it's unary.
                               If previous object is a method and there's a space before the operator and no space after the operator, then it's unary.
                               Otherwise, it's add/sub.*/

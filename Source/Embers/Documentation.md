@@ -184,6 +184,9 @@ integer.to_i
 integer.to_f
 	Returns the integer as a float.
 
+integer.times {|n|}
+	Repeats the given block the integer number of times.
+
 integer.clamp(min, max)
 	Returns min if integer < min, max if integer > max or otherwise integer.
 
@@ -193,8 +196,8 @@ integer.round(decimal_places = 0)
 integer.floor, integer.ceil, integer.truncate
 	Returns the integer.
 
-integer.times {|n|}
-	Repeats the given block the integer number of times.
+integer.abs
+	Returns the positive value of the integer.
 ```
 ```
 Float::INFINITY
@@ -220,6 +223,9 @@ float.ceil
 
 float.truncate
 	Returns the float as an integer with the decimal places removed.
+
+float.abs
+	Returns the positive value of the float.
 ```
 ```
 proc.call(*args)
@@ -361,6 +367,9 @@ Math.to_deg(radians)
 
 Math.lerp(a, b, t)
 	Returns the linear value between a and b at the ratio t.
+
+Math.abs(number)
+	Returns the positive value of the number.
 
 Math.sin, Math.cos, Math.tan, Math.asin, Math.acos, Math.atan, Math.atan2, Math.sinh, Math.cosh, Math.tanh, Math.asinh, Math.acosh,
 Math.atanh, Math.exp, Math.log, Math.log10, Math.log2, Math.frexp, Math.ldexp, Math.hypot, Math.erf, Math.erfc, Math.gamma, Math.lgamma
