@@ -270,6 +270,55 @@ namespace Embers
         public static double ToUnixTimeSecondsDouble(this DateTimeOffset DateTimeOffset) {
             return DateTimeOffset.ToUnixTimeSeconds() + (DateTimeOffset.Ticks % TimeSpan.TicksPerSecond) / (double)TimeSpan.TicksPerSecond;
         }
+        public static async Task QuickSort(this List<Instance> Items, Func<Instance, Instance, Task<bool>> SortBlock) {
+            async Task QuickSort(List<Instance> Items, int Low, int High) {
+                if (Low < High) {
+                    // Choose a pivot
+                    int PivotIndex = (Low + High) / 2;
+                    Instance Pivot = Items[PivotIndex];
+                    // Initialise the pointers
+                    int Left = Low;
+                    int Right = High;
+                    // Check if there are items on either side of the pivot
+                    while (Left <= Right) {
+                        // Find the first item on the left that should be to the right of the pivot
+                        while (await SortBlock(Items[Left], Pivot)) {
+                            Left++;
+                        }
+                        // Find the first item on the right that should be to the left of the pivot
+                        while (await SortBlock(Pivot, Items[Right])) {
+                            Right--;
+                        }
+                        // Check if there are items that need to be swapped
+                        if (Left <= Right) {
+                            // Swap the items to the correct side of the pivot
+                            (Items[Left], Items[Right]) = (Items[Right], Items[Left]);
+                            Left++;
+                            Right--;
+                        }
+                    }
+                    // Sort the sides
+                    if (Low < Right) await QuickSort(Items, Low, Right);
+                    if (Left < High) await QuickSort(Items, Left, High);
+                }
+            }
+            await QuickSort(Items, 0, Items.Count - 1);
+        }
+        public static async Task InsertionSort(this List<Instance> Items, Func<Instance, Instance, Task<bool>> SortBlock) {
+            for (int i = 1; i < Items.Count; i++) {
+                Instance Item = Items[i];
+                int i2;
+                for (i2 = i - 1; i2 >= 0; i2--) {
+                    if (await SortBlock(Item, Items[i2])) {
+                        Items[i2 + 1] = Items[i2];
+                    }
+                    else {
+                        break;
+                    }
+                }
+                Items[i2 + 1] = Item;
+            }
+        }
 
         //
         // Compatibility

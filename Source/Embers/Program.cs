@@ -40,6 +40,7 @@ while true
 end
 =end
 
+=begin
 puts (true ? 5 : 2) + 6
 
 res = Net::HTTP.get('httpbin.org/')
@@ -62,6 +63,33 @@ def y
 end
 end
 puts -Z.new.y
+=end
+
+a = [2, 4, 6, 7, 3, 5, 1, 9, 0, 8, 4.5]
+a.sort!
+p a
+p a.shuffle
+p a.shuffle.sort
+
+start_time = Time.now.to_f
+2_000.times do
+    a = [2, 4, 6, 7, 3, 5, 1, 9, 0, 8, 4.5]
+    a.sort!
+end
+puts (Time.now.to_f - start_time).to_s + ' seconds'
+
+start_time = Time.now.to_f
+10.times do
+    a = ((0..10).to_a * 10).shuffle
+    a.sort!
+end
+puts (Time.now.to_f - start_time).to_s + ' seconds'
+
+z = [1, 2, 4, 2]
+z.sort
+p z
+z.sort!
+p z
                     ")
                 );
                 Console.ReadLine();

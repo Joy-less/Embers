@@ -269,6 +269,9 @@ array.forty_two
 array.sample
 	Returns a random item in the array.
 
+array.shuffle | array.shuffle!
+	Returns the array in a randomised order.
+
 array.min
 	Returns the minimum item in the array using the < operator.
 
@@ -288,8 +291,9 @@ array.map {|item|} | array.map! {|item|}
 	Returns a new array containing the values returned by the given block.
 
 array.sort {|a, b|} | array.sort! {|item|}
-	If a block is given, returns a new array sorted by the block's return value. It should return -1 if a -> b, 0 if a and b are the same, and 1 if b -> a.
-	If a block is not given, returns a new array sorted in ascending order by the "<=>" operator.
+	Sorts the array by the block's return value using a quick sort if there are more than 16 items, otherwise an insertion sort.
+	The block should return -1 if a -> b, 0 if a and b are the same, and 1 if b -> a.
+	The block defaults to "a <=> b" (ascending order).
 
 array.include?(item) | array.includes?(item) | array.contain?(item) | array.contains?(item)
 	Returns true if the array contains the item.

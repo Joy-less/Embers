@@ -292,6 +292,8 @@ namespace Embers
             Array.InstanceMethods["last"] = Script.CreateMethod(_Array.last, 0);
             Array.InstanceMethods["forty_two"] = Script.CreateMethod(_Array.forty_two, 0);
             Array.InstanceMethods["sample"] = Script.CreateMethod(_Array.sample, 0);
+            Array.InstanceMethods["shuffle"] = Script.CreateMethod(_Array.shuffle, 0);
+            Array.InstanceMethods["shuffle!"] = Script.CreateMethod(_Array.shuffle1, 0);
             Array.InstanceMethods["min"] = Script.CreateMethod(_Array.min, 0);
             Array.InstanceMethods["max"] = Script.CreateMethod(_Array.max, 0);
             Array.InstanceMethods["insert"] = Script.CreateMethod(_Array.insert, 1..);
@@ -1686,6 +1688,22 @@ namespace Embers
                     return Input.Api.Nil;
                 }
             }
+            private static void _shuffle(MethodInput Input, List<Instance> Items) {
+                for (int i = 1; i < Items.Count; i++) {
+                    int new_i = Input.Interpreter.InternalRandom.Next(i + 1);
+                    (Items[i], Items[new_i]) = (Items[new_i], Items[i]);
+                }
+            }
+            public static async Task<Instance> shuffle(MethodInput Input) {
+                List<Instance> Items = new(Input.Instance.Array);
+                _shuffle(Input, Items);
+                return new ArrayInstance(Input.Api.Array, Items);
+            }
+            public static async Task<Instance> shuffle1(MethodInput Input) {
+                List<Instance> Items = Input.Instance.Array;
+                _shuffle(Input, Items);
+                return Input.Instance;
+            }
             public static async Task<Instance> min(MethodInput Input) {
                 List<Instance> Items = Input.Instance.Array;
                 if (Items.Count != 0) {
@@ -1829,36 +1847,33 @@ namespace Embers
             public static async Task<Instance> map(MethodInput Input) => await _map(Input, false);
             public static async Task<Instance> map1(MethodInput Input) => await _map(Input, true);
             private static async Task<Instance> _sort(MethodInput Input, bool Exclaim) {
-                // Get sort methods
+                // Get sort block
                 List<Instance> Array = Input.Instance.Array;
-                Func<Instance, Instance, Task<bool>> SortFunction;
+                Func<Instance, Instance, Task<bool>> SortBlock;
                 if (Input.OnYield != null) {
-                    SortFunction = async (A, B) => {
+                    SortBlock = async (A, B) => {
                         return (await Input.OnYield.Call(Input.Script, null, new Instances(A, B), CatchReturn: false)).Integer < 0;
                     };
                 }
                 else {
-                    SortFunction = async (A, B) => {
+                    SortBlock = async (A, B) => {
                         return (await A.CallInstanceMethod(Input.Script, "<=>", B)).Integer < 0;
                     };
                 }
                 // Sort array
-                List<Instance> SortedArray = new(Array);
-                for (int i = 0; i < SortedArray.Count; i++) {
-                    for (int i2 = i + 1; i2 < SortedArray.Count; i2++) {
-                        if (!await SortFunction(SortedArray[i], SortedArray[i2])) {
-                            // Swap elements if they are out of order
-                            (SortedArray[i2], SortedArray[i]) = (SortedArray[i], SortedArray[i2]);
-                        }
-                    }
+                List<Instance> SortedArray = Exclaim ? Array : new(Array);
+                if (SortedArray.Count > 16) {
+                    await SortedArray.QuickSort(SortBlock);
+                }
+                else {
+                    await SortedArray.InsertionSort(SortBlock);
                 }
                 // Return sorted array
                 if (Exclaim) {
-                    ((ArrayInstance)Input.Instance).SetValue(SortedArray);
                     return Input.Instance;
                 }
                 else {
-                    return new ArrayInstance(Input.Api.Array, Array);
+                    return new ArrayInstance(Input.Api.Array, SortedArray);
                 }
             }
             public static async Task<Instance> sort(MethodInput Input) => await _sort(Input, false);
