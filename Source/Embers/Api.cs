@@ -46,6 +46,7 @@ namespace Embers
         public readonly Module Parallel;
         public readonly Class Time;
         public readonly Class WeakRef;
+        public readonly Module GC;
         public readonly Module File;
         public readonly Module Net;
             public readonly Module HTTP;
@@ -404,6 +405,11 @@ namespace Embers
             WeakRef.InstanceMethods["initialize"] = Script.CreateMethod(_WeakRef.initialize, 1);
             WeakRef.InstanceMethods["method_missing"] = Script.CreateMethod(_WeakRef.method_missing, null);
             WeakRef.InstanceMethods["weakref_alive?"] = Script.CreateMethod(_WeakRef.weakref_alive7, 0);
+
+            // GC
+            GC = Script.CreateModule("GC");
+            GC.Methods["start"] = Script.CreateMethod(_GC.start, 0);
+            GC.Methods["count"] = Script.CreateMethod(_GC.count, 0..1);
 
             // Global constants
             Interpreter.RootScope.Constants["EMBERS_VERSION"] = new StringInstance(String, Info.Version);
@@ -2471,6 +2477,25 @@ namespace Embers
             public static async Task<Instance> weakref_alive7(MethodInput Input) {
                 WeakRefInstance WeakRef = (WeakRefInstance)Input.Instance;
                 return WeakRef.WeakRef.TryGetTarget(out _) ? Input.Api.True : Input.Api.False;
+            }
+        }
+        static class _GC {
+            public static async Task<Instance> start(MethodInput Input) {
+                System.GC.Collect();
+                return Input.Api.Nil;
+            }
+            public static async Task<Instance> count(MethodInput Input) {
+                DynInteger Count = 0;
+                if (Input.Arguments.Count == 0) {
+                    for (int i = 0; i <= System.GC.MaxGeneration; i++) {
+                        Count += System.GC.CollectionCount(i);
+                    }
+                }
+                else {
+                    int Generation = (int)Input.Arguments[0].Integer;
+                    Count += System.GC.CollectionCount(Generation);
+                }
+                return Input.Api.GetInteger(Count);
             }
         }
         static class _Net {

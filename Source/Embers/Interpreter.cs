@@ -9,6 +9,8 @@ namespace Embers
 {
     public class Interpreter
     {
+        public readonly Api Api;
+
         /// <summary>Object is the superclass of all classes and modules.</summary>
         public readonly Module Object;
         /// <summary>Class is the class of all classes and modules.</summary>
@@ -22,8 +24,6 @@ namespace Embers
         public readonly Cache<string, SymbolInstance> Symbols = new();
         public readonly Cache<DynInteger, IntegerInstance> Integers = new();
         public readonly Cache<DynFloat, FloatInstance> Floats = new();
-
-        public readonly Api Api;
 
         public readonly Random InternalRandom = new();
         public long RandomSeed;

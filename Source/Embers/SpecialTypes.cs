@@ -588,7 +588,7 @@ namespace Embers
             public int Count => KeyValues.Count;
         }
         public class Cache<TKey, TValue> where TKey : notnull {
-            public const int Limit = 50_000;
+            public const int Limit = 5000;
             private readonly LockingDictionary<TKey, TValue> CacheDictionary = new();
             private readonly Queue<TKey> Keys = new();
             public TValue Store(TKey Key, TValue Value) {

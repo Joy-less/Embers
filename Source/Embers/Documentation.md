@@ -427,6 +427,13 @@ weakref.weakref_alive?
 	Returns false if the object has been garbage collected.
 ```
 ```
+GC.start
+	Initiates garbage collection for all generations.
+
+GC.count([generation])
+	Returns the number of times garbage has been collected for the given generation, or all generations combined.
+```
+```
 __LINE__
 	Returns the current script line as an integer.
 

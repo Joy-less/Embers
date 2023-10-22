@@ -114,6 +114,17 @@ def a **args
     p args
 end
 a b: 4, c: 67, d: :e
+
+p GC.count
+GC.start
+p GC.count
+p GC.count 0
+
+z = 0
+while true
+    z += 1
+    z = z.to_s.to_sym.to_s.to_f.to_i
+end
                     ")
                 );
                 Console.ReadLine();
