@@ -65,6 +65,7 @@ end
 puts -Z.new.y
 =end
 
+=begin
 a = [2, 4, 6, 7, 3, 5, 1, 9, 0, 8, 4.5]
 a.sort!
 p a
@@ -90,6 +91,29 @@ z.sort
 p z
 z.sort!
 p z
+=end
+
+p :or
+p(
+    {
+z: 5,
+y: 1,
+'hi' => 3
+}
+)
+
+p(1 + 2) {}
+
+p({a:4})
+p :or
+p:or
+
+p(5) {}
+
+def a **args
+    p args
+end
+a b: 4, c: 67, d: :e
                     ")
                 );
                 Console.ReadLine();

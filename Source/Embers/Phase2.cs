@@ -47,7 +47,8 @@ namespace Embers
             SplatOperator,
             OpenBracket,
             CloseBracket,
-            StartCurly,
+            StartDoCurly,
+            StartHashCurly,
             EndCurly,
             StartSquare,
             EndSquare,
@@ -113,13 +114,13 @@ namespace Embers
             new[] {"not"},
             new[] {"or", "and"},
         };
-        public readonly static string[] NonMethodOperators = new[] {
+        public readonly static HashSet<string> NonMethodOperators = new() {
             "or", "and", "&&", "||", "!", "not"
         };
-        public readonly static Phase2TokenType[] StartParenthesesTokens = new[] {
-            Phase2TokenType.OpenBracket, Phase2TokenType.StartSquare, Phase2TokenType.StartCurly, Phase2TokenType.Pipe
+        public readonly static HashSet<Phase2TokenType> StartParenthesesTokens = new() {
+            Phase2TokenType.OpenBracket, Phase2TokenType.StartSquare, Phase2TokenType.StartDoCurly, Phase2TokenType.StartHashCurly, Phase2TokenType.Pipe
         };
-        public readonly static Phase2TokenType[] EndParenthesesTokens = new[] {
+        public readonly static HashSet<Phase2TokenType> EndParenthesesTokens = new() {
             Phase2TokenType.CloseBracket, Phase2TokenType.EndSquare, Phase2TokenType.EndCurly, Phase2TokenType.Pipe
         };
 
@@ -953,7 +954,8 @@ namespace Embers
                         Phase1TokenType.SplatOperator => Phase2TokenType.SplatOperator,
                         Phase1TokenType.OpenBracket => Phase2TokenType.OpenBracket,
                         Phase1TokenType.CloseBracket => Phase2TokenType.CloseBracket,
-                        Phase1TokenType.StartCurly => Phase2TokenType.StartCurly,
+                        Phase1TokenType.StartDoCurly => Phase2TokenType.StartDoCurly,
+                        Phase1TokenType.StartHashCurly => Phase2TokenType.StartHashCurly,
                         Phase1TokenType.EndCurly => Phase2TokenType.EndCurly,
                         Phase1TokenType.StartSquare => Phase2TokenType.StartSquare,
                         Phase1TokenType.EndSquare => Phase2TokenType.EndSquare,
@@ -1026,7 +1028,7 @@ namespace Embers
 
             List<Expression> Arguments = new();
 
-            int IndexOfRightArrow = ArgumentObjects.FindIndex(Arg => Arg is Phase2Token Tok && Tok.Type == Phase2TokenType.RightArrow);
+            int IndexOfRightArrow = ArgumentObjects.FindIndex(Arg => Arg is Phase2Token Tok && Tok.Type is Phase2TokenType.RightArrow);
             // Arguments with double-splat hash arguments
             if (IndexOfRightArrow != -1) {
                 // Find index of hash arguments
@@ -1535,10 +1537,10 @@ namespace Embers
             else if (Block is BuildingDo DoBlock) {
                 // Verify end type
                 if (EndIsCurly && !DoBlock.DoIsCurly) {
-                    throw new SyntaxErrorException($"{DoBlock.Location}: Unexpected '}}'; did you mean 'do'?");
+                    throw new SyntaxErrorException($"{DoBlock.Location}: Unexpected '}}'; did you mean 'end'?");
                 }
                 else if (!EndIsCurly && DoBlock.DoIsCurly) {
-                    throw new SyntaxErrorException($"{DoBlock.Location}: Unexpected 'do'; did you mean '}}'?");
+                    throw new SyntaxErrorException($"{DoBlock.Location}: Unexpected 'end'; did you mean '}}'?");
                 }
 
                 MethodExpression OnYield = new(DoBlock.Location, DoBlock.Statements, null, DoBlock.Arguments, null);
@@ -1985,13 +1987,8 @@ namespace Embers
                             if (EndedExpression != null) AddPendingObject(EndedExpression);
                             break;
                         }
-                        // {
-                        case Phase2TokenType.StartCurly: {
-                            if (LastUnknownObject is null or Statement or not Expression) {
-                                // {} is hash; handle later
-                                PushBlock(new BuildingHash(Location));
-                                break;
-                            }
+                        // { (do)
+                        case Phase2TokenType.StartDoCurly: {
                             i++;
                             // Get do |arguments|
                             List<MethodArgumentExpression> DoArguments;
@@ -2006,6 +2003,11 @@ namespace Embers
                             }
                             // Open do block
                             PushBlock(new BuildingDo(Location, DoArguments, true));
+                            break;
+                        }
+                        // { (hash)
+                        case Phase2TokenType.StartHashCurly: {
+                            PushBlock(new BuildingHash(Location));
                             break;
                         }
                         // }
@@ -2742,7 +2744,7 @@ namespace Embers
                 }
                 // Key value (hash) expressions
                 else if (ExpressionsType == ExpressionsType.KeyValueExpressions) {
-                    int Phase = 0; // 0: Accept item only, 1: Expect right arrow, 2: Expect item, 3: Accept comma or end only
+                    int Phase = 0; // 0: Expect item, 1: Expect right arrow, 2: Expect item, 3: Expect comma or end
                     DebugLocation? SyntaxErrorLocation = null;
 
                     for (int i = 0; i < ParsedObjects.Count; i++) {
@@ -2752,17 +2754,17 @@ namespace Embers
                         if (ParsedObject is Statement ParsedStatement) {
                             throw new SyntaxErrorException($"{ParsedObject.Location}: Unexpected statement: {ParsedStatement.Inspect()}");
                         }
-                        else if (ParsedObject is Expression ParsedExpression && (Phase is 0 or 2)) {
+                        else if (Phase is 0 or 2 && ParsedObject is Expression ParsedExpression) {
                             Expressions.Add(ParsedExpression);
                             Phase++;
-                            if (Phase == 1) {
+                            if (Phase is 1) {
                                 SyntaxErrorLocation = ParsedExpression.Location;
                             }
                         }
-                        else if (ParsedObject is Phase2Token ParsedComma && ParsedComma.Type == Phase2TokenType.Comma && Phase == 3) {
+                        else if (Phase is 3 && ParsedObject is Phase2Token ParsedComma && ParsedComma.Type is Phase2TokenType.Comma) {
                             Phase = 0;
                         }
-                        else if (ParsedObject is Phase2Token ParsedRightArrow && ParsedRightArrow.Type == Phase2TokenType.RightArrow && Phase == 1) {
+                        else if (Phase is 1 && ParsedObject is Phase2Token ParsedRightArrow && ParsedRightArrow.Type is Phase2TokenType.RightArrow) {
                             Phase = 2;
                             SyntaxErrorLocation = ParsedRightArrow.Location;
                         }
@@ -2771,10 +2773,10 @@ namespace Embers
                         }
                     }
 
-                    if (Phase == 1) {
+                    if (Phase is 1) {
                         throw new SyntaxErrorException($"{SyntaxErrorLocation}: Expected value after key");
                     }
-                    else if (Phase == 2) {
+                    else if (Phase is 2) {
                         throw new SyntaxErrorException($"{SyntaxErrorLocation}: Expected value after right arrow");
                     }
                 }

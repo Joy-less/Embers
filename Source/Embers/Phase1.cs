@@ -22,7 +22,8 @@ namespace Embers
             Comma,
             SplatOperator,
             Colon,
-            StartCurly,
+            StartDoCurly,
+            StartHashCurly,
             EndCurly,
             StartSquare,
             EndSquare,
@@ -60,18 +61,20 @@ namespace Embers
             }
         }
 
-        static readonly IReadOnlyCollection<char> InvalidIdentifierCharacters = new char[] {
+        static readonly HashSet<char> InvalidIdentifierCharacters = new() {
             '.', ',', '(', ')', '"', '\'', ';', ':', '=', '+', '-', '*', '/', '%', '#', '?', '!', '{', '}', '[', ']', '|', '^', '&', '~', '<', '>', '\\'
         };
-        static readonly IReadOnlyCollection<Phase1TokenType> OmitEndOfStatementAfterList = new Phase1TokenType[] {
+        static readonly HashSet<Phase1TokenType> OmitEndOfStatementAfter = new() {
             Phase1TokenType.OpenBracket, Phase1TokenType.AssignmentOperator, Phase1TokenType.Operator, Phase1TokenType.Dot, Phase1TokenType.DoubleColon, Phase1TokenType.Comma,
-            Phase1TokenType.StartCurly, Phase1TokenType.StartSquare, Phase1TokenType.Pipe, Phase1TokenType.RightArrow, Phase1TokenType.TernaryQuestion, Phase1TokenType.TernaryElse
+            Phase1TokenType.StartDoCurly, Phase1TokenType.StartHashCurly, Phase1TokenType.StartSquare, Phase1TokenType.Pipe, Phase1TokenType.RightArrow,
+            Phase1TokenType.TernaryQuestion, Phase1TokenType.TernaryElse
         };
         public static List<Phase1Token> GetPhase1Tokens(string Code) {
             Code += "\n";
 
             List<Phase1Token> Tokens = new();
-            Stack<char> Brackets = new();
+            Stack<char> AllBrackets = new();
+            Stack<bool> HashBrackets = new();
 
             int CurrentLine = 1;
             int IndexOfLastNewline = 0;
@@ -97,17 +100,6 @@ namespace Embers
                 }
                 bool LastTokenWas(Phase1TokenType Type) {
                     return Tokens.Count != 0 && Tokens[^1].Type == Type;
-                }
-                bool LastTokenWasAny(params Phase1TokenType[] Types) {
-                    if (Tokens.Count != 0) {
-                        Phase1TokenType LastTokenType = Tokens[^1].Type;
-                        for (int i = 0; i < Types.Length; i++) {
-                            if (LastTokenType == Types[i]) {
-                                return true;
-                            }
-                        }
-                    }
-                    return false;
                 }
                 string EscapeString(string String) {
                     for (int i = 0; i < String.Length; i++) {
@@ -237,7 +229,7 @@ namespace Embers
                 }
                 bool IsPipeStatement() {
                     // Start pipe
-                    if ((LastTokenWas(Phase1TokenType.Identifier) && Tokens[^1].Value == "do") || LastTokenWas(Phase1TokenType.StartCurly)) {
+                    if ((LastTokenWas(Phase1TokenType.Identifier) && Tokens[^1].Value == "do") || LastTokenWas(Phase1TokenType.StartDoCurly)) {
                         return true;
                     }
                     // End pipe
@@ -355,14 +347,16 @@ namespace Embers
                             break;
                         case '(':
                             AddToken(Phase1TokenType.OpenBracket, "(");
-                            Brackets.Push('(');
+                            AllBrackets.Push('(');
+                            HashBrackets.Push(false);
                             break;
                         case ')':
                             RemoveEndOfStatement();
                             AddToken(Phase1TokenType.CloseBracket, ")");
                             // Handle unexpected close bracket
-                            if (Brackets.TryPop(out char Opener) == false || Opener != '(')
-                                throw new SyntaxErrorException($"{Location}: Unexpected close bracket: )");
+                            if (AllBrackets.TryPop(out char BracketOpener) == false || BracketOpener != '(')
+                                throw new SyntaxErrorException($"{Location}: Unexpected ')'");
+                            HashBrackets.Pop();
                             // Add EndOfStatement after def method name
                             if (IsDefMethodName())
                                 AddToken(Phase1TokenType.EndOfStatement, null);
@@ -419,17 +413,15 @@ namespace Embers
                             break;
                         case '\n':
                         case '\r':
-                            if (LastTokenWasAny(Phase1TokenType.Operator, Phase1TokenType.AssignmentOperator, Phase1TokenType.Comma, Phase1TokenType.Dot)
-                                || Brackets.Count != 0)
-                            {
+                            if ((Tokens.Count != 0 && OmitEndOfStatementAfter.Contains(Tokens[^1].Type)) && AllBrackets.Count != 0) {
                                 break;
                             }
                             goto case ';';
                         case ';':
                             // Add EndOfStatement if there isn't already one
-                            if (!LastTokenWas(Phase1TokenType.EndOfStatement) && !OmitEndOfStatementAfterList.Any(Token => LastTokenWas(Token)))
+                            if (!LastTokenWas(Phase1TokenType.EndOfStatement) && !(Tokens.Count != 0 && OmitEndOfStatementAfter.Contains(Tokens[^1].Type)))
                                 AddToken(Phase1TokenType.EndOfStatement, Chara.ToString());
-                            // \r + \n --> \r\n
+                            // \r + \n -> \r\n
                             else if (Chara == '\n' && Tokens[^1].Value == "\r")
                                 Tokens[^1].Value += "\n";
                             
@@ -449,7 +441,17 @@ namespace Embers
                                 AddToken(Phase1TokenType.TernaryElse, ":");
                             }
                             else {
-                                AddToken(Phase1TokenType.Colon, ":");
+                                bool HashEntryValid = HashBrackets.Contains(true) || Tokens.Count >= 2 && Tokens[^2].Type is Phase1TokenType.Identifier or Phase1TokenType.Comma;
+                                bool LastTokenValidAsSymbol = Tokens.Count != 0 && Tokens[^1].Type is Phase1TokenType.Identifier or Phase1TokenType.String;
+                                if (HashEntryValid && LastTokenValidAsSymbol) {
+                                    Phase1Token LastToken = Tokens[^1];
+                                    LastToken.Type = Phase1TokenType.Identifier;
+                                    LastToken.Value = ":" + LastToken.Value;
+                                    AddToken(Phase1TokenType.RightArrow, "=>");
+                                }
+                                else {
+                                    AddToken(Phase1TokenType.Colon, ":");
+                                }
                             }
                             break;
                         case '=':
@@ -630,18 +632,37 @@ namespace Embers
                             }
                             break;
                         case '{':
-                            AddToken(Phase1TokenType.StartCurly, "{");
+                            if (LastTokenWas(Phase1TokenType.CloseBracket) || (LastTokenWas(Phase1TokenType.Identifier) && !Phase2.Keywords.ContainsKey(Tokens[^1].NonNullValue))) {
+                                AddToken(Phase1TokenType.StartDoCurly, "{");
+                                HashBrackets.Push(false);
+                            }
+                            else {
+                                AddToken(Phase1TokenType.StartHashCurly, "{");
+                                HashBrackets.Push(true);
+                            }
+                            AllBrackets.Push('{');
                             break;
                         case '}':
                             // Add end curly bracket
                             AddToken(Phase1TokenType.EndCurly, "}");
+                            // Handle unexpected close curly bracket
+                            if (AllBrackets.TryPop(out char CurlyOpener) == false || CurlyOpener != '{')
+                                throw new SyntaxErrorException($"{Location}: Unexpected '}}'");
+                            HashBrackets.Pop();
+                            //
                             break;
                         case '[':
                             AddToken(Phase1TokenType.StartSquare, "[");
+                            AllBrackets.Push('[');
+                            HashBrackets.Push(false);
                             break;
                         case ']':
                             RemoveEndOfStatement();
                             AddToken(Phase1TokenType.EndSquare, "]");
+                            // Handle unexpected close square bracket
+                            if (AllBrackets.TryPop(out char SquareBracketOpener) == false || SquareBracketOpener != '[')
+                                throw new SyntaxErrorException($"{Location}: Unexpected ']'");
+                            HashBrackets.Pop();
                             break;
                         case '\\':
                             throw new SyntaxErrorException($"{Location}: Unexpected '\\'");
@@ -672,16 +693,11 @@ namespace Embers
                                 Tokens.RemoveAt(Tokens.Count - 1);
                                 Identifier = ":" + Identifier;
                             }
-                            // Parse "or", "and" and "not" as operators
-                            Phase1TokenType IdentifierType = Phase1TokenType.Identifier;
-                            if (Identifier is "or" or "and" or "not") {
-                                IdentifierType = Phase1TokenType.Operator;
-                            }
                             // Add EndOfStatement before end keyword
                             if (Identifier == "end" && !LastTokenWas(Phase1TokenType.EndOfStatement))
                                 AddToken(Phase1TokenType.EndOfStatement, null);
                             // Add identifier
-                            AddToken(IdentifierType, Identifier);
+                            AddToken(Phase1TokenType.Identifier, Identifier);
                             // Add EndOfStatement after else keyword
                             if (Identifier == "else")
                                 AddToken(Phase1TokenType.EndOfStatement, null);
@@ -691,7 +707,7 @@ namespace Embers
                     }
                 }
             }
-            // Certain tokens are invalid at this point
+            // Any unhandled colons are invalid
             {
                 Phase1Token? FindColon = Tokens.Find(Token => Token.Type == Phase1TokenType.Colon);
                 if (FindColon != null) {
@@ -704,6 +720,12 @@ namespace Embers
                 Phase1Token? NextToken = i + 1 < Tokens.Count ? Tokens[i + 1] : null;
                 if (Token.Type == Phase1TokenType.Dot && NextToken != null && NextToken.Type == Phase1TokenType.Operator) {
                     NextToken.Type = Phase1TokenType.Identifier;
+                }
+            }
+            // Parse "or", "and" and "not" as operators
+            foreach (Phase1Token Token in Tokens) {
+                if (Token.Type == Phase1TokenType.Identifier && Token.Value is "or" or "and" or "not") {
+                    Token.Type = Phase1TokenType.Operator;
                 }
             }
             //
