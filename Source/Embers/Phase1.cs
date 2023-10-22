@@ -413,18 +413,19 @@ namespace Embers
                             break;
                         case '\n':
                         case '\r':
-                            if ((Tokens.Count != 0 && OmitEndOfStatementAfter.Contains(Tokens[^1].Type)) && AllBrackets.Count != 0) {
+                            if (Tokens.Count != 0 && OmitEndOfStatementAfter.Contains(Tokens[^1].Type) && AllBrackets.Count != 0) {
                                 break;
                             }
                             goto case ';';
                         case ';':
-                            // Add EndOfStatement if there isn't already one
-                            if (!LastTokenWas(Phase1TokenType.EndOfStatement) && !(Tokens.Count != 0 && OmitEndOfStatementAfter.Contains(Tokens[^1].Type)))
-                                AddToken(Phase1TokenType.EndOfStatement, Chara.ToString());
-                            // \r + \n -> \r\n
-                            else if (Chara == '\n' && Tokens[^1].Value == "\r")
-                                Tokens[^1].Value += "\n";
-                            
+                            if (Tokens.Count != 0) {
+                                // Add EndOfStatement if there isn't already one
+                                if (!LastTokenWas(Phase1TokenType.EndOfStatement) && !OmitEndOfStatementAfter.Contains(Tokens[^1].Type))
+                                    AddToken(Phase1TokenType.EndOfStatement, Chara.ToString());
+                                // \r + \n -> \r\n
+                                else if (Chara == '\n' && Tokens[^1].Value == "\r")
+                                    Tokens[^1].Value += "\n";
+                            }
                             // Increment line if \n
                             if (Chara == '\n') {
                                 CurrentLine++;
