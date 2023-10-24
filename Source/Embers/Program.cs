@@ -28,6 +28,14 @@ end
 for i in 1..100_000
     i.to_s.to_sym
 end
+
+class A
+z = 0
+while true
+eval(""class A#{z} < A\nend"")
+z += 1
+end
+end
                     ")
                 );
                 Console.ReadLine();

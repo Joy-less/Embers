@@ -1178,7 +1178,7 @@ namespace Embers
                             NewModule = CreateModule(ClassName, ClassNameRef.Module, InheritsFrom);
                         }
                         else {
-                            NewModule = CreateModule(ClassName, null, InheritsFrom);
+                            NewModule = CreateModule(ClassName, (ClassNameRef.Instance ?? CurrentInstance).Module, InheritsFrom);
                         }
                     }
                     else {
@@ -1186,7 +1186,7 @@ namespace Embers
                             NewModule = CreateClass(ClassName, ClassNameRef.Module, InheritsFrom);
                         }
                         else {
-                            NewModule = CreateClass(ClassName, null, InheritsFrom);
+                            NewModule = CreateClass(ClassName, (ClassNameRef.Instance ?? CurrentInstance).Module, InheritsFrom);
                         }
                     }
                 }
@@ -1200,17 +1200,6 @@ namespace Embers
                     )
                 );
                 CurrentAccessModifier = PreviousAccessModifier;
-
-                // Store class/module constant
-                Module Module;
-                // Path
-                if (ClassNameRef.Module != null)
-                    Module = ClassNameRef.Module;
-                // Local
-                else
-                    Module = (ClassNameRef.Instance ?? CurrentInstance).Module!;
-                // Store constant
-                Module.Constants[ClassName] = new ModuleReference(NewModule);
             }
             else {
                 throw new InternalErrorException($"{DefineClassStatement.Location}: Invalid class/module name: {ClassNameObject}");
