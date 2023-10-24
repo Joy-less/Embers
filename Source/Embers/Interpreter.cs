@@ -21,16 +21,14 @@ namespace Embers
         public readonly Scope RootScope;
 
         public readonly LockingDictionary<string, Instance> GlobalVariables = new();
-        public readonly Cache<string, SymbolInstance> Symbols = new();
-        public readonly Cache<DynInteger, IntegerInstance> Integers = new();
-        public readonly Cache<DynFloat, FloatInstance> Floats = new();
+        public readonly WeakCache<string, SymbolInstance> Symbols = new();
 
         public readonly Random InternalRandom = new();
         public long RandomSeed;
         public Random Random;
         public long GenerateObjectId() => NextObjectId++;
         private long NextObjectId = 0;
-        
+
         public static string Serialise(string Code) {
             List<Phase1.Phase1Token> Tokens = Phase1.GetPhase1Tokens(Code);
             List<Expression> Statements = ObjectsToExpressions(Tokens, ExpressionsType.Statements);

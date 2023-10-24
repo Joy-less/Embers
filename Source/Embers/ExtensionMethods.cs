@@ -176,11 +176,6 @@ namespace Embers
             }
             return LockingDict;
         }
-        public static Method CloneTo(this Method Method, Module Target) {
-            Method MethodClone = Method.Clone();
-            MethodClone.ChangeParent(Target);
-            return MethodClone;
-        }
         public static void CloneTo(this Dictionary<string, Method> From, Dictionary<string, Method> To, Module TargetParent) {
             foreach (KeyValuePair<string, Method> Method in From) {
                 To[Method.Key] = Method.Value.CloneTo(TargetParent);

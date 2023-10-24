@@ -55,12 +55,6 @@ namespace Embers
         public SymbolInstance GetSymbol(string Value) {
             return Interpreter.Symbols[Value] ?? Interpreter.Symbols.Store(Value, new SymbolInstance(Symbol, Value));
         }
-        public IntegerInstance GetInteger(DynInteger Value) {
-            return Interpreter.Integers[Value] ?? Interpreter.Integers.Store(Value, new IntegerInstance(Integer, Value));
-        }
-        public FloatInstance GetFloat(DynFloat Value) {
-            return Interpreter.Floats[Value] ?? Interpreter.Floats.Store(Value, new FloatInstance(Float, Value));
-        }
         public Instance CreateInstanceFromClass(Script Script, Class Class) {
             if (Class.InheritsFrom(NilClass))
                 return new NilInstance(Class);
@@ -73,9 +67,9 @@ namespace Embers
             else if (Class.InheritsFrom(Symbol))
                 return GetSymbol("");
             else if (Class.InheritsFrom(Integer))
-                return GetInteger(0);
+                return new IntegerInstance(Integer, 0);
             else if (Class.InheritsFrom(Float))
-                return GetFloat(0);
+                return new FloatInstance(Float, 0);
             else if (Class.InheritsFrom(Proc))
                 throw new RuntimeException($"{Script.ApproximateLocation}: Tried to create Proc instance without a block");
             else if (Class.InheritsFrom(Range))
@@ -242,7 +236,7 @@ namespace Embers
 
             // Float
             Float = Script.CreateClass("Float");
-            Float.Constants["INFINITY"] = GetFloat(double.PositiveInfinity);
+            Float.Constants["INFINITY"] = new FloatInstance(Float, double.PositiveInfinity);
             Float.InstanceMethods["+"] = Script.CreateMethod(_Float._Add, 1);
             Float.InstanceMethods["-"] = Script.CreateMethod(_Float._Subtract, 1);
             Float.InstanceMethods["*"] = Script.CreateMethod(_Float._Multiply, 1);
@@ -338,8 +332,8 @@ namespace Embers
 
             // Math
             Math = Script.CreateModule("Math");
-            Math.Constants["PI"] = GetFloat(System.Math.PI);
-            Math.Constants["E"] = GetFloat(System.Math.E);
+            Math.Constants["PI"] = new FloatInstance(Float, System.Math.PI);
+            Math.Constants["E"] = new FloatInstance(Float, System.Math.E);
             Math.Methods["sin"] = Script.CreateMethod(_Math.sin, 1);
             Math.Methods["cos"] = Script.CreateMethod(_Math.cos, 1);
             Math.Methods["tan"] = Script.CreateMethod(_Math.tan, 1);
@@ -688,11 +682,11 @@ namespace Embers
                 return new ArrayInstance(Input.Api.Array, Constants);
             }
             public static async Task<Instance> object_id(MethodInput Input) {
-                return Input.Api.GetInteger(Input.Instance.ObjectId);
+                return new IntegerInstance(Input.Api.Integer, Input.Instance.ObjectId);
             }
             public static async Task<Instance> hash(MethodInput Input) {
                 DynInteger Hash = (Input.Instance.GetHashCode().ToString() + ((DynInteger)31 * Input.Instance.Module!.GetHashCode()).ToString()).ParseInteger();
-                return Input.Api.GetInteger(Hash);
+                return new IntegerInstance(Input.Api.Integer, Hash);
             }
             public static async Task<Instance> eql7(MethodInput Input) {
                 Instance Other = Input.Arguments[0];
@@ -916,13 +910,13 @@ namespace Embers
             }
             public static async Task<Instance> _Spaceship(MethodInput Input) {
                 if ((await _LessThan(Input)).IsTruthy) {
-                    return Input.Api.GetInteger(-1);
+                    return new IntegerInstance(Input.Api.Integer, -1);
                 }
                 else if ((await _Equals(Input)).IsTruthy) {
-                    return Input.Api.GetInteger(0);
+                    return new IntegerInstance(Input.Api.Integer, 0);
                 }
                 else if ((await _GreaterThan(Input)).IsTruthy) {
-                    return Input.Api.GetInteger(1);
+                    return new IntegerInstance(Input.Api.Integer, 1);
                 }
                 return Input.Api.Nil;
             }
@@ -948,8 +942,8 @@ namespace Embers
                         break;
                     }
                 }
-                if (IntegerString.Length == 0) return Input.Api.GetInteger(0);
-                return Input.Api.GetInteger(IntegerString.ToString().ParseInteger());
+                if (IntegerString.Length == 0) return new IntegerInstance(Input.Api.Integer, 0);
+                return new IntegerInstance(Input.Api.Integer, IntegerString.ToString().ParseInteger());
             }
             public static async Task<Instance> to_f(MethodInput Input) {
                 string FloatAsString = Input.Instance.LightInspect();
@@ -970,9 +964,9 @@ namespace Embers
                         break;
                     }
                 }
-                if (FloatString.Length == 0) return Input.Api.GetFloat(0);
+                if (FloatString.Length == 0) return new FloatInstance(Input.Api.Float, 0);
                 if (!SeenDot) FloatString.Append(".0");
-                return Input.Api.GetFloat(FloatString.ToString().ParseFloat());
+                return new FloatInstance(Input.Api.Float, FloatString.ToString().ParseFloat());
             }
             public static async Task<Instance> to_sym(MethodInput Input) {
                 return Input.Api.GetSymbol(Input.Instance.String);
@@ -1013,7 +1007,7 @@ namespace Embers
                 return Input.Instance;
             }
             public static async Task<Instance> length(MethodInput Input) {
-                return Input.Api.GetInteger(Input.Instance.String.Length);
+                return new IntegerInstance(Input.Api.Integer, Input.Instance.String.Length);
             }
             public static async Task<Instance> chomp(MethodInput Input) => await _chomp(Input, false);
             public static async Task<Instance> chomp1(MethodInput Input) => await _chomp(Input, true);
@@ -1110,10 +1104,10 @@ namespace Embers
         static class _Integer {
             private static Instance _GetResult(MethodInput Input, DynFloat Result, bool RightIsInteger) {
                 if (RightIsInteger) {
-                    return Input.Api.GetInteger((DynInteger)Result);
+                    return new IntegerInstance(Input.Api.Integer, (DynInteger)Result);
                 }
                 else {
-                    return Input.Api.GetFloat(Result);
+                    return new FloatInstance(Input.Api.Float, Result);
                 }
             }
             public static async Task<Instance> _Add(MethodInput Input) {
@@ -1145,13 +1139,13 @@ namespace Embers
                 return Input.Instance;
             }
             public static async Task<Instance> _UnaryMinus(MethodInput Input) {
-                return Input.Api.GetInteger(-Input.Instance.Integer);
+                return new IntegerInstance(Input.Api.Integer, -Input.Instance.Integer);
             }
             public static async Task<Instance> to_i(MethodInput Input) {
                 return Input.Instance;
             }
             public static async Task<Instance> to_f(MethodInput Input) {
-                return Input.Api.GetFloat(Input.Instance.Float);
+                return new FloatInstance(Input.Api.Float, Input.Instance.Float);
             }
             public static async Task<Instance> times(MethodInput Input) {
                 if (Input.OnYield != null) {
@@ -1162,7 +1156,7 @@ namespace Embers
                         try {
                             // x.times do |n|
                             if (TakesArgument) {
-                                await Input.OnYield.Call(Input.Script, null, Input.Api.GetInteger(i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                await Input.OnYield.Call(Input.Script, null, new IntegerInstance(Input.Api.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.times do
                             else {
@@ -1192,15 +1186,15 @@ namespace Embers
                 Instance Max = Input.Arguments[1];
                 if ((DynFloat)Number < Min.Float) {
                     if (Min is IntegerInstance)
-                        return Input.Api.GetInteger(Min.Integer);
+                        return new IntegerInstance(Input.Api.Integer, Min.Integer);
                     else
-                        return Input.Api.GetFloat(Min.Float);
+                        return new FloatInstance(Input.Api.Float, Min.Float);
                 }
                 else if ((DynFloat)Number > Max.Float) {
                     if (Max is IntegerInstance)
-                        return Input.Api.GetInteger(Max.Integer);
+                        return new IntegerInstance(Input.Api.Integer, Max.Integer);
                     else
-                        return Input.Api.GetFloat(Max.Float);
+                        return new FloatInstance(Input.Api.Float, Max.Float);
                 }
                 else {
                     return Input.Instance;
@@ -1208,33 +1202,33 @@ namespace Embers
             }
             public static async Task<Instance> abs(MethodInput Input) {
                 Instance Number = Input.Instance;
-                return Number.Integer >= 0 ? Number : Input.Api.GetInteger(-Number.Integer);
+                return Number.Integer >= 0 ? Number : new IntegerInstance(Input.Api.Integer, -Number.Integer);
             }
         }
         static class _Float {
             public static async Task<Instance> _Add(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
-                return Input.Api.GetFloat(Input.Instance.Float + Right.Float);
+                return new FloatInstance(Input.Api.Float, Input.Instance.Float + Right.Float);
             }
             public static async Task<Instance> _Subtract(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
-                return Input.Api.GetFloat(Input.Instance.Float - Right.Float);
+                return new FloatInstance(Input.Api.Float, Input.Instance.Float - Right.Float);
             }
             public static async Task<Instance> _Multiply(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
-                return Input.Api.GetFloat(Input.Instance.Float * Right.Float);
+                return new FloatInstance(Input.Api.Float, Input.Instance.Float * Right.Float);
             }
             public static async Task<Instance> _Divide(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
-                return Input.Api.GetFloat(Input.Instance.Float / Right.Float);
+                return new FloatInstance(Input.Api.Float, Input.Instance.Float / Right.Float);
             }
             public static async Task<Instance> _Modulo(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
-                return Input.Api.GetFloat(Input.Instance.Float % Right.Float);
+                return new FloatInstance(Input.Api.Float, Input.Instance.Float % Right.Float);
             }
             public static async Task<Instance> _Exponentiate(MethodInput Input) {
                 Instance Right = Input.Arguments[0];
-                return Input.Api.GetFloat(System.Math.Pow((double)Input.Instance.Float, (double)Right.Float));
+                return new FloatInstance(Input.Api.Float, System.Math.Pow((double)Input.Instance.Float, (double)Right.Float));
             }
             public static async Task<Instance> _Equals(MethodInput Input) {
                 Instance Left = Input.Instance;
@@ -1288,13 +1282,13 @@ namespace Embers
             }
             public static async Task<Instance> _Spaceship(MethodInput Input) {
                 if ((await _LessThan(Input)).IsTruthy) {
-                    return Input.Api.GetInteger(-1);
+                    return new IntegerInstance(Input.Api.Integer, -1);
                 }
                 else if ((await _Equals(Input)).IsTruthy) {
-                    return Input.Api.GetInteger(0);
+                    return new IntegerInstance(Input.Api.Integer, 0);
                 }
                 else if ((await _GreaterThan(Input)).IsTruthy) {
-                    return Input.Api.GetInteger(1);
+                    return new IntegerInstance(Input.Api.Integer, 1);
                 }
                 return Input.Api.Nil;
             }
@@ -1302,10 +1296,10 @@ namespace Embers
                 return Input.Instance;
             }
             public static async Task<Instance> _UnaryMinus(MethodInput Input) {
-                return Input.Api.GetFloat(-Input.Instance.Float);
+                return new FloatInstance(Input.Api.Float, -Input.Instance.Float);
             }
             public static async Task<Instance> to_i(MethodInput Input) {
-                return Input.Api.GetInteger(Input.Instance.Integer);
+                return new IntegerInstance(Input.Api.Integer, Input.Instance.Integer);
             }
             public static async Task<Instance> to_f(MethodInput Input) {
                 return Input.Instance;
@@ -1315,10 +1309,10 @@ namespace Embers
                 DynFloat Min = Input.Arguments[0].Float;
                 DynFloat Max = Input.Arguments[1].Float;
                 if (Number < Min) {
-                    return Input.Api.GetFloat(Min);
+                    return new FloatInstance(Input.Api.Float, Min);
                 }
                 else if (Number > Max) {
-                    return Input.Api.GetFloat(Max);
+                    return new FloatInstance(Input.Api.Float, Max);
                 }
                 else {
                     return Input.Instance;
@@ -1344,27 +1338,27 @@ namespace Embers
                 long ResultAsLong = (long)Result;
                 // Return result
                 if (Result == ResultAsLong) {
-                    return Input.Api.GetInteger(ResultAsLong);
+                    return new IntegerInstance(Input.Api.Integer, ResultAsLong);
                 }
                 else {
-                    return Input.Api.GetFloat(Result);
+                    return new FloatInstance(Input.Api.Float, Result);
                 }
             }
             public static async Task<Instance> floor(MethodInput Input) {
                 long Result = (long)System.Math.Floor((double)Input.Instance.Float);
-                return Input.Api.GetInteger(Result);
+                return new IntegerInstance(Input.Api.Integer, Result);
             }
             public static async Task<Instance> ceil(MethodInput Input) {
                 long Result = (long)System.Math.Ceiling((double)Input.Instance.Float);
-                return Input.Api.GetInteger(Result);
+                return new IntegerInstance(Input.Api.Integer, Result);
             }
             public static async Task<Instance> truncate(MethodInput Input) {
                 long Result = (long)System.Math.Truncate((double)Input.Instance.Float);
-                return Input.Api.GetInteger(Result);
+                return new IntegerInstance(Input.Api.Integer, Result);
             }
             public static async Task<Instance> abs(MethodInput Input) {
                 Instance Number = Input.Instance;
-                return Number.Float >= 0 ? Number : Input.Api.GetFloat(-Number.Float);
+                return Number.Float >= 0 ? Number : new FloatInstance(Input.Api.Float, -Number.Float);
             }
         }
         static class _File {
@@ -1467,7 +1461,7 @@ namespace Embers
                         try {
                             // x.each do |n|
                             if (TakesArgument) {
-                                await Input.OnYield.Call(Input.Script, null, Input.Api.GetInteger(i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                await Input.OnYield.Call(Input.Script, null, new IntegerInstance(Input.Api.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.each do
                             else {
@@ -1502,7 +1496,7 @@ namespace Embers
                         try {
                             // x.reverse_each do |n|
                             if (TakesArgument) {
-                                await Input.OnYield.Call(Input.Script, null, Input.Api.GetInteger(i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                await Input.OnYield.Call(Input.Script, null, new IntegerInstance(Input.Api.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.reverse_each do
                             else {
@@ -1532,7 +1526,7 @@ namespace Embers
                 long Min = (long)(Range.Min != null ? Range.Min : 0);
                 long Max = (long)(Range.Max != null ? Range.Max : throw new RuntimeException($"{Input.Location}: Cannot call 'to_a' on range if max is endless"));
                 for (long i = Min; i <= Max; i++) {
-                    Array.Add(Input.Api.GetInteger(i));
+                    Array.Add(new IntegerInstance(Input.Api.Integer, i));
                 }
                 return new ArrayInstance(Input.Api.Array, Array);
             }
@@ -1540,7 +1534,7 @@ namespace Embers
                 IntegerRange Range = Input.Instance.Range;
                 long? Count = Range.Count;
                 if (Count != null) {
-                    return Input.Api.GetInteger(Count.Value);
+                    return new IntegerInstance(Input.Api.Integer, Count.Value);
                 }
                 else {
                     return Input.Api.Nil;
@@ -1549,7 +1543,7 @@ namespace Embers
         }
         static class _Array {
             private static async Task<Instance> _GetIndex(MethodInput Input, int ArrayIndex) {
-                Instance Index = Input.Api.GetInteger(ArrayIndex);
+                Instance Index = new IntegerInstance(Input.Api.Integer, ArrayIndex);
                 return await Input.Instance.InstanceMethods["[]"].Call(Input.Script, Input.Instance, new Instances(Index));
             }
             private static int _RealisticIndex(MethodInput Input, DynInteger RawIndex) {
@@ -1652,7 +1646,7 @@ namespace Embers
             }
             public static async Task<Instance> length(MethodInput Input) {
                 List<Instance> Items = Input.Instance.Array;
-                return Input.Api.GetInteger(Items.Count);
+                return new IntegerInstance(Input.Api.Integer, Items.Count);
             }
             public static async Task<Instance> count(MethodInput Input) {
                 if (Input.Arguments.Count == 0) {
@@ -1673,7 +1667,7 @@ namespace Embers
                     }
 
                     // Return the count
-                    return Input.Api.GetInteger(Count);
+                    return new IntegerInstance(Input.Api.Integer, Count);
                 }
             }
             public static async Task<Instance> first(MethodInput Input) {
@@ -1766,7 +1760,7 @@ namespace Embers
                         try {
                             // x.each do |n, i|
                             if (TakesArguments == 2) {
-                                await Input.OnYield.Call(Input.Script, null, new List<Instance>() { Array[i], Input.Api.GetInteger(i) }, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                await Input.OnYield.Call(Input.Script, null, new List<Instance>() { Array[i], new IntegerInstance(Input.Api.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.each do |n|
                             else if (TakesArguments == 1) {
@@ -1803,7 +1797,7 @@ namespace Embers
                         try {
                             // x.reverse_each do |n, i|
                             if (TakesArguments == 2) {
-                                await Input.OnYield.Call(Input.Script, null, new List<Instance>() { Array[i], Input.Api.GetInteger(i) }, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                await Input.OnYield.Call(Input.Script, null, new List<Instance>() { Array[i], new IntegerInstance(Input.Api.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                             }
                             // x.reverse_each do |n|
                             else if (TakesArguments == 1) {
@@ -1991,7 +1985,7 @@ namespace Embers
             }
             public static async Task<Instance> length(MethodInput Input) {
                 HashDictionary Items = Input.Instance.Hash;
-                return Input.Api.GetInteger(Items.Count);
+                return new IntegerInstance(Input.Api.Integer, Items.Count);
             }
             public static async Task<Instance> has_key7(MethodInput Input) {
                 Instance ItemToFind = Input.Arguments[0];
@@ -2084,14 +2078,14 @@ namespace Embers
                     long IncludingMin = 0;
                     long ExcludingMax = (long)Integer.Integer;
                     long RandomNumber = Input.Interpreter.Random.NextInt64(IncludingMin, ExcludingMax);
-                    return Input.Api.GetInteger(RandomNumber);
+                    return new IntegerInstance(Input.Api.Integer, RandomNumber);
                 }
                 // Range random
                 else if (Input.Arguments.Count == 1 && Input.Arguments[0] is RangeInstance Range) {
                     long IncludingMin = (long)Range.AppliedMin.Integer;
                     long IncludingMax = (long)Range.AppliedMax.Integer;
                     long RandomNumber = Input.Interpreter.Random.NextInt64(IncludingMin, IncludingMax + 1);
-                    return Input.Api.GetInteger(RandomNumber);
+                    return new IntegerInstance(Input.Api.Integer, RandomNumber);
                 }
                 // Float random
                 else {
@@ -2104,7 +2098,7 @@ namespace Embers
                         ExcludingMax = (double)Input.Arguments[0].Float;
                     }
                     double RandomNumber = Input.Interpreter.Random.NextDouble() * (ExcludingMax - IncludingMin) + IncludingMin;
-                    return Input.Api.GetFloat(RandomNumber);
+                    return new FloatInstance(Input.Api.Float, RandomNumber);
                 }
             }
             public static async Task<Instance> srand(MethodInput Input) {
@@ -2120,60 +2114,60 @@ namespace Embers
                 Input.Interpreter.RandomSeed = NewSeed;
                 Input.Interpreter.Random = new Random(NewSeed.GetHashCode());
 
-                return Input.Api.GetInteger(PreviousSeed);
+                return new IntegerInstance(Input.Api.Integer, PreviousSeed);
             }
         }
         static class _Math {
             public static async Task<Instance> sin(MethodInput Input) {
-                return Input.Api.GetFloat(System.Math.Sin((double)Input.Arguments[0].Float));
+                return new FloatInstance(Input.Api.Float, System.Math.Sin((double)Input.Arguments[0].Float));
             }
             public static async Task<Instance> cos(MethodInput Input) {
-                return Input.Api.GetFloat(System.Math.Cos((double)Input.Arguments[0].Float));
+                return new FloatInstance(Input.Api.Float, System.Math.Cos((double)Input.Arguments[0].Float));
             }
             public static async Task<Instance> tan(MethodInput Input) {
-                return Input.Api.GetFloat(System.Math.Tan((double)Input.Arguments[0].Float));
+                return new FloatInstance(Input.Api.Float, System.Math.Tan((double)Input.Arguments[0].Float));
             }
             public static async Task<Instance> asin(MethodInput Input) {
-                return Input.Api.GetFloat(System.Math.Asin((double)Input.Arguments[0].Float));
+                return new FloatInstance(Input.Api.Float, System.Math.Asin((double)Input.Arguments[0].Float));
             }
             public static async Task<Instance> acos(MethodInput Input) {
-                return Input.Api.GetFloat(System.Math.Acos((double)Input.Arguments[0].Float));
+                return new FloatInstance(Input.Api.Float, System.Math.Acos((double)Input.Arguments[0].Float));
             }
             public static async Task<Instance> atan(MethodInput Input) {
-                return Input.Api.GetFloat(System.Math.Atan((double)Input.Arguments[0].Float));
+                return new FloatInstance(Input.Api.Float, System.Math.Atan((double)Input.Arguments[0].Float));
             }
             public static async Task<Instance> atan2(MethodInput Input) {
-                return Input.Api.GetFloat(System.Math.Atan2((double)Input.Arguments[0].Float, (double)Input.Arguments[1].Float));
+                return new FloatInstance(Input.Api.Float, System.Math.Atan2((double)Input.Arguments[0].Float, (double)Input.Arguments[1].Float));
             }
             public static async Task<Instance> sinh(MethodInput Input) {
-                return Input.Api.GetFloat(System.Math.Sinh((double)Input.Arguments[0].Float));
+                return new FloatInstance(Input.Api.Float, System.Math.Sinh((double)Input.Arguments[0].Float));
             }
             public static async Task<Instance> cosh(MethodInput Input) {
-                return Input.Api.GetFloat(System.Math.Cosh((double)Input.Arguments[0].Float));
+                return new FloatInstance(Input.Api.Float, System.Math.Cosh((double)Input.Arguments[0].Float));
             }
             public static async Task<Instance> tanh(MethodInput Input) {
-                return Input.Api.GetFloat(System.Math.Tanh((double)Input.Arguments[0].Float));
+                return new FloatInstance(Input.Api.Float, System.Math.Tanh((double)Input.Arguments[0].Float));
             }
             public static async Task<Instance> asinh(MethodInput Input) {
-                return Input.Api.GetFloat(System.Math.Asinh((double)Input.Arguments[0].Float));
+                return new FloatInstance(Input.Api.Float, System.Math.Asinh((double)Input.Arguments[0].Float));
             }
             public static async Task<Instance> acosh(MethodInput Input) {
-                return Input.Api.GetFloat(System.Math.Acosh((double)Input.Arguments[0].Float));
+                return new FloatInstance(Input.Api.Float, System.Math.Acosh((double)Input.Arguments[0].Float));
             }
             public static async Task<Instance> atanh(MethodInput Input) {
-                return Input.Api.GetFloat(System.Math.Atanh((double)Input.Arguments[0].Float));
+                return new FloatInstance(Input.Api.Float, System.Math.Atanh((double)Input.Arguments[0].Float));
             }
             public static async Task<Instance> exp(MethodInput Input) {
-                return Input.Api.GetFloat(System.Math.Exp((double)Input.Arguments[0].Float));
+                return new FloatInstance(Input.Api.Float, System.Math.Exp((double)Input.Arguments[0].Float));
             }
             public static async Task<Instance> log(MethodInput Input) {
-                return Input.Api.GetFloat(System.Math.Log((double)Input.Arguments[0].Float, (double)Input.Arguments[1].Float));
+                return new FloatInstance(Input.Api.Float, System.Math.Log((double)Input.Arguments[0].Float, (double)Input.Arguments[1].Float));
             }
             public static async Task<Instance> log10(MethodInput Input) {
-                return Input.Api.GetFloat(System.Math.Log10((double)Input.Arguments[0].Float));
+                return new FloatInstance(Input.Api.Float, System.Math.Log10((double)Input.Arguments[0].Float));
             }
             public static async Task<Instance> log2(MethodInput Input) {
-                return Input.Api.GetFloat(System.Math.Log((double)Input.Arguments[0].Float, 2));
+                return new FloatInstance(Input.Api.Float, System.Math.Log((double)Input.Arguments[0].Float, 2));
             }
             public static async Task<Instance> frexp(MethodInput Input) {
                 double Value = (double)Input.Arguments[0].Float;
@@ -2188,8 +2182,8 @@ namespace Embers
                 else Mantissa |= 1L << 52;
                 if (Mantissa == 0)
                     return new ArrayInstance(Input.Api.Array, new List<Instance>() {
-                        Input.Api.GetFloat(0),
-                        Input.Api.GetInteger(0)
+                        new FloatInstance(Input.Api.Float, 0),
+                        new IntegerInstance(Input.Api.Integer, 0)
                     });
                 Exponent -= 1075;
                 while ((Mantissa & 1) == 0) {
@@ -2206,25 +2200,25 @@ namespace Embers
 
                 // Return [mantissa, exponent]
                 return new ArrayInstance(Input.Api.Array, new List<Instance>() {
-                    Input.Api.GetFloat(M),
-                    Input.Api.GetInteger(E)
+                    new FloatInstance(Input.Api.Float, M),
+                    new IntegerInstance(Input.Api.Integer, E)
                 });
             }
             public static async Task<Instance> ldexp(MethodInput Input) {
                 double Fraction = (double)Input.Arguments[0].Float;
                 long Exponent = (long)Input.Arguments[1].Integer;
-                return Input.Api.GetFloat(Fraction * System.Math.Pow(2, Exponent));
+                return new FloatInstance(Input.Api.Float, Fraction * System.Math.Pow(2, Exponent));
             }
             public static async Task<Instance> sqrt(MethodInput Input) {
-                return Input.Api.GetFloat(System.Math.Sqrt((double)Input.Arguments[0].Float));
+                return new FloatInstance(Input.Api.Float, System.Math.Sqrt((double)Input.Arguments[0].Float));
             }
             public static async Task<Instance> cbrt(MethodInput Input) {
-                return Input.Api.GetFloat(System.Math.Cbrt((double)Input.Arguments[0].Float));
+                return new FloatInstance(Input.Api.Float, System.Math.Cbrt((double)Input.Arguments[0].Float));
             }
             public static async Task<Instance> hypot(MethodInput Input) {
                 double A = (double)Input.Arguments[0].Float;
                 double B = (double)Input.Arguments[1].Float;
-                return Input.Api.GetFloat(System.Math.Sqrt(System.Math.Pow(A, 2) + System.Math.Pow(B, 2)));
+                return new FloatInstance(Input.Api.Float, System.Math.Sqrt(System.Math.Pow(A, 2) + System.Math.Pow(B, 2)));
             }
             private static double _Erf(double x) {
                 // Approximate error function
@@ -2249,10 +2243,10 @@ namespace Embers
                 return sign * y;
             }
             public static async Task<Instance> erf(MethodInput Input) {
-                return Input.Api.GetFloat(_Erf((double)Input.Arguments[0].Float));
+                return new FloatInstance(Input.Api.Float, _Erf((double)Input.Arguments[0].Float));
             }
             public static async Task<Instance> erfc(MethodInput Input) {
-                return Input.Api.GetFloat(1.0 - _Erf((double)Input.Arguments[0].Float));
+                return new FloatInstance(Input.Api.Float, 1.0 - _Erf((double)Input.Arguments[0].Float));
             }
             private static double _Gamma(double Z) {
                 // Approximate gamma
@@ -2269,7 +2263,7 @@ namespace Embers
                 return System.Math.Sqrt(2 * System.Math.PI) * (System.Math.Pow(T, Z + 0.5)) * System.Math.Exp(-T) * X;
             }
             public static async Task<Instance> gamma(MethodInput Input) {
-                return Input.Api.GetFloat(_Gamma((double)Input.Arguments[0].Float));
+                return new FloatInstance(Input.Api.Float, _Gamma((double)Input.Arguments[0].Float));
             }
             public static async Task<Instance> lgamma(MethodInput Input) {
                 double Value = (double)Input.Arguments[0].Float;
@@ -2277,23 +2271,23 @@ namespace Embers
                 double A = System.Math.Log(System.Math.Abs(GammaValue));
                 long B = GammaValue < 0 ? -1 : 1;
                 return new ArrayInstance(Input.Api.Array, new List<Instance>() {
-                    Input.Api.GetFloat(A),
-                    Input.Api.GetInteger(B)
+                    new FloatInstance(Input.Api.Float, A),
+                    new IntegerInstance(Input.Api.Integer, B)
                 });
             }
             public static async Task<Instance> to_rad(MethodInput Input) {
                 double Degrees = (double)Input.Arguments[0].Float;
-                return Input.Api.GetFloat(Degrees * (System.Math.PI / 180));
+                return new FloatInstance(Input.Api.Float, Degrees * (System.Math.PI / 180));
             }
             public static async Task<Instance> to_deg(MethodInput Input) {
                 double Radians = (double)Input.Arguments[0].Float;
-                return Input.Api.GetFloat(Radians / (System.Math.PI / 180));
+                return new FloatInstance(Input.Api.Float, Radians / (System.Math.PI / 180));
             }
             public static async Task<Instance> lerp(MethodInput Input) {
                 DynFloat A = Input.Arguments[0].Float;
                 DynFloat B = Input.Arguments[1].Float;
                 DynFloat T = Input.Arguments[2].Float;
-                return Input.Api.GetFloat(A * (1 - T) + (B * T));
+                return new FloatInstance(Input.Api.Float, A * (1 - T) + (B * T));
             }
             public static async Task<Instance> abs(MethodInput Input) {
                 Instance Number = Input.Arguments[0];
@@ -2301,10 +2295,10 @@ namespace Embers
                     return Number;
                 }
                 else if (Number is IntegerInstance) {
-                    return Input.Api.GetInteger(-Number.Integer);
+                    return new IntegerInstance(Input.Api.Integer, -Number.Integer);
                 }
                 else {
-                    return Input.Api.GetFloat(-Number.Float);
+                    return new FloatInstance(Input.Api.Float, -Number.Float);
                 }
             }
         }
@@ -2364,7 +2358,7 @@ namespace Embers
 
                             // Parallel.each do |n, i|
                             if (TakesArguments == 2) {
-                                await Thread.Thread.Run(new List<Instance>() { Current, Input.Api.GetInteger(CurrentIndex) }, Input.OnYield);
+                                await Thread.Thread.Run(new List<Instance>() { Current, new IntegerInstance(Input.Api.Integer, CurrentIndex) }, Input.OnYield);
                             }
                             // Parallel.each do |n|
                             else if (TakesArguments == 1) {
@@ -2399,7 +2393,7 @@ namespace Embers
 
                             // Parallel.times do |n|
                             if (TakesArguments == 1) {
-                                await Thread.Thread.Run(Input.Api.GetInteger(CurrentIndex), Input.OnYield);
+                                await Thread.Thread.Run(new IntegerInstance(Input.Api.Integer, CurrentIndex), Input.OnYield);
                             }
                             // Parallel.times do
                             else {
@@ -2440,10 +2434,10 @@ namespace Embers
                 return Input.Api.Nil;
             }
             public static async Task<Instance> to_i(MethodInput Input) {
-                return Input.Api.GetInteger(Input.Instance.Time.ToUnixTimeSeconds());
+                return new IntegerInstance(Input.Api.Integer, Input.Instance.Time.ToUnixTimeSeconds());
             }
             public static async Task<Instance> to_f(MethodInput Input) {
-                return Input.Api.GetFloat(Input.Instance.Time.ToUnixTimeSecondsDouble());
+                return new FloatInstance(Input.Api.Float, Input.Instance.Time.ToUnixTimeSecondsDouble());
             }
             public static async Task<Instance> at(MethodInput Input) {
                 double Seconds = (double)Input.Arguments[0].Float;
@@ -2495,7 +2489,7 @@ namespace Embers
                     int Generation = (int)Input.Arguments[0].Integer;
                     Count += System.GC.CollectionCount(Generation);
                 }
-                return Input.Api.GetInteger(Count);
+                return new IntegerInstance(Input.Api.Integer, Count);
             }
         }
         static class _Net {
@@ -2514,7 +2508,7 @@ namespace Embers
                         return new StringInstance(Input.Api.String, await Input.Instance.HttpResponse.Content.ReadAsStringAsync());
                     }
                     public static async Task<Instance> code(MethodInput Input) {
-                        return Input.Api.GetInteger((int)Input.Instance.HttpResponse.StatusCode);
+                        return new IntegerInstance(Input.Api.Integer, (int)Input.Instance.HttpResponse.StatusCode);
                     }
                 }
             }
@@ -2598,6 +2592,9 @@ namespace Embers
             public SymbolInstance(Class fromClass, string value) : base(fromClass) {
                 Value = value;
                 IsStringSymbol = Value.Any("(){}[]<>=+-*/%.,;@#&|~^$".Contains) || Value.Any(char.IsWhiteSpace) || (Value.Length != 0 && Value[0].IsAsciiDigit()) || Value[..^1].Any("?!".Contains);
+            }
+            ~SymbolInstance() {
+                Module!.Interpreter.Symbols.Dict.Remove(Value);
             }
         }
         public class IntegerInstance : Instance {
@@ -2683,7 +2680,7 @@ namespace Embers
             (Instance, Instance) Setup() {
                 if (Min == null) {
                     AppliedMin = Max!.Module!.Interpreter.Api.Nil;
-                    AppliedMax = IncludesMax ? Max : Max.Module!.Interpreter.Api.GetInteger(Max.Integer - 1);
+                    AppliedMax = IncludesMax ? Max : new IntegerInstance(Max.Module!.Interpreter.Api.Integer, Max.Integer - 1);
                 }
                 else if (Max == null) {
                     AppliedMin = Min;
@@ -2691,7 +2688,7 @@ namespace Embers
                 }
                 else {
                     AppliedMin = Min;
-                    AppliedMax = IncludesMax ? Max : Max.Module!.Interpreter.Api.GetInteger(Max.Integer - 1);
+                    AppliedMax = IncludesMax ? Max : new IntegerInstance(Max.Module!.Interpreter.Api.Integer, Max.Integer - 1);
                 }
                 return (AppliedMin, AppliedMax);
             }

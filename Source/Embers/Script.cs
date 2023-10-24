@@ -71,22 +71,22 @@ namespace Embers
                     SuperModule.Methods.CloneTo(Methods, this);
                     SuperModule.InstanceMethods.CloneTo(InstanceMethods, this);
                     // Copy future changes
-                    SuperModule.Methods.OnSet.Listen(Methods, (string Key, Method Method) => {
+                    SuperModule.Methods.OnSet.Listen((string Key, Method Method) => {
                         Methods[Key] = Method.CloneTo(this);
                     });
-                    SuperModule.Methods.OnRemoved.Listen(Methods, (string Key) => {
+                    SuperModule.Methods.OnRemoved.Listen((string Key) => {
                         Methods.Remove(Key);
                     });
-                    SuperModule.InstanceMethods.OnSet.Listen(InstanceMethods, (string Key, Method Method) => {
+                    SuperModule.InstanceMethods.OnSet.Listen((string Key, Method Method) => {
                         InstanceMethods[Key] = Method.CloneTo(this);
                     });
-                    SuperModule.InstanceMethods.OnRemoved.Listen(InstanceMethods, (string Key) => {
+                    SuperModule.InstanceMethods.OnRemoved.Listen((string Key) => {
                         InstanceMethods.Remove(Key);
                     });
-                    SuperModule.Constants.OnSet.Listen(Constants, (string Key, Instance Constant) => {
+                    SuperModule.Constants.OnSet.Listen((string Key, Instance Constant) => {
                         Constants[Key] = Constant;
                     });
-                    SuperModule.Constants.OnRemoved.Listen(Constants, (string Key) => {
+                    SuperModule.Constants.OnRemoved.Listen((string Key) => {
                         Constants.Remove(Key);
                     });
                 }
@@ -215,8 +215,8 @@ namespace Embers
                     Phase2TokenType.False => Script.Api.False,
                     Phase2TokenType.String => new StringInstance(Script.Api.String, Token.Value!),
                     Phase2TokenType.Symbol => Script.Api.GetSymbol(Token.Value!),
-                    Phase2TokenType.Integer => Script.Api.GetInteger(Token.ValueAsInteger),
-                    Phase2TokenType.Float => Script.Api.GetFloat(Token.ValueAsFloat),
+                    Phase2TokenType.Integer => new IntegerInstance(Script.Api.Integer, Token.ValueAsInteger),
+                    Phase2TokenType.Float => new FloatInstance(Script.Api.Float, Token.ValueAsFloat),
                     _ => throw new InternalErrorException($"{Token.Location}: Cannot create new object from token type {Token.Type}")
                 };
             }
@@ -240,10 +240,10 @@ namespace Embers
                     Module.InstanceMethods.CloneTo(InstanceMethods, Module);
                     // Copy future changes
                     if (this is not ModuleReference) {
-                        Module.InstanceMethods.OnSet.Listen(InstanceMethods, (string Key, Method Method) => {
+                        Module.InstanceMethods.OnSet.Listen((string Key, Method Method) => {
                             InstanceMethods[Key] = Method.CloneTo(Module);
                         });
-                        Module.InstanceMethods.OnRemoved.Listen(InstanceMethods, (string Key) => {
+                        Module.InstanceMethods.OnRemoved.Listen((string Key) => {
                             InstanceMethods.Remove(Key);
                         });
                     }
@@ -457,11 +457,8 @@ namespace Embers
             public void ChangeFunction(Func<MethodInput, Task<Instance>> function) {
                 Function = function;
             }
-            public void ChangeParent(Module? parent) {
-                Parent = parent;
-            }
-            public Method Clone() {
-                return (Method)MemberwiseClone();
+            public Method CloneTo(Module Target) {
+                return new Method(Function, ArgumentCountRange, ArgumentNames, Unsafe, AccessModifier, Target) { Name = Name };
             }
             public async Task SetArgumentVariables(Scope Scope, MethodInput Input) {
                 Instances Arguments = Input.Arguments;
@@ -1392,7 +1389,7 @@ namespace Embers
                     else {
                         // Find appropriate local variable block
                         Block SetBlock = CurrentBlock;
-                        foreach (object Object in CurrentObject)
+                        foreach (object Object in CurrentObject) {
                             if (Object is Block Block) {
                                 if (Block.LocalVariables.ContainsKey(Variable.Token.Value!)) {
                                     SetBlock = Block;
@@ -1400,6 +1397,7 @@ namespace Embers
                                 }
                             }
                             else break;
+                        }
                         // Set local variable
                         SetBlock.LocalVariables[Variable.Token.Value!] = Value;
                     }
@@ -1470,7 +1468,6 @@ namespace Embers
                             AssignedValues.Add(RightInstance);
                         }
                         else {
-                            // AssignedValues.Add(Left);
                             throw new InternalErrorException($"{MultipleAssignmentExpression.Location}: Cannot get variable reference from multiple assignment");
                         }
                     }

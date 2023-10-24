@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using System.Numerics;
 using System.Threading.Tasks;
-using System.Linq;
 using static Embers.Script;
 
 #nullable enable
@@ -413,29 +411,39 @@ namespace Embers
             }
         }
         public class WeakEvent<T> {
-            private readonly ConditionalWeakTable<object, Action<T>> Subscribers = new();
-            public void Listen(object AttachedObject, Action<T> Listener) {
-                lock (Subscribers) Subscribers.Add(AttachedObject, Listener);
+            readonly List<WeakReference<Action<T>>> Subscribers = new();
+            public void Listen(Action<T> Listener) {
+                RemoveDeadSubscribers();
+                Subscribers.Add(new WeakReference<Action<T>>(Listener));
             }
             public void Fire(T Argument) {
-                lock (Subscribers) {
-                    foreach (KeyValuePair<object, Action<T>> Subscriber in Subscribers) {
-                        Subscriber.Value(Argument);
+                RemoveDeadSubscribers();
+                foreach (WeakReference<Action<T>> SubscriberRef in Subscribers) {
+                    if (SubscriberRef.TryGetTarget(out Action<T>? Subscriber)) {
+                        Subscriber(Argument);
                     }
                 }
+            }
+            private void RemoveDeadSubscribers() {
+                Subscribers.RemoveAll(SubscriberRef => !SubscriberRef.TryGetTarget(out _));
             }
         }
         public class WeakEvent<T1, T2> {
-            private readonly ConditionalWeakTable<object, Action<T1, T2>> Subscribers = new();
-            public void Listen(object AttachedObject, Action<T1, T2> Listener) {
-                lock (Subscribers) Subscribers.Add(AttachedObject, Listener);
+            readonly List<WeakReference<Action<T1, T2>>> Subscribers = new();
+            public void Listen(Action<T1, T2> Listener) {
+                RemoveDeadSubscribers();
+                Subscribers.Add(new WeakReference<Action<T1, T2>>(Listener));
             }
             public void Fire(T1 Argument1, T2 Argument2) {
-                lock (Subscribers) {
-                    foreach (KeyValuePair<object, Action<T1, T2>> Subscriber in Subscribers) {
-                        Subscriber.Value(Argument1, Argument2);
+                RemoveDeadSubscribers();
+                foreach (WeakReference<Action<T1, T2>> SubscriberRef in Subscribers) {
+                    if (SubscriberRef.TryGetTarget(out Action<T1, T2>? Subscriber)) {
+                        Subscriber(Argument1, Argument2);
                     }
                 }
+            }
+            private void RemoveDeadSubscribers() {
+                Subscribers.RemoveAll(SubscriberRef => !SubscriberRef.TryGetTarget(out _));
             }
         }
         /// <summary>A thread-safe dictionary that is locked while a key is being added or set.</summary>
@@ -587,25 +595,20 @@ namespace Embers
             } }
             public int Count => KeyValues.Count;
         }
-        public class Cache<TKey, TValue> where TKey : notnull {
-            public const int Limit = 5000;
-            private readonly LockingDictionary<TKey, TValue> CacheDictionary = new();
-            private readonly Queue<TKey> Keys = new();
+        /// <summary>A dictionary cache of weak references. Values should be removed from the cache in their finalisers.</summary>
+        public class WeakCache<TKey, TValue> where TKey : notnull where TValue : class {
+            public readonly LockingDictionary<TKey, WeakReference<TValue>> Dict = new();
+
+            public TValue? this[TKey Key] { get {
+                Dict.TryGetValue(Key, out WeakReference<TValue>? CacheValue);
+                if (CacheValue != null && CacheValue.TryGetTarget(out TValue? Value)) {
+                    return Value;
+                }
+                return null;
+            } }
             public TValue Store(TKey Key, TValue Value) {
-                lock (CacheDictionary) {
-                    if (CacheDictionary.Count > Limit) {
-                        CacheDictionary.Remove(Keys.Dequeue());
-                    }
-                    Keys.Enqueue(Key);
-                    CacheDictionary.Add(Key, Value);
-                    return Value;
-                }
-            }
-            public TValue? this[TKey Key] {
-                get {
-                    CacheDictionary.TryGetValue(Key, out TValue? Value);
-                    return Value;
-                }
+                Dict[Key] = new WeakReference<TValue>(Value);
+                return Value;
             }
         }
     }
