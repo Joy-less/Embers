@@ -49,6 +49,7 @@ namespace Embers
             public readonly string Name;
             public readonly ReactiveDictionary<string, Method> Methods = new();
             public readonly ReactiveDictionary<string, Method> InstanceMethods = new();
+            public readonly LockingDictionary<string, Instance> InstanceVariables = new();
             public readonly LockingDictionary<string, Instance> ClassVariables = new();
             public readonly Interpreter Interpreter;
             public readonly Module? SuperModule;
@@ -149,8 +150,8 @@ namespace Embers
             /// <summary>Module will be null if instance is a PseudoInstance.</summary>
             public readonly Module? Module;
             public long ObjectId { get; private set; }
-            public ReactiveDictionary<string, Instance> InstanceVariables { get; protected set; } = new();
-            public ReactiveDictionary<string, Method> InstanceMethods { get; protected set; } = new();
+            public LockingDictionary<string, Instance> InstanceVariables { get; protected set; } = new();
+            public LockingDictionary<string, Method> InstanceMethods { get; protected set; } = new();
             public bool IsTruthy => Object is not (null or false);
             public virtual object? Object { get { return null; } }
             public virtual bool Boolean { get { throw new RuntimeException("Instance is not a Boolean"); } }
@@ -1242,10 +1243,10 @@ namespace Embers
                 Instance MethodOrigin = await InterpretExpressionAsync(AliasStatement.MethodToAlias, ReturnType.FoundVariable);
                 if (MethodOrigin is VariableReference MethodOriginRef) {
                     // Get target methods dictionary
-                    ReactiveDictionary<string, Method> TargetMethods = MethodAliasRef.Instance != null ? MethodAliasRef.Instance.InstanceMethods
+                    LockingDictionary<string, Method> TargetMethods = MethodAliasRef.Instance != null ? MethodAliasRef.Instance.InstanceMethods
                         : (MethodAliasRef.Module != null ? MethodAliasRef.Module.Methods : CurrentInstance.InstanceMethods);
                     // Get origin methods dictionary
-                    ReactiveDictionary<string, Method> OriginMethods = MethodOriginRef.Instance != null ? MethodOriginRef.Instance.InstanceMethods
+                    LockingDictionary<string, Method> OriginMethods = MethodOriginRef.Instance != null ? MethodOriginRef.Instance.InstanceMethods
                         : (MethodOriginRef.Module != null ? MethodOriginRef.Module.Methods : CurrentInstance.InstanceMethods);
                     // Create alias for method
                     TargetMethods[AliasStatement.AliasAs.Token.Value!] = OriginMethods[MethodOriginRef.Token.Value!];

@@ -114,6 +114,9 @@ namespace Embers
             Object.InstanceMethods["instance_of?"] = Object.Methods["instance_of?"] = Script.CreateMethod(_Object.instance_of7, 1);
             Object.InstanceMethods["in?"] = Object.Methods["in?"] = Script.CreateMethod(_Object.in7, 1);
             Object.InstanceMethods["clone"] = Object.Methods["clone"] = Script.CreateMethod(_Object.clone, 0);
+            Object.InstanceMethods["instance_variables"] = Object.Methods["instance_variables"] = Script.CreateMethod(_Object.instance_variables, 0);
+
+            Object.Methods["class_variables"] = Script.CreateMethod(_Object.class_variables, 0);
 
             Script.CurrentAccessModifier = AccessModifier.Protected;
             Object.InstanceMethods["puts"] = Object.Methods["puts"] = Script.CreateMethod(puts, null);
@@ -606,18 +609,18 @@ namespace Embers
             }
         }
         static async Task<Instance> local_variables(MethodInput Input) {
-            List<Instance> GlobalVariables = new();
-            foreach (KeyValuePair<string, Instance> GlobalVariable in Input.Script.GetAllLocalVariables()) {
-                GlobalVariables.Add(Input.Api.GetSymbol(GlobalVariable.Key));
+            List<Instance> Variables = new();
+            foreach (KeyValuePair<string, Instance> Variable in Input.Script.GetAllLocalVariables()) {
+                Variables.Add(Input.Api.GetSymbol(Variable.Key));
             }
-            return new ArrayInstance(Input.Api.Array, GlobalVariables);
+            return new ArrayInstance(Input.Api.Array, Variables);
         }
         static async Task<Instance> global_variables(MethodInput Input) {
-            List<Instance> GlobalVariables = new();
-            foreach (KeyValuePair<string, Instance> GlobalVariable in Input.Interpreter.GlobalVariables) {
-                GlobalVariables.Add(Input.Api.GetSymbol(GlobalVariable.Key));
+            List<Instance> Variables = new();
+            foreach (KeyValuePair<string, Instance> Variable in Input.Interpreter.GlobalVariables) {
+                Variables.Add(Input.Api.GetSymbol(Variable.Key));
             }
-            return new ArrayInstance(Input.Api.Array, GlobalVariables);
+            return new ArrayInstance(Input.Api.Array, Variables);
         }
         static class _Object {
             public static async Task<Instance> _Equals(MethodInput Input) {
@@ -739,6 +742,20 @@ namespace Embers
             }
             public static async Task<Instance> clone(MethodInput Input) {
                 return Input.Instance.Clone(Input.Interpreter);
+            }
+            public static async Task<Instance> instance_variables(MethodInput Input) {
+                List<Instance> Variables = new();
+                foreach (KeyValuePair<string, Instance> Variable in Input.Instance.InstanceVariables) {
+                    Variables.Add(Input.Api.GetSymbol(Variable.Key));
+                }
+                return new ArrayInstance(Input.Api.Array, Variables);
+            }
+            public static async Task<Instance> class_variables(MethodInput Input) {
+                List<Instance> Variables = new();
+                foreach (KeyValuePair<string, Instance> Variable in Input.Instance.Module!.ClassVariables) {
+                    Variables.Add(Input.Api.GetSymbol(Variable.Key));
+                }
+                return new ArrayInstance(Input.Api.Array, Variables);
             }
             public static async Task<Instance> attr_reader(MethodInput Input) {
                 string VariableName = Input.Arguments[0].String;
@@ -2822,6 +2839,7 @@ namespace Embers
             public ModuleReference(Module module) : base(module) {
                 // Copy changes to the parent module
                 InstanceMethods = module.InstanceMethods;
+                InstanceVariables = module.InstanceVariables;
             }
         }
     }

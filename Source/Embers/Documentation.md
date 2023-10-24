@@ -97,6 +97,9 @@ object.in?(array)
 object.clone
 	Returns a shallow copy of the object.
 
+object.instance_methods
+	Returns an array containing the names of all instance variables in the object as symbols.
+
 instance.attr_reader(instance_variable_name)
 	Creates an instance method called {the given name} which returns the given instance variable.
 
@@ -118,6 +121,9 @@ instance.protected
 ```
 class.name
 	Returns the name of the class as a string.
+
+class.class_methods
+	Returns an array containing the names of all class variables in the class as symbols.
 ```
 ```
 string.to_str
