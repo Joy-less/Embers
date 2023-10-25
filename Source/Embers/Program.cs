@@ -13,37 +13,24 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() =>
                     Script.Evaluate(@"
-#for i in 1..1_000_000
-    
-#end
+ttt = Time.now.to_f
+for i in 1..1000
 
-class A
-    def inspect
-        'lol'
+end
+p Time.now.to_f - ttt
+
+avg = []
+for i in 1..50
+    t = Time.now.to_f
+    i = 0
+    y = 1.0 / 60.0
+    while Time.now.to_f - t < y
+        i += 1
     end
+    avg << i
+    sleep 0.01
 end
-class B
-end
-p A.new
-p B.new
-
-p 'Hello there  lol'.split
-p 'Hello there  lol'.split 'l'
-p 'Hello there  lol'.split [' ', 'l']
-p 'Hello there  lol'.split nil, false
-p 'Hello there  lol'.split 'l', false
-p 'Hello there  lol'.split [' ', 'l'], false
-
-a = [1, 2, 3]
-p a.prepend 0
-p a.append 4
-p a.pop
-p a
-p [].prepend 0
-p [].pop
-
-p [1, 'hi', true, ['z', ['a', 'b'], 'y']].join ', '
-p [1, 'hi', true, ['z', ['a', 'b'], 'y']].join
+p avg.sum / avg.count
                     ")
                 );
                 Console.ReadLine();

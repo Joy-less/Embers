@@ -611,5 +611,13 @@ namespace Embers
                 return Value;
             }
         }
+        public class OuterStack<T> {
+            public Stack<T> Inner = new();
+            public OuterStack() {
+            }
+            public OuterStack(Stack<T> inner) {
+                Inner = inner;
+            }
+        }
     }
 }

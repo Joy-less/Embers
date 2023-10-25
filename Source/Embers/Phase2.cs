@@ -830,6 +830,9 @@ namespace Embers
                     catch (NextException) {
                         return Input.Api.Nil;
                     }
+                    catch (LoopControlException Ex) {
+                        throw new SyntaxErrorException($"{Input.Location}: {Ex.GetType().Name} not valid in for loop");
+                    }
                 }, null, VariableNames);
             }
         }

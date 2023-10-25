@@ -298,6 +298,7 @@ namespace Embers
             Array.InstanceMethods["shuffle!"] = Script.CreateMethod(_Array.shuffle1, 0);
             Array.InstanceMethods["min"] = Script.CreateMethod(_Array.min, 0);
             Array.InstanceMethods["max"] = Script.CreateMethod(_Array.max, 0);
+            Array.InstanceMethods["sum"] = Script.CreateMethod(_Array.sum, 0);
             Array.InstanceMethods["each"] = Script.CreateMethod(_Array.each, 0);
             Array.InstanceMethods["reverse_each"] = Script.CreateMethod(_Array.reverse_each, 0);
             Array.InstanceMethods["map"] = Script.CreateMethod(_Array.map, 0);
@@ -1808,6 +1809,20 @@ namespace Embers
                 }
                 else {
                     return Input.Api.Nil;
+                }
+            }
+            public static async Task<Instance> sum(MethodInput Input) {
+                DynFloat Sum = 0;
+                bool ReturnFloat = false;
+                foreach (Instance Item in Input.Instance.Array) {
+                    if (Item is FloatInstance) ReturnFloat = true;
+                    Sum += Item.Float;
+                }
+                if (ReturnFloat) {
+                    return new FloatInstance(Input.Api.Float, Sum);
+                }
+                else {
+                    return new IntegerInstance(Input.Api.Integer, (DynInteger)Sum);
                 }
             }
             public static async Task<Instance> each(MethodInput Input) {

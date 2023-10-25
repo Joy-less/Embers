@@ -299,6 +299,9 @@ array.min
 array.max
 	Returns the maximum item in the array using the > operator.
 
+array.sum
+	Returns the sum of all items in the array of numbers.
+
 array.each {|item, index|}
 	Repeats the given block for each item in the array.
 
