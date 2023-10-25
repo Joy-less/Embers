@@ -612,8 +612,9 @@ namespace Embers
             }
         }
         public class OuterStack<T> {
-            public Stack<T> Inner = new();
+            public Stack<T> Inner;
             public OuterStack() {
+                Inner = new Stack<T>();
             }
             public OuterStack(Stack<T> inner) {
                 Inner = inner;
