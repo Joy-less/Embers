@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using static Embers.Phase2;
 using static Embers.Script;
 using static Embers.SpecialTypes;
+using static Embers.Api;
 #if !NET6_0_OR_GREATER
     using System.Threading.Tasks;
     using System.Diagnostics;
@@ -92,7 +93,7 @@ namespace Embers
                 foreach (Instance Object in List) {
                     if (ListInspection.Length != 0)
                         ListInspection += Separator;
-                    ListInspection += Object.LightInspect();
+                    ListInspection += Object is ArrayInstance ? Object.Array.LightInspectInstances(Separator) : Object.LightInspect();
                 }
             }
             return ListInspection;

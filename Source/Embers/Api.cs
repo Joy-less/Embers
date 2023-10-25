@@ -206,6 +206,7 @@ namespace Embers
             String.InstanceMethods["sub!"] = Script.CreateMethod(_String.sub1, 2);
             String.InstanceMethods["gsub"] = Script.CreateMethod(_String.gsub, 2);
             String.InstanceMethods["gsub!"] = Script.CreateMethod(_String.gsub1, 2);
+            String.InstanceMethods["split"] = Script.CreateMethod(_String.split, 0..2);
             String.InstanceMethods["eql?"] = Script.CreateMethod(_String.eql7, 1);
 
             // Symbol
@@ -283,7 +284,10 @@ namespace Embers
             Array.InstanceMethods["[]="] = Script.CreateMethod(_Array._IndexEquals, 2);
             Array.InstanceMethods["*"] = Script.CreateMethod(_Array._Multiply, 1);
             Array.InstanceMethods["==", "==="] = Script.CreateMethod(_Array._Equals, 1);
-            Array.InstanceMethods["<<"] = Script.CreateMethod(_Array._Append, 1);
+            Array.InstanceMethods["<<", "push", "append"] = Script.CreateMethod(_Array._Append, 1);
+            Array.InstanceMethods["prepend"] = Script.CreateMethod(_Array.prepend, 1);
+            Array.InstanceMethods["pop"] = Script.CreateMethod(_Array.pop, 0);
+            Array.InstanceMethods["insert"] = Script.CreateMethod(_Array.insert, 1..);
             Array.InstanceMethods["length"] = Script.CreateMethod(_Array.length, 0);
             Array.InstanceMethods["count"] = Script.CreateMethod(_Array.count, 0..1);
             Array.InstanceMethods["first"] = Script.CreateMethod(_Array.first, 0);
@@ -294,7 +298,6 @@ namespace Embers
             Array.InstanceMethods["shuffle!"] = Script.CreateMethod(_Array.shuffle1, 0);
             Array.InstanceMethods["min"] = Script.CreateMethod(_Array.min, 0);
             Array.InstanceMethods["max"] = Script.CreateMethod(_Array.max, 0);
-            Array.InstanceMethods["insert"] = Script.CreateMethod(_Array.insert, 1..);
             Array.InstanceMethods["each"] = Script.CreateMethod(_Array.each, 0);
             Array.InstanceMethods["reverse_each"] = Script.CreateMethod(_Array.reverse_each, 0);
             Array.InstanceMethods["map"] = Script.CreateMethod(_Array.map, 0);
@@ -308,6 +311,7 @@ namespace Embers
             Array.InstanceMethods["empty?"] = Script.CreateMethod(_Array.empty7, 0);
             Array.InstanceMethods["reverse"] = Script.CreateMethod(_Array.reverse, 0);
             Array.InstanceMethods["reverse!"] = Script.CreateMethod(_Array.reverse1, 0);
+            Array.InstanceMethods["join"] = Script.CreateMethod(_Array.join, 0..1);
 
             // Hash
             Hash = Script.CreateClass("Hash");
@@ -467,7 +471,8 @@ namespace Embers
         }
         static async Task<Instance> p(MethodInput Input) {
             foreach (Instance Message in Input.Arguments) {
-                Console.WriteLine(Message.Inspect());
+                string Inspect = (await Message.CallInstanceMethod(Input.Script, "inspect")).String;
+                Console.WriteLine(Inspect);
             }
             return Input.Api.Nil;
         }
@@ -1114,6 +1119,30 @@ namespace Embers
             }
             public static async Task<Instance> gsub(MethodInput Input) => await _gsub(Input, false);
             public static async Task<Instance> gsub1(MethodInput Input) => await _gsub(Input, true);
+            public static async Task<Instance> split(MethodInput Input) {
+                string String = Input.Instance.String;
+                string[] Result;
+                StringSplitOptions SplitType = StringSplitOptions.RemoveEmptyEntries;
+                if (Input.Arguments.Count >= 2 && !Input.Arguments[1].Boolean) {
+                    SplitType = StringSplitOptions.None;
+                }
+                if (Input.Arguments.Count == 0 || !Input.Arguments[0].IsTruthy) {
+                    char[] Separators = String.Where(char.IsWhiteSpace).ToArray();
+                    Result = String.Split(Separators, SplitType);
+                }
+                else if (Input.Arguments[0] is ArrayInstance SeparatorInstances) {
+                    string[] Separators = SeparatorInstances.Array.Select(x => x.String).ToArray();
+                    Result = String.Split(Separators, SplitType);
+                }
+                else if (Input.Arguments[0] is StringInstance SeparatorInstance) {
+                    Result = String.Split(SeparatorInstance.String, SplitType);
+                }
+                else {
+                    throw new RuntimeException($"{Input.Location}: Expected string.split separator to be string or array, got '{Input.Arguments[0].LightInspect()}'");
+                }
+                List<Instance> SplitArray = Result.Select(x => (Instance)new StringInstance(Input.Api.String, x)).ToList();
+                return new ArrayInstance(Input.Api.Array, SplitArray);
+            }
             public static async Task<Instance> eql7(MethodInput Input) {
                 return await _Equals(Input);
             }
@@ -1661,6 +1690,34 @@ namespace Embers
                 // Return array
                 return Input.Instance;
             }
+            public static async Task<Instance> prepend(MethodInput Input) {
+                Instance Item = Input.Arguments[0];
+                Input.Instance.Array.Insert(0, Item);
+                return Input.Instance;
+            }
+            public static async Task<Instance> pop(MethodInput Input) {
+                Instance Popped = Input.Api.Nil;
+                if (Input.Instance.Array.Count != 0) {
+                    Popped = Input.Instance.Array[^1];
+                    Input.Instance.Array.RemoveAt(Input.Instance.Array.Count - 1);
+                }
+                return Popped;
+            }
+            public static async Task<Instance> insert(MethodInput Input) {
+                List<Instance> Items = Input.Instance.Array;
+                int Index = _RealisticIndex(Input, Input.Arguments[0].Integer);
+
+                if (Input.Arguments.Count == 1) {
+                    Items.Add(Input.Arguments[0]);
+                }
+                else if (Input.Arguments.Count == 2) {
+                    Items.Insert(Index, Input.Arguments[1]);
+                }
+                else {
+                    Items.InsertRange(Index, Input.Arguments.MultiInstance.GetIndexRange(1));
+                }
+                return Input.Instance;
+            }
             public static async Task<Instance> length(MethodInput Input) {
                 List<Instance> Items = Input.Instance.Array;
                 return new IntegerInstance(Input.Api.Integer, Items.Count);
@@ -1752,21 +1809,6 @@ namespace Embers
                 else {
                     return Input.Api.Nil;
                 }
-            }
-            public static async Task<Instance> insert(MethodInput Input) {
-                List<Instance> Items = Input.Instance.Array;
-                int Index = _RealisticIndex(Input, Input.Arguments[0].Integer);
-
-                if (Input.Arguments.Count == 1) {
-                    Items.Add(Input.Arguments[0]);
-                }
-                else if (Input.Arguments.Count == 2) {
-                    Items.Insert(Index, Input.Arguments[1]);
-                }
-                else {
-                    Items.InsertRange(Index, Input.Arguments.MultiInstance.GetIndexRange(1));
-                }
-                return Input.Instance;
             }
             public static async Task<Instance> each(MethodInput Input) {
                 if (Input.OnYield != null) {
@@ -1949,6 +1991,16 @@ namespace Embers
             public static async Task<Instance> reverse1(MethodInput Input) {
                 Input.Instance.Array.Reverse();
                 return Input.Instance;
+            }
+            public static async Task<Instance> join(MethodInput Input) {
+                string Separator = "";
+                if (Input.Arguments.Count >= 1) {
+                    Separator = Input.Arguments[0].String;
+                }
+                string Joined = string.Join(Separator,
+                    Input.Instance.Array.Select(x => x is ArrayInstance ? x.Array.LightInspectInstances(Separator) : x.LightInspect())
+                );
+                return new StringInstance(Input.Api.String, Joined);
             }
         }
         static class _Hash {

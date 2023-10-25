@@ -10,7 +10,7 @@ print(*messages)
 	Outputs each message to the console.
 
 p(*lines)
-	Inspects and outputs each line to the console.
+	Outputs each line.inspect to the console.
 
 gets
 	Reads a line of user input from the console, including the trailing newline.
@@ -180,6 +180,9 @@ string.sub(replace, with) | string.sub!(replace, with)
 string.gsub(replace, with) | string.gsub!(replace, with)
 	Returns the string where all instances of replace are replaced with with.
 
+string.split([delimiter], [remove_empty_entries = true])
+	Splits the string by the given delimiter or delimiters and returns an array of substrings. Delimiter defaults to all whitespace characters in the string.
+
 string.eql?(other)
 	Returns true if other is a string that has the same contents.
 ```
@@ -257,6 +260,18 @@ range.to_a
 	Returns an array containing each index in the range.
 ```
 ```
+array.push(item) | array.append(item)
+	Adds the item to the end of the array and returns the array.
+	
+array.prepend(item)
+	Inserts the item at the beginning of the array and returns the array.
+	
+array.pop
+	Removes an item from the end of the array and returns the item.
+
+array.insert(index, item) | array.insert(item)
+	Inserts the item at the given array index, or adds it to the end of the array.
+
 array.length
 	Returns the number of items in the array.
 
@@ -284,9 +299,6 @@ array.min
 array.max
 	Returns the maximum item in the array using the > operator.
 
-array.insert(index, item) | array.insert(item)
-	Inserts the item into the given index in the array, or adds it to the end of the array.
-
 array.each {|item, index|}
 	Repeats the given block for each item in the array.
 
@@ -307,17 +319,20 @@ array.include?(item) | array.includes?(item) | array.contain?(item) | array.cont
 array.delete(item) | array.remove(item)
 	Removes each item from the array that is equal to the item and returns the last item found.
 
+array.delete_at(index) | array.remove_at(index)
+	Removes the item at the index of the array if found and returns the item.
+
 array.clear
 	Removes every item from the array.
-
-array.delete_at(index) | array.remove_at(index)
-	Removes and returns the item from the array at the index if found, otherwise returns nil.
 
 array.empty?
 	Returns true if the array contains no items.
 
 array.reverse | array.reverse!
 	Returns the array in the opposite order.
+
+array.join([separator = ''])
+	Returns a string containing each item in the array as a string separated by the given separator.
 ```
 ```
 Hash.new([default_value = nil])
