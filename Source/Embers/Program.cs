@@ -13,7 +13,6 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() =>
                     Script.Evaluate(@"
-
 p __LINE__
 p __FILE__
 ttt = Time.now.to_f
@@ -22,18 +21,17 @@ for i in 1..1000
 end
 p Time.now.to_f - ttt
 
-avg = []
-for i in 1..50
-    t = Time.now.to_f
+counts = []
+for i in 1..10
     i = 0
     y = 1.0 / 60.0
+    t = Time.now.to_f
     while Time.now.to_f - t < y
         i += 1
     end
-    avg << i
-    sleep 0.01
+    counts << i
 end
-p avg.sum / avg.count
+p counts
                     ")
                 );
                 Console.ReadLine();

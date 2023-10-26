@@ -465,6 +465,9 @@ namespace Embers
                     lock (this) base[Key] = value;
                 }
             }
+            public new void Clear() {
+                lock (this) base.Clear();
+            }
         }
         /// <summary>A locking dictionary with events that trigger when a key-value pair is added to or removed from the dictionary.</summary>
         public class ReactiveDictionary<TKey, TValue> : LockingDictionary<TKey, TValue> where TKey : notnull {
@@ -509,7 +512,7 @@ namespace Embers
                 return Exists && Equals(CurrentValue, Value);
             }
             static void TrySetMethodName(TKey Key, TValue Value) {
-                if (Key is string MethodName && Value is Method Method) {
+                if (Value is Method Method && Key is string MethodName) {
                     Method.SetName(MethodName);
                 }
             }
@@ -564,7 +567,7 @@ namespace Embers
                 return null;
             }
             public void Clear() {
-                lock (Dict) Dict.Clear();
+                Dict.Clear();
             }
             public List<KeyValuePair<Instance, Instance>> KeyValues { get {
                 List<KeyValuePair<Instance, Instance>> KeyValues = new();

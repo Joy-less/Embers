@@ -141,10 +141,16 @@ namespace Embers
                 Target[Pair.Key] = Pair.Value;
             }
         }
-        public static void ReplaceContentsWith<T>(this Stack<T> Stack, T[] With) {
-            Stack.Clear();
-            for (int i = With.Length - 1; i >= 0; i--) {
-                Stack.Push(With[i]);
+        public static T[] RemoveFromTop<T>(this Stack<T> Stack, int Count) {
+            T[] Removed = new T[Count];
+            for (int i = 0; i < Count; i++) {
+                Removed[i] = Stack.Pop();
+            }
+            return Removed;
+        }
+        public static void AddBackToTop<T>(this Stack<T> Stack, T[] Removed) {
+            for (int i = Removed.Length - 1; i >= 0; i--) {
+                Stack.Push(Removed[i]);
             }
         }
         public static void EnsureArrayIndex<T>(this List<T> List, Api Api, int Index) where T : Instance {
@@ -216,16 +222,16 @@ namespace Embers
             return Chara >= 'A' && Chara <= 'Z';
         }
         public static bool IsSmall(this long Long) {
-            return long.MinValue / 2.0 < Long && Long < long.MaxValue / 2.0;
+            return long.MinValue / 2 < Long && Long < long.MaxValue / 2;
         }
         public static bool IsSmall(this double Double) {
-            return long.MinValue / 2.0 < Double && Double < long.MaxValue / 2.0 || double.IsInfinity(Double);
+            return long.MinValue / 2 < Double && Double < long.MaxValue / 2 || double.IsInfinity(Double);
         }
         public static bool IsSmall(this BigInteger BigInteger) {
-            return (BigFloat)(long.MinValue / 2.0) < BigInteger && BigInteger < (BigFloat)(long.MaxValue / 2.0);
+            return long.MinValue / 2 < BigInteger && BigInteger < long.MaxValue / 2;
         }
         public static bool IsSmall(this BigFloat BigFloat) {
-            return (BigFloat)(long.MinValue / 2.0) < BigFloat && BigFloat < (BigFloat)(long.MaxValue / 2.0);
+            return long.MinValue / 2 < BigFloat && BigFloat < long.MaxValue / 2;
         }
         public static DynInteger ParseInteger(this string String) {
             if (long.TryParse(String, out long Result) && Result.IsSmall()) {

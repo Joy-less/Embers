@@ -93,8 +93,7 @@ namespace Embers
                 }
             }
             public bool InheritsFrom(Module? Ancestor) {
-                if (Ancestor == null)
-                    return false;
+                if (Ancestor == null) return false;
                 Module? CurrentAncestor = this;
                 while (CurrentAncestor != null) {
                     if (CurrentAncestor == Ancestor)
@@ -720,15 +719,14 @@ namespace Embers
             return Constants;
         }
         internal Method? ToYieldMethod(Method? Current) {
-            // This makes yield methods (do ... end) be called in the scope they're called in, not the scope of the instance/class.
+            // This makes yield methods (do ... end) be called back in the scope they're defined in, not in the scope of the method.
             // e.g. 5.times do ... end should be called in the scope of the line, not in the instance of 5.
-            // If you've changed this function and are receiving errors, ensure you're referencing Input.Script and not this script.
+            // If you're modifying this function, ensure you're referencing Input.Script and not this script.
             if (Current != null) {
                 Func<MethodInput, Task<Instance>> CurrentFunction = Current.Function;
-                object[] OriginalSnapshot = CurrentObject.ToArray();
+                int OriginalStackCount = CurrentObject.Count;
                 Current.ChangeFunction(async Input => {
-                    object[] TemporarySnapshot = Input.Script.CurrentObject.ToArray();
-                    Input.Script.CurrentObject.ReplaceContentsWith(OriginalSnapshot);
+                    object[] RemovedStack = Input.Script.CurrentObject.RemoveFromTop(Input.Script.CurrentObject.Count - OriginalStackCount);
                     try {
                         return await Input.Script.CreateTemporaryScope(async () => {
                             await Current.SetArgumentVariables(Input.Script.CurrentScope, Input);
@@ -740,7 +738,7 @@ namespace Embers
                         throw;
                     }
                     finally {
-                        Input.Script.CurrentObject.ReplaceContentsWith(TemporarySnapshot);
+                        Input.Script.CurrentObject.AddBackToTop(RemovedStack);
                     }
                 });
             }
