@@ -37,7 +37,7 @@ namespace Embers
         }
 
         public Interpreter() {
-            Object = new Module("Object", this); Object.InstanceMethods.Remove("initialize"); Object.Methods.Remove("new");
+            Object = new Module("Object", this);
             RootModule = new Module("main", this, Object); RootModule.Constants["Object"] = new ModuleReference(Object);
             Class = new Class("Class", RootModule, Object); RootModule.Constants["Class"] = new ModuleReference(Class);
             RootInstance = new ModuleReference(RootModule);
