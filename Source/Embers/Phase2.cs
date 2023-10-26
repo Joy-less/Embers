@@ -38,7 +38,7 @@ namespace Embers
 
             // Keywords
             Alias, Begin, Break, Case, Class, Def, Defined, Do, Else, Elsif, End, Ensure, False, For, If, In, Module, Next, Nil, Redo, Rescue, Retry, Return, Self, Super, Then, True, Undef, Unless, Until, When, While, Yield,
-            __LINE__,
+            __LINE__, __FILE__,
 
             // Temporary
             Dot,
@@ -95,6 +95,7 @@ namespace Embers
             {"while", Phase2TokenType.While},
             {"yield", Phase2TokenType.Yield},
             {"__LINE__", Phase2TokenType.__LINE__},
+            {"__FILE__", Phase2TokenType.__FILE__},
         };
         public readonly static string[][] NormalOperatorPrecedence = new[] {
             new[] {"**"},
@@ -245,7 +246,8 @@ namespace Embers
             }
         }
         public enum EnvironmentInfoType {
-            __LINE__,
+            __LINE__ = Phase2TokenType.__LINE__,
+            __FILE__ = Phase2TokenType.__FILE__,
         }
         public class EnvironmentInfoExpression : Expression {
             public readonly EnvironmentInfoType Type;
@@ -2081,8 +2083,8 @@ namespace Embers
             // Environment Info
             for (int i = 0; i < ParsedObjects.Count; i++) {
                 if (ParsedObjects[i] is Phase2Token Token) {
-                    if (Token.Type == Phase2TokenType.__LINE__) {
-                        ParsedObjects[i] = new EnvironmentInfoExpression(Token.Location, EnvironmentInfoType.__LINE__);
+                    if (Enum.IsDefined((EnvironmentInfoType)Token.Type)) {
+                        ParsedObjects[i] = new EnvironmentInfoExpression(Token.Location, (EnvironmentInfoType)Token.Type);
                     }
                 }
             }

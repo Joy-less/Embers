@@ -1556,7 +1556,7 @@ namespace Embers
                 return new StringInstance(Api.String, "super");
             }
             else {
-                throw new InternalErrorException($"{DefinedExpression.Location}: Unknown expression type for defined?: {DefinedExpression.Expression.GetType().Name}");
+                return new StringInstance(Api.String, "expression");
             }
         }
         async Task<Instance> InterpretHashArgumentsExpression(HashArgumentsExpression HashArgumentsExpression) {
@@ -1566,12 +1566,11 @@ namespace Embers
             );
         }
         async Task<Instance> InterpretEnvironmentInfoExpression(EnvironmentInfoExpression EnvironmentInfoExpression) {
-            if (EnvironmentInfoExpression.Type == EnvironmentInfoType.__LINE__) {
-                return new IntegerInstance(Api.Integer, ApproximateLocation.Line);
-            }
-            else {
-                throw new InternalErrorException($"{ApproximateLocation}: Environment info type not handled: '{EnvironmentInfoExpression.Type}'");
-            }
+            return EnvironmentInfoExpression.Type switch {
+                EnvironmentInfoType.__LINE__ => new IntegerInstance(Api.Integer, EnvironmentInfoExpression.Location.Line),
+                EnvironmentInfoType.__FILE__ => new StringInstance(Api.String, System.IO.Path.GetFileName(new System.Diagnostics.StackTrace(true).GetFrame(0)?.GetFileName() ?? "")),
+                _ => throw new InternalErrorException($"{ApproximateLocation}: Environment info type not handled: '{EnvironmentInfoExpression.Type}'"),
+            };
         }
 
         public enum AccessModifier {

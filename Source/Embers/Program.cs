@@ -13,6 +13,9 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() =>
                     Script.Evaluate(@"
+
+p __LINE__
+p __FILE__
 ttt = Time.now.to_f
 for i in 1..1000
 
