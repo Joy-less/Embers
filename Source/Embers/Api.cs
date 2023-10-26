@@ -393,6 +393,7 @@ namespace Embers
             Parallel = Script.CreateModule("Parallel");
             Parallel.Methods["each"] = Script.CreateMethod(_Parallel.each, 1);
             Parallel.Methods["times"] = Script.CreateMethod(_Parallel.times, 1);
+            Parallel.Methods["processor_count"] = Script.CreateMethod(_Parallel.processor_count, 0);
 
             // Time
             Time = Script.CreateClass("Time");
@@ -2488,6 +2489,9 @@ namespace Embers
                     System.Threading.Tasks.Parallel.Invoke(Methods);
                 }
                 return Input.Api.Nil;
+            }
+            public static async Task<Instance> processor_count(MethodInput Input) {
+                return new IntegerInstance(Input.Api.Integer, Environment.ProcessorCount);
             }
         }
         static class _Time {

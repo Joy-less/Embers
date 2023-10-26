@@ -426,6 +426,9 @@ Parallel.each(array) {|n, i|}
 
 Parallel.times(count) {|i|} | Parallel.times(range) {|i|}
 	Repeats the given block for each index in the range in parallel.
+
+Parallel.processor_count
+	Returns the number of available logical processors.
 ```
 ```
 Time.new | Time.new(year, [month = 0], [day = 0], [hour = 0], [minute = 0], [second = 0], [utc_offset = +0])

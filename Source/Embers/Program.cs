@@ -30,6 +30,8 @@ puts ""Fibonacci sequence for n = #{n}:""
 p 0..n
 p (0..n).to_a
 
+puts ""Processor count: #{Parallel.processor_count}""
+
 puts 'PARALLEL'
 t = Time.now.to_f
 Parallel.each((0..n).to_a) { |i| puts ""#{i}. #{fibonacci(i)}"" }
