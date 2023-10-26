@@ -13,25 +13,18 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() =>
                     Script.Evaluate(@"
-p __LINE__
-p __FILE__
-ttt = Time.now.to_f
-for i in 1..1000
-
+def fibonacci(n)
+  if n <= 1
+    return n
+  else
+    return fibonacci(n - 1) + fibonacci(n - 2)
+  end
 end
-p Time.now.to_f - ttt
 
-counts = []
-for i in 1..10
-    i = 0
-    y = 1.0 / 60.0
-    t = Time.now.to_f
-    while Time.now.to_f - t < y
-        i += 1
-    end
-    counts << i
-end
-p counts
+# Calculate the Fibonacci sequence
+n = 20
+puts ""Fibonacci sequence for n = #{n}:""
+(0..n).each { |i| puts fibonacci(i) }
                     ")
                 );
                 Console.ReadLine();

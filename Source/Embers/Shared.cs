@@ -65,12 +65,7 @@ namespace Embers
             IsUnknown = isUnknown;
         }
         public override string ToString() {
-            if (!IsUnknown) {
-                return $"{Line}:{Column}";
-            }
-            else {
-                return "?";
-            }
+            return !IsUnknown ? $"{Line}:{Column}" : "?";
         }
         public string Serialise() {
             if (!IsUnknown)
