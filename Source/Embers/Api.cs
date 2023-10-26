@@ -2436,25 +2436,24 @@ namespace Embers
                         Instance Current = Array[i];
                         int CurrentIndex = i;
 
+                        ScriptThread Thread = new(Input.Script) {
+                            Method = Input.OnYield
+                        };
                         Methods[i] = async () => {
-                            ThreadInstance Thread = new(Input.Api.Thread, Input.Script);
-                            Thread.Thread.Method = Input.OnYield;
-
                             // Parallel.each do |n, i|
                             if (TakesArguments == 2) {
-                                await Thread.Thread.Run(new List<Instance>() { Current, new IntegerInstance(Input.Api.Integer, CurrentIndex) }, Input.OnYield);
+                                await Thread.Run(new List<Instance>() { Current, new IntegerInstance(Input.Api.Integer, CurrentIndex) }, Input.OnYield);
                             }
                             // Parallel.each do |n|
                             else if (TakesArguments == 1) {
-                                await Thread.Thread.Run(Current, Input.OnYield);
+                                await Thread.Run(Current, Input.OnYield);
                             }
                             // Parallel.each do
                             else {
-                                await Thread.Thread.Run(OnYield: Input.OnYield);
+                                await Thread.Run(OnYield: Input.OnYield);
                             }
                         };
                     }
-
                     System.Threading.Tasks.Parallel.Invoke(Methods);
                 }
                 return Input.Api.Nil;
@@ -2471,22 +2470,21 @@ namespace Embers
                     for (DynInteger i = Times.Min!.Value; i <= Times.Max!.Value; i++) {
                         DynInteger CurrentIndex = i;
 
+                        ScriptThread Thread = new(Input.Script) {
+                            Method = Input.OnYield
+                        };
                         Methods[Counter] = async () => {
-                            ThreadInstance Thread = new(Input.Api.Thread, Input.Script);
-                            Thread.Thread.Method = Input.OnYield;
-
                             // Parallel.times do |n|
                             if (TakesArguments == 1) {
-                                await Thread.Thread.Run(new IntegerInstance(Input.Api.Integer, CurrentIndex), Input.OnYield);
+                                await Thread.Run(new IntegerInstance(Input.Api.Integer, CurrentIndex), Input.OnYield);
                             }
                             // Parallel.times do
                             else {
-                                await Thread.Thread.Run(OnYield: Input.OnYield);
+                                await Thread.Run(OnYield: Input.OnYield);
                             }
                         };
                         Counter++;
                     }
-
                     System.Threading.Tasks.Parallel.Invoke(Methods);
                 }
                 return Input.Api.Nil;

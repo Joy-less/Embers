@@ -422,10 +422,10 @@ thread.stop
 ```
 ```
 Parallel.each(array) {|n, i|}
-	Creates a new thread for each item in the array and repeats the given block in parallel for each thread.
+	Repeats the given block for each item in the array in parallel.
 
 Parallel.times(count) {|i|} | Parallel.times(range) {|i|}
-	Creates a new thread for each index in the range and repeats the given block in parallel for each thread.
+	Repeats the given block for each index in the range in parallel.
 ```
 ```
 Time.new | Time.new(year, [month = 0], [day = 0], [hour = 0], [minute = 0], [second = 0], [utc_offset = +0])

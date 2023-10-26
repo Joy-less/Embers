@@ -414,7 +414,7 @@ namespace Embers
             readonly List<WeakReference<Action<T>>> Subscribers = new();
             public void Listen(Action<T> Listener) {
                 RemoveDeadSubscribers();
-                Subscribers.Add(new WeakReference<Action<T>>(Listener));
+                lock (Subscribers) Subscribers.Add(new WeakReference<Action<T>>(Listener));
             }
             public void Fire(T Argument) {
                 RemoveDeadSubscribers();
@@ -425,14 +425,14 @@ namespace Embers
                 }
             }
             private void RemoveDeadSubscribers() {
-                Subscribers.RemoveAll(SubscriberRef => !SubscriberRef.TryGetTarget(out _));
+                lock (Subscribers) Subscribers.RemoveAll(SubscriberRef => !SubscriberRef.TryGetTarget(out _));
             }
         }
         public class WeakEvent<T1, T2> {
             readonly List<WeakReference<Action<T1, T2>>> Subscribers = new();
             public void Listen(Action<T1, T2> Listener) {
                 RemoveDeadSubscribers();
-                Subscribers.Add(new WeakReference<Action<T1, T2>>(Listener));
+                lock (Subscribers) Subscribers.Add(new WeakReference<Action<T1, T2>>(Listener));
             }
             public void Fire(T1 Argument1, T2 Argument2) {
                 RemoveDeadSubscribers();
@@ -443,7 +443,7 @@ namespace Embers
                 }
             }
             private void RemoveDeadSubscribers() {
-                Subscribers.RemoveAll(SubscriberRef => !SubscriberRef.TryGetTarget(out _));
+                lock (Subscribers) Subscribers.RemoveAll(SubscriberRef => !SubscriberRef.TryGetTarget(out _));
             }
         }
         /// <summary>A thread-safe dictionary that is locked while a key is being added or set.</summary>

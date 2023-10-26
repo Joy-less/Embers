@@ -21,10 +21,23 @@ def fibonacci(n)
   end
 end
 
+p __FILE__
+
 # Calculate the Fibonacci sequence
-n = 20
+n = 22
 puts ""Fibonacci sequence for n = #{n}:""
-(0..n).each { |i| puts fibonacci(i) }
+
+p 0..n
+p (0..n).to_a
+
+puts 'PARALLEL'
+t = Time.now.to_f
+Parallel.each((0..n).to_a) { |i| puts ""#{i}. #{fibonacci(i)}"" }
+p Time.now.to_f - t
+puts 'SEQUENCE'
+t = Time.now.to_f
+(0..n).each { |i| puts ""#{i}. #{fibonacci(i)}"" }
+p Time.now.to_f - t
                     ")
                 );
                 Console.ReadLine();

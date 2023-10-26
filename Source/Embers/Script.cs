@@ -29,9 +29,10 @@ namespace Embers
         Instance CurrentInstance => CurrentObject.First<Instance>();
 
         public AccessModifier CurrentAccessModifier = AccessModifier.Public;
-        private Method? CurrentOnYield;
         internal readonly ConditionalWeakTable<Exception, ExceptionInstance> ExceptionsTable = new();
         public readonly HashSet<ScriptThread> ScriptThreads = new();
+
+        private Method? CurrentOnYield;
 
         public class Block {
             public readonly LockingDictionary<string, Instance> LocalVariables = new();
@@ -1717,9 +1718,11 @@ namespace Embers
         }
         public async Task WaitForThreadsAsync() {
             HashSet<ScriptThread> CurrentScriptThreads = new(ScriptThreads);
-            foreach (ScriptThread ScriptThread in CurrentScriptThreads)
-                if (ScriptThread.Running != null)
+            foreach (ScriptThread ScriptThread in CurrentScriptThreads) {
+                if (ScriptThread.Running != null) {
                     await ScriptThread.Running;
+                }
+            }
         }
         public void WaitForThreads() {
             WaitForThreadsAsync().Wait();
