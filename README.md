@@ -100,7 +100,7 @@ Note that code running on a single thread will be faster if they are regularly a
 ### Custom methods
 ```csharp
 MyInterpreter.Integer.InstanceMethods.Add("double_number", MyScript.CreateMethod(async Input => {
-    return Input.Interpreter.GetInteger(Input.Instance.Integer * 2);
+    return new IntegerInstance(Input.Api.Integer, Input.Instance.Integer * 2);
 }, 0));
 MyScript.Evaluate("puts 3.double_number"); // 6
 ```

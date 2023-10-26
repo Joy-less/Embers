@@ -142,16 +142,10 @@ namespace Embers
                 Target[Pair.Key] = Pair.Value;
             }
         }
-        public static T[] RemoveFromTop<T>(this Stack<T> Stack, int Count) {
-            T[] Removed = new T[Count];
-            for (int i = 0; i < Count; i++) {
-                Removed[i] = Stack.Pop();
-            }
-            return Removed;
-        }
-        public static void AddBackToTop<T>(this Stack<T> Stack, T[] Removed) {
-            for (int i = Removed.Length - 1; i >= 0; i--) {
-                Stack.Push(Removed[i]);
+        public static void ReplaceContentsWith<T>(this Stack<T> Stack, T[] With) {
+            Stack.Clear();
+            for (int i = With.Length - 1; i >= 0; i--) {
+                Stack.Push(With[i]);
             }
         }
         public static void EnsureArrayIndex<T>(this List<T> List, Api Api, int Index) where T : Instance {

@@ -724,9 +724,10 @@ namespace Embers
             // If you're modifying this function, ensure you're referencing Input.Script and not this script.
             if (Current != null) {
                 Func<MethodInput, Task<Instance>> CurrentFunction = Current.Function;
-                int OriginalStackCount = CurrentObject.Count;
+                object[] OriginalSnapshot = CurrentObject.ToArray();
                 Current.ChangeFunction(async Input => {
-                    object[] RemovedStack = Input.Script.CurrentObject.RemoveFromTop(Input.Script.CurrentObject.Count - OriginalStackCount);
+                    object[] TemporarySnapshot = Input.Script.CurrentObject.ToArray();
+                    Input.Script.CurrentObject.ReplaceContentsWith(OriginalSnapshot);
                     try {
                         return await Input.Script.CreateTemporaryScope(async () => {
                             await Current.SetArgumentVariables(Input.Script.CurrentScope, Input);
@@ -738,7 +739,7 @@ namespace Embers
                         throw;
                     }
                     finally {
-                        Input.Script.CurrentObject.AddBackToTop(RemovedStack);
+                        Input.Script.CurrentObject.ReplaceContentsWith(TemporarySnapshot);
                     }
                 });
             }
