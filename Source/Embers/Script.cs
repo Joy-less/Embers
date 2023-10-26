@@ -21,12 +21,12 @@ namespace Embers
         public bool Stopping { get; private set; }
         public DebugLocation ApproximateLocation { get; private set; } = DebugLocation.Unknown;
 
-        OuterStack<object> CurrentObject = new();
-        Block CurrentBlock => (Block)CurrentObject.Inner.First(obj => obj is Block);
-        Scope CurrentScope => (Scope)CurrentObject.Inner.First(obj => obj is Scope);
-        MethodScope CurrentMethodScope => (MethodScope)CurrentObject.Inner.First(obj => obj is MethodScope);
-        Module CurrentModule => (Module)CurrentObject.Inner.First(obj => obj is Module);
-        Instance CurrentInstance => (Instance)CurrentObject.Inner.First(obj => obj is Instance);
+        Stack<object> CurrentObject = new();
+        Block CurrentBlock => (Block)CurrentObject.First(obj => obj is Block);
+        Scope CurrentScope => (Scope)CurrentObject.First(obj => obj is Scope);
+        MethodScope CurrentMethodScope => (MethodScope)CurrentObject.First(obj => obj is MethodScope);
+        Module CurrentModule => (Module)CurrentObject.First(obj => obj is Module);
+        Instance CurrentInstance => (Instance)CurrentObject.First(obj => obj is Instance);
 
         public AccessModifier CurrentAccessModifier = AccessModifier.Public;
         private Method? CurrentOnYield;
@@ -335,7 +335,7 @@ namespace Embers
                     ParentScript.ScriptThreads.Add(this);
                 try {
                     // Create a new script
-                    ThreadScript.CurrentObject = new OuterStack<object>(ParentScript.CurrentObject.Inner);
+                    ThreadScript.CurrentObject = new Stack<object>(ParentScript.CurrentObject);
                     // Call the method in the script
                     Running = Method!.Call(ThreadScript, null, Arguments, OnYield);
                     while (!ThreadScript.Stopping && !ParentScript.Stopping && !Running.IsCompleted) {
@@ -394,14 +394,14 @@ namespace Embers
                 if (ArgumentCountRange.IsInRange(Arguments.Count)) {
                     // Create temporary scope
                     if (OnInstance != null) {
-                        Script.CurrentObject.Inner.Push(OnInstance.Module!);
-                        Script.CurrentObject.Inner.Push(OnInstance);
+                        Script.CurrentObject.Push(OnInstance.Module!);
+                        Script.CurrentObject.Push(OnInstance);
                     }
                     else if (Parent != null) {
-                        Script.CurrentObject.Inner.Push(Parent);
+                        Script.CurrentObject.Push(Parent);
                     }
                     MethodScope MethodScope = new(this);
-                    Script.CurrentObject.Inner.Push(MethodScope);
+                    Script.CurrentObject.Push(MethodScope);
                     
                     Instance ReturnValue;
                     try {
@@ -433,13 +433,13 @@ namespace Embers
                     }
                     finally {
                         // Step back a scope
-                        Script.CurrentObject.Inner.Pop();
+                        Script.CurrentObject.Pop();
                         if (OnInstance != null) {
-                            Script.CurrentObject.Inner.Pop();
-                            Script.CurrentObject.Inner.Pop();
+                            Script.CurrentObject.Pop();
+                            Script.CurrentObject.Pop();
                         }
                         else if (Parent != null) {
-                            Script.CurrentObject.Inner.Pop();
+                            Script.CurrentObject.Pop();
                         }
                     }
                     // Return method return value
@@ -614,38 +614,38 @@ namespace Embers
         }
         async Task<T> CreateTemporaryClassScope<T>(Module Module, Func<Task<T>> Do) {
             // Create temporary class/module scope
-            CurrentObject.Inner.Push(Module);
+            CurrentObject.Push(Module);
             try {
                 // Do action
                 return await Do();
             }
             finally {
                 // Step back a class/module
-                CurrentObject.Inner.Pop();
+                CurrentObject.Pop();
             }
         }
         async Task<T> CreateTemporaryInstanceScope<T>(Instance Instance, Func<Task<T>> Do) {
             // Create temporary instance scope
-            CurrentObject.Inner.Push(Instance);
+            CurrentObject.Push(Instance);
             try {
                 // Do action
                 return await Do();
             }
             finally {
                 // Step back an instance
-                CurrentObject.Inner.Pop();
+                CurrentObject.Pop();
             }
         }
         async Task<T> CreateTemporaryScope<T>(Scope Scope, Func<Task<T>> Do) {
             // Create temporary scope
-            CurrentObject.Inner.Push(Scope);
+            CurrentObject.Push(Scope);
             try {
                 // Do action
                 return await Do();
             }
             finally {
                 // Step back a scope
-                CurrentObject.Inner.Pop();
+                CurrentObject.Pop();
             }
         }
         async Task<T> CreateTemporaryScope<T>(Func<Task<T>> Do) {
@@ -653,21 +653,21 @@ namespace Embers
         }
         async Task CreateTemporaryScope(Scope Scope, Func<Task> Do) {
             // Create temporary scope
-            CurrentObject.Inner.Push(Scope);
+            CurrentObject.Push(Scope);
             try {
                 // Do action
                 await Do();
             }
             finally {
                 // Step back a scope
-                CurrentObject.Inner.Pop();
+                CurrentObject.Pop();
             }
         }
         async Task CreateTemporaryScope(Func<Task> Do) {
             await CreateTemporaryScope(new Scope(), Do);
         }
         public bool TryGetLocalVariable(string Name, out Instance? LocalVariable) {
-            foreach (object Object in CurrentObject.Inner) {
+            foreach (object Object in CurrentObject) {
                 if (Object is Block Block && Block.LocalVariables.TryGetValue(Name, out Instance? FindLocalVariable)) {
                     LocalVariable = FindLocalVariable;
                     return true;
@@ -677,7 +677,7 @@ namespace Embers
             return false;
         }
         public bool TryGetLocalConstant(string Name, out Instance? LocalConstant) {
-            foreach (object Object in CurrentObject.Inner) {
+            foreach (object Object in CurrentObject) {
                 if (Object is Block Block && Block.Constants.TryGetValue(Name, out Instance? FindLocalConstant)) {
                     LocalConstant = FindLocalConstant;
                     return true;
@@ -687,7 +687,7 @@ namespace Embers
             return false;
         }
         public bool TryGetLocalInstanceMethod(string Name, out Method? LocalInstanceMethod) {
-            foreach (object Object in CurrentObject.Inner) {
+            foreach (object Object in CurrentObject) {
                 if (Object is Instance Instance && (Instance is PseudoInstance ? Instance.Module!.InstanceMethods : Instance.InstanceMethods).TryGetValue(Name, out Method? FindLocalInstanceMethod)) {
                     LocalInstanceMethod = FindLocalInstanceMethod;
                     return true;
@@ -698,7 +698,7 @@ namespace Embers
         }
         public Dictionary<string, Instance> GetAllLocalVariables() {
             Dictionary<string, Instance> LocalVariables = new();
-            foreach (object Object in CurrentObject.Inner) {
+            foreach (object Object in CurrentObject) {
                 if (Object is Block Block) {
                     foreach (KeyValuePair<string, Instance> LocalVariable in Block.LocalVariables) {
                         LocalVariables[LocalVariable.Key] = LocalVariable.Value;
@@ -709,7 +709,7 @@ namespace Embers
         }
         public Dictionary<string, Instance> GetAllLocalConstants() {
             Dictionary<string, Instance> Constants = new();
-            foreach (object Object in CurrentObject.Inner) {
+            foreach (object Object in CurrentObject) {
                 if (Object is Block Block) {
                     foreach (KeyValuePair<string, Instance> Constant in Block.Constants) {
                         Constants[Constant.Key] = Constant.Value;
@@ -725,10 +725,10 @@ namespace Embers
             // If you've changed this function and are receiving errors, ensure you're referencing Input.Script and not this script.
             if (Current != null) {
                 Func<MethodInput, Task<Instance>> CurrentFunction = Current.Function;
-                var OriginalSnapshot = CurrentObject.Inner;
+                object[] OriginalSnapshot = CurrentObject.ToArray();
                 Current.ChangeFunction(async Input => {
-                    var TemporarySnapshot = Input.Script.CurrentObject.Inner;
-                    Input.Script.CurrentObject.Inner = OriginalSnapshot;
+                    object[] TemporarySnapshot = Input.Script.CurrentObject.ToArray();
+                    Input.Script.CurrentObject.ReplaceContentsWith(OriginalSnapshot);
                     try {
                         return await Input.Script.CreateTemporaryScope(async () => {
                             await Current.SetArgumentVariables(Input.Script.CurrentScope, Input);
@@ -740,7 +740,7 @@ namespace Embers
                         throw;
                     }
                     finally {
-                        Input.Script.CurrentObject.Inner = TemporarySnapshot;
+                        Input.Script.CurrentObject.ReplaceContentsWith(TemporarySnapshot);
                     }
                 });
             }
@@ -893,7 +893,7 @@ namespace Embers
                                 }
                                 // Undefined
                                 else {
-                                    throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Undefined local variable or method '{ObjectTokenExpression.Token.Value!}' for {CurrentObject.Inner.Peek()}");
+                                    throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Undefined local variable or method '{ObjectTokenExpression.Token.Value!}' for {CurrentObject.Peek()}");
                                 }
                             }
                             // Global variable
@@ -1377,7 +1377,7 @@ namespace Embers
                     else {
                         // Find appropriate local variable block
                         Block SetBlock = CurrentBlock;
-                        foreach (object Object in CurrentObject.Inner) {
+                        foreach (object Object in CurrentObject) {
                             if (Object is Block Block) {
                                 if (Block.LocalVariables.ContainsKey(Variable.Token.Value!)) {
                                     SetBlock = Block;
@@ -1735,9 +1735,9 @@ namespace Embers
             Interpreter = interpreter;
             this.AllowUnsafeApi = AllowUnsafeApi;
 
-            CurrentObject.Inner.Push(Interpreter.RootModule);
-            CurrentObject.Inner.Push(Interpreter.RootInstance);
-            CurrentObject.Inner.Push(Interpreter.RootScope);
+            CurrentObject.Push(Interpreter.RootModule);
+            CurrentObject.Push(Interpreter.RootInstance);
+            CurrentObject.Push(Interpreter.RootScope);
         }
     }
 }

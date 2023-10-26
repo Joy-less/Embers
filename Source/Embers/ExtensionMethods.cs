@@ -141,6 +141,12 @@ namespace Embers
                 Target[Pair.Key] = Pair.Value;
             }
         }
+        public static void ReplaceContentsWith<T>(this Stack<T> Stack, T[] With) {
+            Stack.Clear();
+            for (int i = With.Length - 1; i >= 0; i--) {
+                Stack.Push(With[i]);
+            }
+        }
         public static void EnsureArrayIndex<T>(this List<T> List, Api Api, int Index) where T : Instance {
             int Count = Index + 1;
             List.EnsureCapacity(Count);
