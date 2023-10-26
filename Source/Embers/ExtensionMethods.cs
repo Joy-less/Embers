@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -41,7 +42,7 @@ namespace Embers
             if (StartIndex <= EndIndex)
                 List.RemoveRange(StartIndex, EndIndex - StartIndex + 1);
         }
-        public static void RemoveFromEnd<T>(this List<T> List, Func<T, bool> While, bool RemoveOneOnly = false) {
+        public static void RemoveFromEndWhile<T>(this List<T> List, Func<T, bool> While, bool RemoveOneOnly = false) {
             for (int i = List.Count - 1; i >= 0; i--) {
                 if (While(List[i])) {
                     List.RemoveAt(i);
@@ -259,6 +260,12 @@ namespace Embers
         }
         public static double ToUnixTimeSecondsDouble(this DateTimeOffset DateTimeOffset) {
             return DateTimeOffset.ToUnixTimeSeconds() + (DateTimeOffset.Ticks % TimeSpan.TicksPerSecond) / (double)TimeSpan.TicksPerSecond;
+        }
+        public static T First<T>(this ICollection Collection) {
+            foreach (object Item in Collection) {
+                if (Item is T ItemAsT) return ItemAsT;
+            }
+            throw new InternalErrorException($"Item which is a {typeof(T).GetType().Name} not found in collection");
         }
         public static async Task QuickSort(this List<Instance> Items, Func<Instance, Instance, Task<bool>> SortBlock) {
             async Task QuickSort(List<Instance> Items, int Low, int High) {

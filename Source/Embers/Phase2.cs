@@ -1701,7 +1701,7 @@ namespace Embers
             Index++;
             List<Phase2Object> CaseExpressionObjects = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && Tok.Type is Phase2TokenType.When);
             Index--;
-            CaseExpressionObjects.RemoveFromEnd(Obj => Obj is Phase2Token Tok && Tok.Type == Phase2TokenType.EndOfStatement);
+            CaseExpressionObjects.RemoveFromEndWhile(Obj => Obj is Phase2Token Tok && Tok.Type == Phase2TokenType.EndOfStatement);
             Expression CaseExpression = ObjectsToExpression(CaseExpressionObjects);
 
             // Open case block
@@ -2023,7 +2023,7 @@ namespace Embers
                             else if (CurrentBlocks.Peek() is BuildingHash) {
                                 // Get objects inside {}
                                 List<Phase2Object> HashContents = PendingObjects.Pop();
-                                HashContents.RemoveFromEnd(Item => Item is Phase2Token Tok && Tok.Type == Phase2TokenType.EndOfStatement);
+                                HashContents.RemoveFromEndWhile(Item => Item is Phase2Token Tok && Tok.Type == Phase2TokenType.EndOfStatement);
                                 // Get items to put in hash
                                 List<Expression> HashItemsList = ObjectsToExpressions(HashContents, ExpressionsType.KeyValueExpressions);
                                 // Split items into key value pairs

@@ -22,11 +22,11 @@ namespace Embers
         public DebugLocation ApproximateLocation { get; private set; } = DebugLocation.Unknown;
 
         Stack<object> CurrentObject = new();
-        Block CurrentBlock => (Block)CurrentObject.First(obj => obj is Block);
-        Scope CurrentScope => (Scope)CurrentObject.First(obj => obj is Scope);
-        MethodScope CurrentMethodScope => (MethodScope)CurrentObject.First(obj => obj is MethodScope);
-        Module CurrentModule => (Module)CurrentObject.First(obj => obj is Module);
-        Instance CurrentInstance => (Instance)CurrentObject.First(obj => obj is Instance);
+        Block CurrentBlock => CurrentObject.First<Block>();
+        Scope CurrentScope => CurrentObject.First<Scope>();
+        MethodScope CurrentMethodScope => CurrentObject.First<MethodScope>();
+        Module CurrentModule => CurrentObject.First<Module>();
+        Instance CurrentInstance => CurrentObject.First<Instance>();
 
         public AccessModifier CurrentAccessModifier = AccessModifier.Public;
         private Method? CurrentOnYield;
