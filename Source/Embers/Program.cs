@@ -30,6 +30,7 @@ puts ""Fibonacci sequence for n = #{n}:""
 p 0..n
 p (0..n).to_a
 
+p constants
 puts ""Processor count: #{Parallel.processor_count}""
 
 puts 'PARALLEL'
