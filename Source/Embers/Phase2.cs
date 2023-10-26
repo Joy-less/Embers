@@ -2066,7 +2066,7 @@ namespace Embers
             if (Phase2Objects.Count == 0) return new List<Expression>(0);
             List<Phase2Object> ParsedObjects = new(Phase2Objects); // Preserve the original list
 
-            // Object Tokens and Self
+            // Object Tokens, Self, Environment Info
             for (int i = 0; i < ParsedObjects.Count; i++) {
                 if (ParsedObjects[i] is Phase2Token Token) {
                     // self
@@ -2077,13 +2077,8 @@ namespace Embers
                     else if (IsVariableToken(Token) || Token.IsObjectToken) {
                         ParsedObjects[i] = new ObjectTokenExpression(Token);
                     }
-                }
-            }
-
-            // Environment Info
-            for (int i = 0; i < ParsedObjects.Count; i++) {
-                if (ParsedObjects[i] is Phase2Token Token) {
-                    if (Enum.IsDefined((EnvironmentInfoType)Token.Type)) {
+                    // Environment Info
+                    else if (Enum.IsDefined((EnvironmentInfoType)Token.Type)) {
                         ParsedObjects[i] = new EnvironmentInfoExpression(Token.Location, (EnvironmentInfoType)Token.Type);
                     }
                 }

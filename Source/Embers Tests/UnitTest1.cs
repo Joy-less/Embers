@@ -418,6 +418,11 @@ namespace Embers_Tests
                 end
                 MyClass.local_variables
             ");
+
+            // __LINE__
+            AssertEqual(@"
+                __LINE__
+            ", new DynInteger(2));
         }
 
 
