@@ -13,6 +13,7 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() =>
                     Script.Evaluate(@"
+=begin
 def fibonacci(n)
   if n <= 1
     return n
@@ -20,27 +21,7 @@ def fibonacci(n)
     return fibonacci(n - 1) + fibonacci(n - 2)
   end
 end
-
-p __FILE__
-
-# Calculate the Fibonacci sequence
-n = 22
-puts ""Fibonacci sequence for n = #{n}:""
-
-p 0..n
-p (0..n).to_a
-
-p constants
-puts ""Processor count: #{Parallel.processor_count}""
-
-puts 'PARALLEL'
-t = Time.now.to_f
-Parallel.each((0..n).to_a) { |i| puts ""#{i}. #{fibonacci(i)}"" }
-p Time.now.to_f - t
-puts 'SEQUENCE'
-t = Time.now.to_f
-(0..n).each { |i| puts ""#{i}. #{fibonacci(i)}"" }
-p Time.now.to_f - t
+=end
                     ")
                 );
                 Console.ReadLine();

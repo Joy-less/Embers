@@ -31,8 +31,7 @@ namespace Embers
         public AccessModifier CurrentAccessModifier = AccessModifier.Public;
         internal readonly ConditionalWeakTable<Exception, ExceptionInstance> ExceptionsTable = new();
         public readonly HashSet<ScriptThread> ScriptThreads = new();
-
-        private Method? CurrentOnYield;
+        public Method? CurrentOnYield { get; private set; }
 
         public class Block {
             public readonly LockingDictionary<string, Instance> LocalVariables = new();
@@ -269,7 +268,7 @@ namespace Embers
                 }
                 // Error
                 else {
-                    throw new RuntimeException($"{Script.ApproximateLocation}: Undefined method '{MethodName}' for {LightInspect()}");
+                    throw new RuntimeException($"{Script.ApproximateLocation}: Undefined method '{MethodName}' for {Inspect()}");
                 }
             }
         }
@@ -378,16 +377,18 @@ namespace Embers
                 AccessModifier = accessModifier;
                 Parent = parent;
             }
-            public async Task<Instance> Call(Script Script, Instance? OnInstance, Instances? Arguments = null, Method? OnYield = null, BreakHandleType BreakHandleType = BreakHandleType.Invalid, bool CatchReturn = true) {
+            public async Task<Instance> Call(Script Script, Instance? OnInstance, Instances? Arguments = null, Method? OnYield = null, BreakHandleType BreakHandleType = BreakHandleType.Invalid, bool CatchReturn = true, bool BypassAccessModifiers = false) {
                 if (Unsafe && !Script.AllowUnsafeApi)
                     throw new RuntimeException($"{Script.ApproximateLocation}: The method '{Name}' is unavailable since 'AllowUnsafeApi' is disabled for this script.");
-                if (AccessModifier == AccessModifier.Private) {
-                    if (Parent != null && Script.CurrentModule != Parent)
-                        throw new RuntimeException($"{Script.ApproximateLocation}: Private method '{Name}' called {(Parent != null ? $"for {Parent.Name}" : "")}");
-                }
-                else if (AccessModifier == AccessModifier.Protected) {
-                    if (Parent != null && !Script.CurrentModule.InheritsFrom(Parent))
-                        throw new RuntimeException($"{Script.ApproximateLocation}: Protected method '{Name}' called {(Parent != null ? $"for {Parent.Name}" : "")}");
+                if (!BypassAccessModifiers) {
+                    if (AccessModifier == AccessModifier.Private) {
+                        if (Parent != null && Script.CurrentModule != Parent)
+                            throw new RuntimeException($"{Script.ApproximateLocation}: Private method '{Name}' called {(Parent != null ? $"for {Parent.Name}" : "")}");
+                    }
+                    else if (AccessModifier == AccessModifier.Protected) {
+                        if (Parent != null && !Script.CurrentModule.InheritsFrom(Parent))
+                            throw new RuntimeException($"{Script.ApproximateLocation}: Protected method '{Name}' called {(Parent != null ? $"for {Parent.Name}" : "")}");
+                    }
                 }
 
                 Arguments ??= Instances.None;
@@ -1205,35 +1206,30 @@ namespace Embers
             }
             return Api.Nil;
         }
-        async Task<Instance> InterpretYieldStatement(YieldStatement YieldStatement) {
+        async Task<Instance> InterpretYieldExpression(YieldExpression YieldExpression) {
             if (CurrentOnYield != null) {
-                List<Instance> YieldArgs = YieldStatement.YieldValues != null
-                    ? await InterpretExpressionsAsync(YieldStatement.YieldValues)
+                List<Instance> YieldArgs = YieldExpression.YieldValues != null
+                    ? await InterpretExpressionsAsync(YieldExpression.YieldValues)
                     : new();
-                await CurrentOnYield.Call(this, null, YieldArgs, BreakHandleType: BreakHandleType.Destroy, CatchReturn: false);
+                return await CurrentOnYield.Call(this, null, YieldArgs, BreakHandleType: BreakHandleType.Destroy, CatchReturn: false);
             }
             else {
-                throw new RuntimeException($"{YieldStatement.Location}: No block given to yield to");
+                throw new RuntimeException($"{YieldExpression.Location}: No block given to yield to");
             }
-            return Api.Nil;
         }
-        async Task<Instance> InterpretSuperStatement(SuperStatement SuperStatement) {
+        async Task<Instance> InterpretSuperExpression(SuperExpression SuperExpression) {
             Module CurrentModule = this.CurrentModule;
-            string? SuperMethodName = null;
-            try {
-                SuperMethodName = CurrentMethodScope.Method?.Name;
-                if (CurrentModule != Interpreter.RootModule && CurrentModule.SuperModule is Module SuperModule) {
-                    if (SuperMethodName != null && SuperModule.InstanceMethods.TryGetValue(SuperMethodName, out Method? SuperMethod)) {
-                        Instances? Arguments = null;
-                        if (SuperStatement.Arguments != null) {
-                            Arguments = await InterpretExpressionsAsync(SuperStatement.Arguments);
-                        }
-                        return await SuperMethod.Call(this, null, Arguments);
+            string? SuperMethodName = CurrentMethodScope.Method?.Name;
+            if (CurrentModule != Interpreter.RootModule && CurrentModule.SuperModule is Module SuperModule) {
+                if (SuperMethodName != null && SuperModule.InstanceMethods.TryGetValue(SuperMethodName, out Method? SuperMethod)) {
+                    Instances? Arguments = null;
+                    if (SuperExpression.Arguments != null) {
+                        Arguments = await InterpretExpressionsAsync(SuperExpression.Arguments);
                     }
+                    return await SuperMethod.Call(this, null, Arguments, BypassAccessModifiers: true);
                 }
             }
-            catch { }
-            throw new RuntimeException($"{SuperStatement.Location}: No super method '{SuperMethodName}' to call");
+            throw new RuntimeException($"{SuperExpression.Location}: No super method '{SuperMethodName}' to call");
         }
         async Task<Instance> InterpretAliasStatement(AliasStatement AliasStatement) {
             Instance MethodAlias = await InterpretExpressionAsync(AliasStatement.AliasAs, ReturnType.HypotheticalVariable);
@@ -1552,7 +1548,7 @@ namespace Embers
             else if (DefinedExpression.Expression is SelfExpression) {
                 return new StringInstance(Api.String, "self");
             }
-            else if (DefinedExpression.Expression is SuperStatement) {
+            else if (DefinedExpression.Expression is SuperExpression) {
                 return new StringInstance(Api.String, "super");
             }
             else {
@@ -1624,8 +1620,8 @@ namespace Embers
                     LoopControlType.Redo => throw new RedoException(),
                     LoopControlType.Next => throw new NextException(),
                     _ => throw new InternalErrorException($"{Expression.Location}: Loop control type not handled: '{LoopControlStatement.Type}'")},
-                YieldStatement YieldStatement => await InterpretYieldStatement(YieldStatement),
-                SuperStatement SuperStatement => await InterpretSuperStatement(SuperStatement),
+                YieldExpression YieldExpression => await InterpretYieldExpression(YieldExpression),
+                SuperExpression SuperExpression => await InterpretSuperExpression(SuperExpression),
                 AliasStatement AliasStatement => await InterpretAliasStatement(AliasStatement),
                 RangeExpression RangeExpression => await InterpretRangeExpression(RangeExpression),
                 IfBranchesStatement IfBranchesStatement => await InterpretIfBranchesStatement(IfBranchesStatement),

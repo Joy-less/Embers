@@ -423,6 +423,14 @@ namespace Embers_Tests
             AssertEqual(@"
                 __LINE__
             ", new DynInteger(2));
+
+            // Yield return values
+            AssertEqual(@"
+                def a
+                    yield ""hi""
+                end
+                a {|x| 7.to_s + x}
+            ", "7hi");
         }
 
 

@@ -552,6 +552,32 @@ namespace Embers
                 return $"new {PathToSelf}({OnYield.Serialise()}, {(HighPriority ? "true" : "false")})";
             }
         }
+        public class YieldExpression : Expression {
+            public readonly List<Expression>? YieldValues;
+            public YieldExpression(DebugLocation location, List<Expression>? yieldValues = null) : base(location) {
+                YieldValues = yieldValues;
+            }
+            public override string Inspect() {
+                if (YieldValues != null) return "yield " + YieldValues.Inspect();
+                else return "yield";
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({Location.Serialise()}, {(YieldValues != null ? YieldValues.Serialise() : "null")})";
+            }
+        }
+        public class SuperExpression : Expression {
+            public readonly List<Expression>? Arguments;
+            public SuperExpression(DebugLocation location, List<Expression>? arguments = null) : base(location) {
+                Arguments = arguments;
+            }
+            public override string Inspect() {
+                if (Arguments != null) return "super " + Arguments.Inspect();
+                else return "super";
+            }
+            public override string Serialise() {
+                return $"new {PathToSelf}({Location.Serialise()}, {(Arguments != null ? Arguments.Serialise() : "null")})";
+            }
+        }
         public class ArrayExpression : Expression {
             public readonly List<Expression> Expressions;
             public ArrayExpression(DebugLocation location, List<Expression> expressions) : base(location) {
@@ -635,19 +661,6 @@ namespace Embers
                 return $"new {PathToSelf}({ClassName.Serialise()}, {BlockStatements.Serialise()}, {(IsModule ? "true" : "false")}, {(InheritsFrom != null ? InheritsFrom.Serialise() : "null")})";
             }
         }
-        public class YieldStatement : Statement {
-            public readonly List<Expression>? YieldValues;
-            public YieldStatement(DebugLocation location, List<Expression>? yieldValues = null) : base(location) {
-                YieldValues = yieldValues;
-            }
-            public override string Inspect() {
-                if (YieldValues != null) return "yield " + YieldValues.Inspect();
-                else return "yield";
-            }
-            public override string Serialise() {
-                return $"new {PathToSelf}({Location.Serialise()}, {(YieldValues != null ? YieldValues.Serialise() : "null")})";
-            }
-        }
         public class ReturnStatement : Statement {
             public readonly Expression? ReturnValue;
             public ReturnStatement(DebugLocation location, Expression? returnValue = null) : base(location) {
@@ -659,19 +672,6 @@ namespace Embers
             }
             public override string Serialise() {
                 return $"new {PathToSelf}({Location.Serialise()}, {(ReturnValue != null ? ReturnValue.Serialise() : "null")})";
-            }
-        }
-        public class SuperStatement : Statement {
-            public readonly List<Expression>? Arguments;
-            public SuperStatement(DebugLocation location, List<Expression>? arguments = null) : base(location) {
-                Arguments = arguments;
-            }
-            public override string Inspect() {
-                if (Arguments != null) return "super " + Arguments.Inspect();
-                else return "super";
-            }
-            public override string Serialise() {
-                return $"new {PathToSelf}({Location.Serialise()}, {(Arguments != null ? Arguments.Serialise() : "null")})";
             }
         }
         public class AliasStatement : Statement {
@@ -1629,10 +1629,10 @@ namespace Embers
                 }
             }
             else if (ReturnOrYieldOrSuper == ReturnOrYieldOrSuper.Super) {
-                return new SuperStatement(Location, ReturnOrYieldValues);
+                return new SuperExpression(Location, ReturnOrYieldValues);
             }
             else {
-                return new YieldStatement(Location, ReturnOrYieldValues);
+                return new YieldExpression(Location, ReturnOrYieldValues);
             }
         }
         static Expression ParseUndef(DebugLocation Location, List<Phase2Object> StatementTokens, ref int Index) {

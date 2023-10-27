@@ -56,6 +56,9 @@ local_variables
 
 global_variables
 	Returns an array containing the names of all current global variables as symbols.
+
+block_given?
+	Returns true if a block is given to yield to.
 ```
 ```
 object.inspect
@@ -184,7 +187,10 @@ string.split([delimiter], [remove_empty_entries = true])
 	Splits the string by the given delimiter or delimiters and returns an array of substrings. Delimiter defaults to all whitespace characters in the string.
 
 string.eql?(other)
-	Returns true if other is a string that has the same contents.
+	Returns true if other is a string with the same contents.
+
+string.include?(substring) | string.contain?(substring)
+	Returns true if the string contains the substring.
 ```
 ```
 integer.to_i
@@ -316,7 +322,7 @@ array.sort {|a, b|} | array.sort! {|item|}
 	The block should return -1 if a -> b, 0 if a and b are the same, and 1 if b -> a.
 	The block defaults to "a <=> b" (ascending order).
 
-array.include?(item) | array.includes?(item) | array.contain?(item) | array.contains?(item)
+array.include?(item) | array.contain?(item)
 	Returns true if the array contains the item.
 
 array.delete(item) | array.remove(item)

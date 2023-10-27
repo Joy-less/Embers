@@ -472,19 +472,21 @@ namespace Embers
                                 i++;
                             }
                             else if (NextCharactersAre("begin") && LastChara is null or '\n' or '\r') {
-                                i += 5;
-                                while (i < Code.Length) {
-                                    i++;
+                                bool FoundEqualsEnd = false;
+                                for (i += 5; i < Code.Length; i++) {
                                     if (NextCharactersAre("\n=end") || NextCharactersAre("\r=end")) {
                                         i += 4 + 1;
                                         CurrentLine++;
                                         IndexOfLastNewline = i;
-                                        break;
+                                        FoundEqualsEnd = true;
                                     }
                                     else if (Code[i] is '\n' or '\r') {
                                         CurrentLine++;
+                                        IndexOfLastNewline = i;
+                                        if (FoundEqualsEnd) break;
                                     }
                                 }
+                                if (!FoundEqualsEnd) throw new SyntaxErrorException($"{Location}: Expected =end after =begin");
                             }
                             else {
                                 AddToken(Phase1TokenType.AssignmentOperator, "=");

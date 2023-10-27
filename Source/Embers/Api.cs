@@ -118,7 +118,7 @@ namespace Embers
 
             Object.Methods["class_variables"] = Script.CreateMethod(_Object.class_variables, 0);
 
-            Script.CurrentAccessModifier = AccessModifier.Protected;
+            Script.CurrentAccessModifier = AccessModifier.Private;
             Object.InstanceMethods["puts"] = Object.Methods["puts"] = Script.CreateMethod(puts, null);
             Object.InstanceMethods["print"] = Object.Methods["print"] = Script.CreateMethod(print, null);
             Object.InstanceMethods["p"] = Object.Methods["p"] = Script.CreateMethod(p, null);
@@ -138,6 +138,7 @@ namespace Embers
             Object.InstanceMethods["eval"] = Object.Methods["eval"] = Script.CreateMethod(eval, 1);
             Object.InstanceMethods["local_variables"] = Object.Methods["local_variables"] = Script.CreateMethod(local_variables, 0);
             Object.InstanceMethods["global_variables"] = Object.Methods["global_variables"] = Script.CreateMethod(global_variables, 0);
+            Object.InstanceMethods["block_given?"] = Object.Methods["block_given?"] = Script.CreateMethod(block_given7, 0);
 
             Object.InstanceMethods["attr_reader"] = Script.CreateMethod(_Object.attr_reader, 1);
             Object.InstanceMethods["attr_writer"] = Script.CreateMethod(_Object.attr_writer, 1);
@@ -208,6 +209,7 @@ namespace Embers
             String.InstanceMethods["gsub!"] = Script.CreateMethod(_String.gsub1, 2);
             String.InstanceMethods["split"] = Script.CreateMethod(_String.split, 0..2);
             String.InstanceMethods["eql?"] = Script.CreateMethod(_String.eql7, 1);
+            String.InstanceMethods["include?", "contain?"] = Script.CreateMethod(_String.include7, 1);
 
             // Symbol
             Symbol = Script.CreateClass("Symbol");
@@ -305,7 +307,7 @@ namespace Embers
             Array.InstanceMethods["map!"] = Script.CreateMethod(_Array.map1, 0);
             Array.InstanceMethods["sort"] = Script.CreateMethod(_Array.sort, 0);
             Array.InstanceMethods["sort!"] = Script.CreateMethod(_Array.sort1, 0);
-            Array.InstanceMethods["include?", "includes?", "contain?", "contains?"] = Script.CreateMethod(_Array.include7, 1);
+            Array.InstanceMethods["include?", "contain?"] = Script.CreateMethod(_Array.include7, 1);
             Array.InstanceMethods["delete", "remove"] = Script.CreateMethod(_Array.delete, 1);
             Array.InstanceMethods["delete_at", "remove_at"] = Script.CreateMethod(_Array.delete_at, 1);
             Array.InstanceMethods["clear"] = Script.CreateMethod(_Array.clear, 0);
@@ -628,6 +630,9 @@ namespace Embers
                 Variables.Add(Input.Api.GetSymbol(Variable.Key));
             }
             return new ArrayInstance(Input.Api.Array, Variables);
+        }
+        public static async Task<Instance> block_given7(MethodInput Input) {
+            return Input.Script.CurrentOnYield != null ? Input.Api.True : Input.Api.False;
         }
         static class _Object {
             public static async Task<Instance> _Equals(MethodInput Input) {
@@ -1147,6 +1152,9 @@ namespace Embers
             }
             public static async Task<Instance> eql7(MethodInput Input) {
                 return await _Equals(Input);
+            }
+            public static async Task<Instance> include7(MethodInput Input) {
+                return Input.Instance.String.Contains(Input.Arguments[0].String) ? Input.Api.True : Input.Api.False;
             }
         }
         static class _Integer {
