@@ -22,6 +22,9 @@ def fibonacci(n)
   end
 end
 =end
+
+p 'a'.hash
+p :a.hash
                     ")
                 );
                 Console.ReadLine();

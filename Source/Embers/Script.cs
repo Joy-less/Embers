@@ -271,6 +271,9 @@ namespace Embers
                     throw new RuntimeException($"{Script.ApproximateLocation}: Undefined method '{MethodName}' for {Inspect()}");
                 }
             }
+            public override int GetHashCode() {
+                return Inspect().GetHashCode();
+            }
         }
         public abstract class PseudoInstance : Instance {
             public PseudoInstance(Module module) : base(module) { }

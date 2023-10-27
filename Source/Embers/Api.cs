@@ -2663,9 +2663,6 @@ namespace Embers
             public void SetValue(string value) {
                 Value = value;
             }
-            public override int GetHashCode() {
-                return Value.GetHashCode();
-            }
         }
         public class SymbolInstance : Instance {
             readonly string Value;
