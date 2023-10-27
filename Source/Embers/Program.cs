@@ -25,6 +25,8 @@ end
 
 p 'a'.hash
 p :a.hash
+
+p({:a => 1, :a => 2})
                     ")
                 );
                 Console.ReadLine();

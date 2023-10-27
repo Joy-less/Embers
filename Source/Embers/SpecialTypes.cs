@@ -552,6 +552,7 @@ namespace Embers
                     Entry = new HashSet<KeyValuePair<Instance, Instance>>();
                     lock (Dict) Dict[HashKey] = Entry;
                 }
+                Entry.RemoveWhere(Match => Match.Key == Key);
                 lock (Entry) Entry.Add(new KeyValuePair<Instance, Instance>(Key, Value));
             }
             public async Task<Instance?> Remove(Script Script, Instance Key) {
