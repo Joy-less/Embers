@@ -410,51 +410,17 @@ namespace Embers
                 return IsDouble ? Double.GetHashCode() : BigFloat.GetHashCode();
             }
         }
-        public class WeakEvent<T> {
-            readonly List<WeakReference<Action<T>>> Subscribers = new();
-            public void Listen(Action<T> Listener) {
-                RemoveDeadSubscribers();
-                lock (Subscribers) Subscribers.Add(new WeakReference<Action<T>>(Listener));
-            }
-            public void Fire(T Argument) {
-                RemoveDeadSubscribers();
-                foreach (WeakReference<Action<T>> SubscriberRef in Subscribers) {
-                    if (SubscriberRef.TryGetTarget(out Action<T>? Subscriber)) {
-                        Subscriber(Argument);
-                    }
-                }
-            }
-            private void RemoveDeadSubscribers() {
-                lock (Subscribers) Subscribers.RemoveAll(SubscriberRef => !SubscriberRef.TryGetTarget(out _));
-            }
-        }
-        public class WeakEvent<T1, T2> {
-            readonly List<WeakReference<Action<T1, T2>>> Subscribers = new();
-            public void Listen(Action<T1, T2> Listener) {
-                RemoveDeadSubscribers();
-                lock (Subscribers) Subscribers.Add(new WeakReference<Action<T1, T2>>(Listener));
-            }
-            public void Fire(T1 Argument1, T2 Argument2) {
-                RemoveDeadSubscribers();
-                foreach (WeakReference<Action<T1, T2>> SubscriberRef in Subscribers) {
-                    if (SubscriberRef.TryGetTarget(out Action<T1, T2>? Subscriber)) {
-                        Subscriber(Argument1, Argument2);
-                    }
-                }
-            }
-            private void RemoveDeadSubscribers() {
-                lock (Subscribers) Subscribers.RemoveAll(SubscriberRef => !SubscriberRef.TryGetTarget(out _));
-            }
-        }
-        /// <summary>A thread-safe dictionary that is locked while a key is being added or set.</summary>
+        /// <summary>A thread-safe dictionary that is locked while a key is being changed.</summary>
         public class LockingDictionary<TKey, TValue> : Dictionary<TKey, TValue> where TKey : notnull {
             public new void Add(TKey Key, TValue Value) {
+                TrySetMethodName(Key, Value);
                 lock (this) base.Add(Key, Value);
             }
             public new bool Remove(TKey Key) {
                 lock (this) return base.Remove(Key);
             }
             public new bool TryAdd(TKey Key, TValue Value) {
+                TrySetMethodName(Key, Value);
                 lock (this) return base.TryAdd(Key, Value);
             }
             public new TValue this[TKey Key] {
@@ -462,26 +428,8 @@ namespace Embers
                     lock (this) return base[Key];
                 }
                 set {
-                    lock (this) base[Key] = value;
-                }
-            }
-            public new void Clear() {
-                lock (this) base.Clear();
-            }
-        }
-        /// <summary>A locking dictionary with events that trigger when a key-value pair is added to or removed from the dictionary.</summary>
-        public class ReactiveDictionary<TKey, TValue> : LockingDictionary<TKey, TValue> where TKey : notnull {
-            public readonly WeakEvent<TKey, TValue> OnSet = new();
-            public readonly WeakEvent<TKey> OnRemoved = new();
-
-            public new TValue this[TKey Key] {
-                get => base[Key];
-                set {
                     TrySetMethodName(Key, value);
-                    if (!IsValueAlreadySet(Key, value)) {
-                        base[Key] = value;
-                        OnSet.Fire(Key, value);
-                    }
+                    lock (this) base[Key] = value;
                 }
             }
             public TValue this[TKey FirstKey, params TKey[] Keys] {
@@ -493,27 +441,115 @@ namespace Embers
                     }
                 }
             }
-            public new void Add(TKey Key, TValue Value) {
-                TrySetMethodName(Key, Value);
-                if (!IsValueAlreadySet(Key, Value)) {
-                    lock (this) base.Add(Key, Value);
-                    OnSet.Fire(Key, Value);
-                }
-            }
-            public new bool Remove(TKey Key) {
-                bool Success;
-                lock (this) Success = Remove(Key, out _);
-                if (Success) OnRemoved.Fire(Key);
-                return Success;
-            }
-            
-            bool IsValueAlreadySet(TKey Key, TValue Value) {
-                bool Exists = TryGetValue(Key, out TValue? CurrentValue);
-                return Exists && Equals(CurrentValue, Value);
+            public new void Clear() {
+                lock (this) base.Clear();
             }
             static void TrySetMethodName(TKey Key, TValue Value) {
                 if (Value is Method Method && Key is string MethodName) {
                     Method.SetName(MethodName);
+                }
+            }
+        }
+        /// <summary>A locking dictionary that supports events when a key is set or removed.</summary>
+        public class ReactiveDictionary<TKey, TValue> : LockingDictionary<TKey, TValue> where TKey : notnull {
+            readonly Action<TKey, TValue> OnSet;
+            readonly Action<TKey> OnRemoved;
+            public ReactiveDictionary(Action<TKey, TValue> onSet, Action<TKey> onRemoved) {
+                OnSet = onSet;
+                OnRemoved = onRemoved;
+            }
+            public new void Add(TKey Key, TValue Value) {
+                OnSet.Invoke(Key, Value);
+                lock (this) base.Add(Key, Value);
+            }
+            public new bool Remove(TKey Key) {
+                OnRemoved.Invoke(Key);
+                lock (this) return base.Remove(Key);
+            }
+            public new bool TryAdd(TKey Key, TValue Value) {
+                OnSet.Invoke(Key, Value);
+                lock (this) return base.TryAdd(Key, Value);
+            }
+            public new TValue this[TKey Key] {
+                get {
+                    lock (this) return base[Key];
+                }
+                set {
+                    OnSet.Invoke(Key, value);
+                    lock (this) base[Key] = value;
+                }
+            }
+            public new TValue this[TKey FirstKey, params TKey[] Keys] {
+                set {
+                    OnSet.Invoke(FirstKey, value);
+                    foreach (TKey Key in Keys) {
+                        OnSet.Invoke(Key, value);
+                    }
+                    base[FirstKey, Keys] = value;
+                }
+            }
+            public new void Clear() {
+                lock (this) {
+                    foreach (TKey Key in Keys) {
+                        OnRemoved.Invoke(Key);
+                    }
+                    base.Clear();
+                }
+            }
+        }
+        /// <summary>A thread-safe list that is locked while an item is being changed.</summary>
+        public class LockingList<T> : List<T> {
+            public new void Add(T Item) {
+                lock (this) base.Add(Item);
+            }
+            public new bool Remove(T Item) {
+                lock (this) return base.Remove(Item);
+            }
+            public new T this[int Key] {
+                get {
+                    lock (this) return base[Key];
+                }
+                set {
+                    lock (this) base[Key] = value;
+                }
+            }
+            public new void Clear() {
+                lock (this) base.Clear();
+            }
+        }
+        /// <summary>A locking list of weak references that automatically removes dead references.</summary>
+        public class WeakList<T> where T : class {
+            private readonly LockingList<WeakReference<T>> Items = new();
+            public void Add(T Item) {
+                Purge();
+                Items.Add(new WeakReference<T>(Item));
+            }
+            public bool Remove(T Item) {
+                Purge();
+                for (int i = Items.Count - 1; i >= 0; i--) {
+                    if (Items[i].TryGetTarget(out T? Target) && Target == Item) {
+                        Items.RemoveAt(i);
+                        return true;
+                    }
+                }
+                return false;
+            }
+            public T? this[int Index] {
+                get {
+                    Purge();
+                    Items[Index].TryGetTarget(out T? Target);
+                    return Target;
+                }
+            }
+            public void Purge() {
+                Items.RemoveAll(reference => !reference.TryGetTarget(out _));
+            }
+            public IEnumerator<T> GetEnumerator() {
+                Purge();
+                foreach (WeakReference<T> Item in Items) {
+                    if (Item.TryGetTarget(out T? Target)) {
+                        yield return Target;
+                    }
                 }
             }
         }

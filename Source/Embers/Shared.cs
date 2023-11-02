@@ -4,10 +4,10 @@ using static Embers.Script;
 namespace Embers
 {
     public static class Info {
-        public const string Version = "1.7.5";
-        public const string ReleaseDate = "2023-10-27";
+        public const string Version = "1.7.6";
+        public const string ReleaseDate = "2023-11-02";
         public const string Copyright = "Embers - Copyright © 2023 Joyless";
-        public const string RubyCopyright = "Ruby - Copyright © Yukihiro Matsumoto";
+        public const string RubyCopyright = "Ruby - Copyright © 1995 Yukihiro Matsumoto";
     }
 
     public abstract class EmbersException : Exception {

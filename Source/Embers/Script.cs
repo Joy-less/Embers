@@ -35,7 +35,7 @@ namespace Embers
 
         public class Block {
             public readonly LockingDictionary<string, Instance> LocalVariables = new();
-            public readonly ReactiveDictionary<string, Instance> Constants = new();
+            public LockingDictionary<string, Instance> Constants {get; protected set;} = new();
         }
         public class Scope : Block {
         }
@@ -47,49 +47,40 @@ namespace Embers
         }
         public class Module : Block {
             public readonly string Name;
-            public readonly ReactiveDictionary<string, Method> Methods = new();
-            public readonly ReactiveDictionary<string, Method> InstanceMethods = new();
+            public readonly ReactiveDictionary<string, Method> Methods;
+            public readonly ReactiveDictionary<string, Method> InstanceMethods;
             public readonly LockingDictionary<string, Instance> InstanceVariables = new();
             public readonly LockingDictionary<string, Instance> ClassVariables = new();
             public readonly Interpreter Interpreter;
             public readonly Module? SuperModule;
+            public readonly WeakList<Module> SubModules = new();
+            public readonly WeakList<Instance> SubInstances = new();
             public Module(string name, Module parent, Module? superModule = null) {
                 Name = name;
                 Interpreter = parent.Interpreter;
                 SuperModule = superModule ?? Interpreter.Class;
+                Methods = new(ForwardMethodChanges, ForwardMethodChanges);
+                InstanceMethods = new(ForwardInstanceMethodChanges, ForwardInstanceMethodChanges);
+                Constants = new ReactiveDictionary<string, Instance>(ForwardConstantChanges, ForwardConstantChanges);
                 Setup();
             }
             public Module(string name, Interpreter interpreter, Module? superModule = null) {
                 Name = name;
                 Interpreter = interpreter;
                 SuperModule = superModule;
+                Methods = new(ForwardMethodChanges, ForwardMethodChanges);
+                InstanceMethods = new(ForwardInstanceMethodChanges, ForwardInstanceMethodChanges);
+                Constants = new ReactiveDictionary<string, Instance>(ForwardConstantChanges, ForwardConstantChanges);
                 Setup();
             }
             protected virtual void Setup() {
                 // Copy superclass class and instance methods
                 if (SuperModule != null) {
+                    // Add to parent module
+                    SuperModule.SubModules.Add(this);
                     // Copy methods and instance methods
                     SuperModule.Methods.CloneTo(Methods, this);
                     SuperModule.InstanceMethods.CloneTo(InstanceMethods, this);
-                    // Copy future changes
-                    SuperModule.Methods.OnSet.Listen((string Key, Method Method) => {
-                        Methods[Key] = Method.CloneTo(this);
-                    });
-                    SuperModule.Methods.OnRemoved.Listen((string Key) => {
-                        Methods.Remove(Key);
-                    });
-                    SuperModule.InstanceMethods.OnSet.Listen((string Key, Method Method) => {
-                        InstanceMethods[Key] = Method.CloneTo(this);
-                    });
-                    SuperModule.InstanceMethods.OnRemoved.Listen((string Key) => {
-                        InstanceMethods.Remove(Key);
-                    });
-                    SuperModule.Constants.OnSet.Listen((string Key, Instance Constant) => {
-                        Constants[Key] = Constant;
-                    });
-                    SuperModule.Constants.OnRemoved.Listen((string Key) => {
-                        Constants.Remove(Key);
-                    });
                 }
             }
             public bool InheritsFrom(Module? Ancestor) {
@@ -124,6 +115,42 @@ namespace Embers
                 // Error
                 else {
                     throw new RuntimeException($"{Script.ApproximateLocation}: Undefined method '{MethodName}' for {Name}");
+                }
+            }
+            void ForwardMethodChanges(string MethodName, Method Method) {
+                foreach (Module SubModule in SubModules) {
+                    SubModule.Methods[MethodName] = Method;
+                }
+            }
+            void ForwardMethodChanges(string MethodName) {
+                foreach (Module SubModule in SubModules) {
+                    SubModule.Methods.Remove(MethodName);
+                }
+            }
+            void ForwardInstanceMethodChanges(string MethodName, Method Method) {
+                foreach (Module SubModule in SubModules) {
+                    SubModule.InstanceMethods[MethodName] = Method;
+                }
+                foreach (Instance Instance in SubInstances) {
+                    Instance.InstanceMethods[MethodName] = Method;
+                }
+            }
+            void ForwardInstanceMethodChanges(string MethodName) {
+                foreach (Module SubModule in SubModules) {
+                    SubModule.InstanceMethods.Remove(MethodName);
+                }
+                foreach (Instance Instance in SubInstances) {
+                    Instance.InstanceMethods.Remove(MethodName);
+                }
+            }
+            void ForwardConstantChanges(string ConstantName, Instance Instance) {
+                foreach (Module SubModule in SubModules) {
+                    SubModule.Constants[ConstantName] = Instance;
+                }
+            }
+            void ForwardConstantChanges(string ConstantName) {
+                foreach (Module SubModule in SubModules) {
+                    SubModule.Constants.Remove(ConstantName);
                 }
             }
         }
@@ -236,15 +263,10 @@ namespace Embers
             }
             void Setup() {
                 if (Module != null && this is not ModuleReference) {
+                    // Add to module
+                    Module.SubInstances.Add(this);
                     // Copy instance methods
                     Module.InstanceMethods.CloneTo(InstanceMethods, Module);
-                    // Copy future changes
-                    Module.InstanceMethods.OnSet.Listen((string Key, Method Method) => {
-                        InstanceMethods[Key] = Method.CloneTo(Module);
-                    });
-                    Module.InstanceMethods.OnRemoved.Listen((string Key) => {
-                        InstanceMethods.Remove(Key);
-                    });
                 }
             }
             public async Task<Instance> CallInstanceMethod(Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {

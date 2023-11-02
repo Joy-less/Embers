@@ -13,7 +13,6 @@ namespace Embers
                 Script Script = new(Interpreter);
                 Benchmark(() =>
                     Script.Evaluate(@"
-=begin
 def fibonacci(n)
   if n <= 1
     return n
@@ -21,12 +20,13 @@ def fibonacci(n)
     return fibonacci(n - 1) + fibonacci(n - 2)
   end
 end
-=end
 
-p 'a'.hash
-p :a.hash
+22.times do |n|
+    puts fibonacci(n)
+end
 
-p({:a => 1, :a => 2})
+puts ""Started.""
+t = Time.now.to_f; i = 0; for i in 1..1_000_000 do i += 1 end; puts Time.now.to_f - t
                     ")
                 );
                 Console.ReadLine();
