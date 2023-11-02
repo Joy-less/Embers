@@ -18,7 +18,7 @@ using static Embers.SpecialTypes;
 
 namespace Embers
 {
-    public class Api
+    public sealed class Api
     {
         public readonly Interpreter Interpreter;
 

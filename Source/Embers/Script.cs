@@ -12,7 +12,7 @@ using static Embers.Api;
 
 namespace Embers
 {
-    public class Script
+    public sealed class Script
     {
         public readonly Interpreter Interpreter;
         public readonly bool AllowUnsafeApi;
