@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Threading.Tasks;
@@ -518,40 +519,69 @@ namespace Embers
             }
         }
         /// <summary>A locking list of weak references that automatically removes dead references.</summary>
-        public class WeakList<T> where T : class {
-            private readonly LockingList<WeakReference<T>> Items = new();
-            public void Add(T Item) {
-                Purge();
-                Items.Add(new WeakReference<T>(Item));
+        public class WeakCollection<T> : ICollection<T> where T : class {
+            readonly LockingList<WeakReference<T>> List;
+            readonly WeakReference GCSentinel = new(new object());
+
+            public WeakCollection() {
+                List = new LockingList<WeakReference<T>>();
             }
-            public bool Remove(T Item) {
-                Purge();
-                for (int i = Items.Count - 1; i >= 0; i--) {
-                    if (Items[i].TryGetTarget(out T? Target) && Target == Item) {
-                        Items.RemoveAt(i);
-                        return true;
-                    }
-                }
-                return false;
+            public bool Purge() {
+                return List.RemoveAll(Item => !Item.TryGetTarget(out _)) != 0;
             }
-            public T? this[int Index] {
-                get {
+            void ConsiderPurge() {
+                if (!GCSentinel.IsAlive) {
+                    GCSentinel.Target = new object();
                     Purge();
-                    Items[Index].TryGetTarget(out T? Target);
-                    return Target;
                 }
-            }
-            public void Purge() {
-                Items.RemoveAll(reference => !reference.TryGetTarget(out _));
             }
             public IEnumerator<T> GetEnumerator() {
-                Purge();
-                foreach (WeakReference<T> Item in Items) {
+                ConsiderPurge();
+                foreach (WeakReference<T> Item in List) {
                     if (Item.TryGetTarget(out T? Target)) {
                         yield return Target;
                     }
                 }
             }
+            IEnumerator IEnumerable.GetEnumerator() {
+                return GetEnumerator();
+            }
+            public void Add(T Item) {
+                ConsiderPurge();
+                List.Add(new WeakReference<T>(Item));
+            }
+            public void Clear() {
+                List.Clear();
+            }
+            public bool Contains(T Item) {
+                ConsiderPurge();
+                return List.Exists(WeakRef => WeakRef.TryGetTarget(out T? Target) && Target == Item);
+            }
+            public void CopyTo(T[] Array, int ArrayIndex) {
+                ConsiderPurge();
+                for (int i = 0;  i < List.Count; i++) {
+                    if (List[i].TryGetTarget(out T? Target)) {
+                        Array[ArrayIndex + i] = Target;
+                    }
+                }
+            }
+            public bool Remove(T Item) {
+                ConsiderPurge();
+                for (var i = 0; i < List.Count; i++) {
+                    if (List[i].TryGetTarget(out T? Target) && Target == Item) {
+                        List.RemoveAt(i);
+                        return true;
+                    }
+                }
+                return false;
+            }
+            public int Count {
+                get {
+                    ConsiderPurge();
+                    return List.Count;
+                }
+            }
+            public bool IsReadOnly => false;
         }
         public class HashDictionary {
             private readonly LockingDictionary<DynInteger, HashSet<KeyValuePair<Instance, Instance>>> Dict;

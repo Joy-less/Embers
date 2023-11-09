@@ -53,8 +53,8 @@ namespace Embers
             public readonly LockingDictionary<string, Instance> ClassVariables = new();
             public readonly Interpreter Interpreter;
             public readonly Module? SuperModule;
-            public readonly WeakList<Module> SubModules = new();
-            public readonly WeakList<Instance> SubInstances = new();
+            public readonly WeakCollection<Module> SubModules = new();
+            public readonly WeakCollection<Instance> SubInstances = new();
             public Module(string name, Module parent, Module? superModule = null) {
                 Name = name;
                 Interpreter = parent.Interpreter;
