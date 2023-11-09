@@ -303,10 +303,10 @@ namespace Embers
             public override string Serialise() {
                 return $"new {PathToSelf}({Location.Serialise()}, {Statements.Serialise()}, {ArgumentCount.Serialise()}, {Arguments.Serialise()}, {Name.Serialise()})";
             }
-            public Method ToMethod(AccessModifier AccessModifier, Module? Parent) {
+            public Method ToMethod(AccessModifier AccessModifier) {
                 Method Method = new(async Input => {
                     return await Input.Script.InternalInterpretAsync(Statements, Input.OnYield);
-                }, ArgumentCount, Arguments, accessModifier: AccessModifier, parent: Parent);
+                }, ArgumentCount, Arguments, accessModifier: AccessModifier);
                 Method.SetName(Name);
                 return Method;
             }

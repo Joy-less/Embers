@@ -501,7 +501,7 @@ namespace Embers
         static async Task<Instance> sleep(MethodInput Input) {
             if (Input.Arguments.Count == 1) {
                 DynFloat SecondsToSleep = Input.Arguments[0].Float;
-                await Task.Delay((int)(SecondsToSleep * 1000));
+                await Task.Delay(TimeSpan.FromSeconds((double)SecondsToSleep));
             }
             else {
                 await Task.Delay(Timeout.Infinite);

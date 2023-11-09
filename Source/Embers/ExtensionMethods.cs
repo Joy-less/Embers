@@ -137,7 +137,8 @@ namespace Embers
             else
                 return new DebugLocation();
         }
-        public static void CopyTo<TKey, TValue>(this LockingDictionary<TKey, TValue> Origin, LockingDictionary<TKey, TValue> Target) where TKey : notnull {
+        public static void CopyTo<TKey, TValue>(this Dictionary<TKey, TValue> Origin, Dictionary<TKey, TValue> Target) where TKey : notnull {
+            Target.EnsureCapacity(Origin.Count);
             foreach (KeyValuePair<TKey, TValue> Pair in Origin) {
                 Target[Pair.Key] = Pair.Value;
             }
@@ -152,7 +153,7 @@ namespace Embers
             int Count = Index + 1;
             List.EnsureCapacity(Count);
             for (int i = List.Count; i < Count; i++) {
-                List.Add((T)(object)Api.Nil);
+                List.Add((T)(Instance)Api.Nil);
             }
         }
         public static LockingDictionary<T, T> ListAsHash<T>(this List<T> HashItemsList) where T : notnull {
@@ -168,11 +169,6 @@ namespace Embers
                 LockingDict[KeySelector(KVP)] = ValueSelector(KVP);
             }
             return LockingDict;
-        }
-        public static void CloneTo(this Dictionary<string, Method> From, Dictionary<string, Method> To, Module TargetParent) {
-            foreach (KeyValuePair<string, Method> Method in From) {
-                To[Method.Key] = Method.Value.CloneTo(TargetParent);
-            }
         }
         public static string GetPath(this object Self) {
             return GetPath(Self.GetType()) + "." + Self;

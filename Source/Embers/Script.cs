@@ -59,8 +59,8 @@ namespace Embers
                 Name = name;
                 Interpreter = parent.Interpreter;
                 SuperModule = superModule ?? Interpreter.Class;
-                Methods = new(ForwardMethodChanges, ForwardMethodChanges);
-                InstanceMethods = new(ForwardInstanceMethodChanges, ForwardInstanceMethodChanges);
+                Methods = new ReactiveDictionary<string, Method>(ForwardMethodChanges, ForwardMethodChanges);
+                InstanceMethods = new ReactiveDictionary<string, Method>(ForwardInstanceMethodChanges, ForwardInstanceMethodChanges);
                 Constants = new ReactiveDictionary<string, Instance>(ForwardConstantChanges, ForwardConstantChanges);
                 Setup();
             }
@@ -68,8 +68,8 @@ namespace Embers
                 Name = name;
                 Interpreter = interpreter;
                 SuperModule = superModule;
-                Methods = new(ForwardMethodChanges, ForwardMethodChanges);
-                InstanceMethods = new(ForwardInstanceMethodChanges, ForwardInstanceMethodChanges);
+                Methods = new ReactiveDictionary<string, Method>(ForwardMethodChanges, ForwardMethodChanges);
+                InstanceMethods = new ReactiveDictionary<string, Method>(ForwardInstanceMethodChanges, ForwardInstanceMethodChanges);
                 Constants = new ReactiveDictionary<string, Instance>(ForwardConstantChanges, ForwardConstantChanges);
                 Setup();
             }
@@ -79,8 +79,8 @@ namespace Embers
                     // Add to parent module
                     SuperModule.SubModules.Add(this);
                     // Copy methods and instance methods
-                    SuperModule.Methods.CloneTo(Methods, this);
-                    SuperModule.InstanceMethods.CloneTo(InstanceMethods, this);
+                    SuperModule.Methods.CopyTo(Methods);
+                    SuperModule.InstanceMethods.CopyTo(InstanceMethods);
                 }
             }
             public bool InheritsFrom(Module? Ancestor) {
@@ -205,7 +205,7 @@ namespace Embers
                 Clone.InstanceVariables = new();
                 InstanceVariables.CopyTo(Clone.InstanceVariables);
                 Clone.InstanceMethods = new();
-                InstanceMethods.CloneTo(Clone.InstanceMethods, Clone.Module!);
+                InstanceMethods.CopyTo(Clone.InstanceMethods);
                 Clone.Setup();
                 return Clone;
             }
@@ -266,7 +266,7 @@ namespace Embers
                     // Add to module
                     Module.SubInstances.Add(this);
                     // Copy instance methods
-                    Module.InstanceMethods.CloneTo(InstanceMethods, Module);
+                    Module.InstanceMethods.CopyTo(InstanceMethods);
                 }
             }
             public async Task<Instance> CallInstanceMethod(Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
@@ -380,39 +380,36 @@ namespace Embers
         }
         public class Method {
             public string? Name {get; private set;}
-            public Module? Parent {get; private set;}
             public Func<MethodInput, Task<Instance>> Function {get; private set;}
             public readonly IntRange ArgumentCountRange;
             public readonly List<MethodArgumentExpression> ArgumentNames;
             public readonly bool Unsafe;
             public AccessModifier AccessModifier { get; private set; }
-            public Method(Func<MethodInput, Task<Instance>> function, IntRange? argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false, AccessModifier accessModifier = AccessModifier.Public, Module? parent = null) {
+            public Method(Func<MethodInput, Task<Instance>> function, IntRange? argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false, AccessModifier accessModifier = AccessModifier.Public) {
                 Function = function;
                 ArgumentCountRange = argumentCountRange ?? new IntRange();
                 ArgumentNames = argumentNames ?? new();
                 Unsafe = IsUnsafe;
                 AccessModifier = accessModifier;
-                Parent = parent;
             }
-            public Method(Func<MethodInput, Task<Instance>> function, int argumentCount, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false, AccessModifier accessModifier = AccessModifier.Public, Module? parent = null) {
+            public Method(Func<MethodInput, Task<Instance>> function, int argumentCount, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false, AccessModifier accessModifier = AccessModifier.Public) {
                 Function = function;
                 ArgumentCountRange = new IntRange(argumentCount, argumentCount);
                 ArgumentNames = argumentNames ?? new();
                 Unsafe = IsUnsafe;
                 AccessModifier = accessModifier;
-                Parent = parent;
             }
             public async Task<Instance> Call(Script Script, Instance? OnInstance, Instances? Arguments = null, Method? OnYield = null, BreakHandleType BreakHandleType = BreakHandleType.Invalid, bool CatchReturn = true, bool BypassAccessModifiers = false) {
                 if (Unsafe && !Script.AllowUnsafeApi)
                     throw new RuntimeException($"{Script.ApproximateLocation}: The method '{Name}' is unavailable since 'AllowUnsafeApi' is disabled for this script.");
                 if (!BypassAccessModifiers) {
                     if (AccessModifier == AccessModifier.Private) {
-                        if (Parent != null && Script.CurrentModule != Parent)
-                            throw new RuntimeException($"{Script.ApproximateLocation}: Private method '{Name}' called {(Parent != null ? $"for {Parent.Name}" : "")}");
+                        if (OnInstance != null && Script.CurrentModule != OnInstance.Module!)
+                            throw new RuntimeException($"{Script.ApproximateLocation}: Private method '{Name}' called {(OnInstance != null ? $"for {OnInstance.Module!.Name}" : "")}");
                     }
                     else if (AccessModifier == AccessModifier.Protected) {
-                        if (Parent != null && !Script.CurrentModule.InheritsFrom(Parent))
-                            throw new RuntimeException($"{Script.ApproximateLocation}: Protected method '{Name}' called {(Parent != null ? $"for {Parent.Name}" : "")}");
+                        if (OnInstance != null && !Script.CurrentModule.InheritsFrom(OnInstance.Module!))
+                            throw new RuntimeException($"{Script.ApproximateLocation}: Protected method '{Name}' called {(OnInstance != null ? $"for {OnInstance.Module!.Name}" : "")}");
                     }
                 }
 
@@ -423,8 +420,8 @@ namespace Embers
                         Script.CurrentObject.Push(OnInstance.Module!);
                         Script.CurrentObject.Push(OnInstance);
                     }
-                    else if (Parent != null) {
-                        Script.CurrentObject.Push(Parent);
+                    else if (OnInstance != null) {
+                        Script.CurrentObject.Push(OnInstance.Module!);
                     }
                     MethodScope MethodScope = new(this);
                     Script.CurrentObject.Push(MethodScope);
@@ -464,7 +461,7 @@ namespace Embers
                             Script.CurrentObject.Pop();
                             Script.CurrentObject.Pop();
                         }
-                        else if (Parent != null) {
+                        else if (OnInstance != null) {
                             Script.CurrentObject.Pop();
                         }
                     }
@@ -477,13 +474,10 @@ namespace Embers
             }
             public void SetName(string? name) {
                 Name = name;
-                if (Name == "initialize") AccessModifier = AccessModifier.Private;
+                if (name == "initialize") AccessModifier = AccessModifier.Private;
             }
             public void ChangeFunction(Func<MethodInput, Task<Instance>> function) {
                 Function = function;
-            }
-            public Method CloneTo(Module Target) {
-                return new Method(Function, ArgumentCountRange, ArgumentNames, Unsafe, AccessModifier, Target) { Name = Name };
             }
             public async Task SetArgumentVariables(Scope Scope, MethodInput Input) {
                 Instances Arguments = Input.Arguments;
@@ -627,15 +621,15 @@ namespace Embers
             return NewClass;
         }
         public Method CreateMethod(Func<MethodInput, Task<Instance>> Function, Range ArgumentCountRange, bool IsUnsafe = false) {
-            Method NewMethod = new(Function, new IntRange(ArgumentCountRange), IsUnsafe: IsUnsafe, accessModifier: CurrentAccessModifier, parent: CurrentModule);
+            Method NewMethod = new(Function, new IntRange(ArgumentCountRange), IsUnsafe: IsUnsafe, accessModifier: CurrentAccessModifier);
             return NewMethod;
         }
         public Method CreateMethod(Func<MethodInput, Task<Instance>> Function, IntRange? ArgumentCountRange, bool IsUnsafe = false) {
-            Method NewMethod = new(Function, ArgumentCountRange, IsUnsafe: IsUnsafe, accessModifier: CurrentAccessModifier, parent: CurrentModule);
+            Method NewMethod = new(Function, ArgumentCountRange, IsUnsafe: IsUnsafe, accessModifier: CurrentAccessModifier);
             return NewMethod;
         }
         public Method CreateMethod(Func<MethodInput, Task<Instance>> Function, int ArgumentCount, bool IsUnsafe = false) {
-            Method NewMethod = new(Function, ArgumentCount, IsUnsafe: IsUnsafe, accessModifier: CurrentAccessModifier, parent: CurrentModule);
+            Method NewMethod = new(Function, ArgumentCount, IsUnsafe: IsUnsafe, accessModifier: CurrentAccessModifier);
             return NewMethod;
         }
         async Task<T> CreateTemporaryClassScope<T>(Module Module, Func<Task<T>> Do) {
@@ -1153,7 +1147,7 @@ namespace Embers
                         throw new RuntimeException($"{DefineMethodStatement.Location}: The static method '{MethodName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
                     }
                     // Create or overwrite static method
-                    MethodModule.Methods[MethodName] = DefineMethodStatement.MethodExpression.ToMethod(CurrentAccessModifier, CurrentModule);
+                    MethodModule.Methods[MethodName] = DefineMethodStatement.MethodExpression.ToMethod(CurrentAccessModifier);
                 }
                 // Define instance method
                 else {
@@ -1163,7 +1157,7 @@ namespace Embers
                         throw new RuntimeException($"{DefineMethodStatement.Location}: The instance method '{MethodName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
                     }
                     // Create or overwrite instance method
-                    Method NewInstanceMethod = DefineMethodStatement.MethodExpression.ToMethod(CurrentAccessModifier, CurrentModule);
+                    Method NewInstanceMethod = DefineMethodStatement.MethodExpression.ToMethod(CurrentAccessModifier);
                     if (MethodNameRef.Instance != null) {
                         // Define method for a specific instance
                         MethodInstance.InstanceMethods[MethodName] = NewInstanceMethod;
