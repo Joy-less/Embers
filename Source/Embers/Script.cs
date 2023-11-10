@@ -305,6 +305,27 @@ namespace Embers
                 Method = method;
             }
         }
+        public class LoopControlReference : PseudoInstance {
+            public readonly LoopControlType Type;
+            public bool CalledInYieldMethod;
+            public LoopControlReference(LoopControlType type, Interpreter interpreter) : base(interpreter) {
+                Type = type;
+            }
+        }
+        public class ReturnReference : PseudoInstance {
+            public readonly Instance ReturnValue;
+            public bool CalledInYieldMethod;
+            public ReturnReference(Instance returnValue, Interpreter interpreter) : base(interpreter) {
+                ReturnValue = returnValue;
+            }
+        }
+        public class StopReference : PseudoInstance {
+            public readonly bool Manual;
+            public bool CalledInYieldMethod;
+            public StopReference(bool manual, Interpreter interpreter) : base(interpreter) {
+                Manual = manual;
+            }
+        }
         public class ScriptThread {
             public Task? Running { get; private set; }
             public readonly Script ParentScript;
@@ -401,25 +422,32 @@ namespace Embers
                         await SetArgumentVariables(MethodScope, Input);
                         // Call method
                         ReturnValue = await Function(Input);
-                    }
-                    catch (BreakException Ex) {
-                        if (Ex.ThrownInYieldMethod) {
-                            Ex.ThrownInYieldMethod = false;
-                            throw;
+                        // Handle loop control
+                        if (ReturnValue is LoopControlReference LoopControlReference) {
+                            // Break
+                            if (LoopControlReference.Type == LoopControlType.Break) {
+                                if (LoopControlReference.CalledInYieldMethod) {
+                                    LoopControlReference.CalledInYieldMethod = false;
+                                }
+                                else if (BreakHandleType != BreakHandleType.Rethrow) {
+                                    if (BreakHandleType == BreakHandleType.Destroy)
+                                        ReturnValue = Script.Api.Nil;
+                                    else
+                                        throw new SyntaxErrorException($"{Script.ApproximateLocation}: Invalid break (break must be in a loop)");
+                                }
+                            }
                         }
-                        if (BreakHandleType == BreakHandleType.Rethrow)
-                            throw;
-                        else if (BreakHandleType == BreakHandleType.Destroy)
-                            ReturnValue = Script.Api.Nil;
-                        else
-                            throw new SyntaxErrorException($"{Script.ApproximateLocation}: Invalid break (break must be in a loop)");
-                    }
-                    catch (ReturnException Ex) when (CatchReturn) {
-                        if (Ex.ThrownInYieldMethod) {
-                            Ex.ThrownInYieldMethod = false;
-                            throw;
+                        // Handle return
+                        else if (ReturnValue is ReturnReference ReturnReference) {
+                            if (CatchReturn) {
+                                if (ReturnReference.CalledInYieldMethod) {
+                                    ReturnReference.CalledInYieldMethod = false;
+                                }
+                                else {
+                                    ReturnValue = ReturnReference.ReturnValue;
+                                }
+                            }
                         }
-                        ReturnValue = Ex.Instance;
                     }
                     finally {
                         // Step back a scope
@@ -717,14 +745,14 @@ namespace Embers
                     object[] TemporarySnapshot = Input.Script.CurrentObject.ToArray();
                     Input.Script.CurrentObject.ReplaceContentsWith(OriginalSnapshot);
                     try {
-                        return await Input.Script.CreateTemporaryScope(async () => {
+                        Instance Result = await Input.Script.CreateTemporaryScope(async () => {
                             await Current.SetArgumentVariables(Input.Script.CurrentScope, Input);
                             return await CurrentFunction(Input);
                         });
-                    }
-                    catch (NonErrorException Ex) {
-                        Ex.ThrownInYieldMethod = true;
-                        throw;
+                        if (Result is LoopControlReference LoopControlReference) {
+                            LoopControlReference.CalledInYieldMethod = true;
+                        }
+                        return Result;
                     }
                     finally {
                         Input.Script.CurrentObject.ReplaceContentsWith(TemporarySnapshot);
@@ -982,7 +1010,7 @@ namespace Embers
             try {
                 await InterpretExpressionAsync(RescueExpression.Statement);
             }
-            catch (Exception Ex) when (Ex is not NonErrorException) {
+            catch {
                 await InterpretExpressionAsync(RescueExpression.RescueStatement);
             }
             return Api.Nil;
@@ -1037,23 +1065,17 @@ namespace Embers
         }
         async Task<Instance> InterpretWhileExpression(WhileExpression WhileExpression) {
             while ((await InterpretExpressionAsync(WhileExpression.Condition!)).IsTruthy != WhileExpression.Inverse) {
-                try {
-                    await InternalInterpretAsync(WhileExpression.Statements, CurrentOnYield);
-                }
-                catch (BreakException) {
-                    break;
-                }
-                catch (RetryException) {
-                    throw new SyntaxErrorException($"{ApproximateLocation}: Retry not valid in while loop");
-                }
-                catch (RedoException) {
-                    continue;
-                }
-                catch (NextException) {
-                    continue;
-                }
-                catch (LoopControlException Ex) {
-                    throw new SyntaxErrorException($"{ApproximateLocation}: {Ex.GetType().Name} not valid in while loop");
+                Instance Result = await InternalInterpretAsync(WhileExpression.Statements, CurrentOnYield);
+                if (Result is LoopControlReference LoopControlReference) {
+                    if (LoopControlReference.Type is LoopControlType.Break) {
+                        break;
+                    }
+                    else if (LoopControlReference.Type is LoopControlType.Retry) {
+                        throw new SyntaxErrorException($"{ApproximateLocation}: Retry not valid in while loop");
+                    }
+                    else if (LoopControlReference.Type is LoopControlType.Redo or LoopControlType.Next) {
+                        continue;
+                    }
                 }
             }
             return Api.Nil;
@@ -1300,7 +1322,7 @@ namespace Embers
                     await InternalInterpretAsync(BeginBranch.Statements, CurrentOnYield)
                 );
             }
-            catch (Exception Ex) when (Ex is not NonErrorException) {
+            catch (Exception Ex) {
                 ExceptionToRescue = Ex;
             }
 
@@ -1584,7 +1606,7 @@ namespace Embers
 
             // Stop script
             if (Stopping)
-                throw new StopException();
+                return new StopReference(false, Interpreter);
 
             // Interpret expression
             return Expression switch {
@@ -1604,15 +1626,14 @@ namespace Embers
                 NotExpression NotExpression => await InterpretNotExpression(NotExpression),
                 DefineMethodStatement DefineMethodStatement => await InterpretDefineMethodStatement(DefineMethodStatement),
                 DefineClassStatement DefineClassStatement => await InterpretDefineClassStatement(DefineClassStatement),
-                ReturnStatement ReturnStatement => throw new ReturnException(
-                                                        ReturnStatement.ReturnValue != null
-                                                        ? await InterpretExpressionAsync(ReturnStatement.ReturnValue)
-                                                        : Api.Nil),
+                ReturnStatement ReturnStatement => new ReturnReference(ReturnStatement.ReturnValue != null
+                                                        ? await InterpretExpressionAsync(ReturnStatement.ReturnValue) : Api.Nil,
+                                                        Interpreter),
                 LoopControlStatement LoopControlStatement => LoopControlStatement.Type switch {
-                    LoopControlType.Break => throw new BreakException(),
-                    LoopControlType.Retry => throw new RetryException(),
-                    LoopControlType.Redo => throw new RedoException(),
-                    LoopControlType.Next => throw new NextException(),
+                    LoopControlType.Break => new LoopControlReference(LoopControlType.Break, Interpreter),
+                    LoopControlType.Retry => new LoopControlReference(LoopControlType.Retry, Interpreter),
+                    LoopControlType.Redo => new LoopControlReference(LoopControlType.Redo, Interpreter),
+                    LoopControlType.Next => new LoopControlReference(LoopControlType.Next, Interpreter),
                     _ => throw new InternalErrorException($"{Expression.Location}: Loop control type not handled: '{LoopControlStatement.Type}'")},
                 YieldExpression YieldExpression => await InterpretYieldExpression(YieldExpression),
                 SuperExpression SuperExpression => await InterpretSuperExpression(SuperExpression),
@@ -1633,6 +1654,9 @@ namespace Embers
             List<Instance> Results = new();
             foreach (Expression Expression in Expressions) {
                 Results.Add(await InterpretExpressionAsync(Expression));
+                if (Results[^1] is LoopControlReference or ReturnReference or StopReference) {
+                    throw new SyntaxErrorException($"{Expression.Location}: Invalid {Results[^1].GetType().Name}");
+                }
             }
             return Results;
         }
@@ -1644,6 +1668,9 @@ namespace Embers
                 Instance LastInstance = Api.Nil;
                 foreach (Expression Statement in Statements) {
                     LastInstance = await InterpretExpressionAsync(Statement);
+                    if (LastInstance is LoopControlReference or ReturnReference or StopReference) {
+                        break;
+                    }
                 }
                 // Return last instance
                 return LastInstance;
@@ -1671,18 +1698,15 @@ namespace Embers
             Instance LastInstance;
             try {
                 LastInstance = await InternalInterpretAsync(Statements, OnYield);
-            }
-            catch (LoopControlException Ex) {
-                throw new SyntaxErrorException($"{ApproximateLocation}: Invalid {Ex.GetType().Name} (must be in a loop)");
-            }
-            catch (ReturnException Ex) {
-                return Ex.Instance;
-            }
-            catch (ExitException) {
-                return Api.Nil;
-            }
-            catch (StopException) {
-                return Api.Nil;
+                if (LastInstance is LoopControlReference LoopControlReference) {
+                    throw new SyntaxErrorException($"{ApproximateLocation}: Invalid {LoopControlReference.Type} (must be in a loop)");
+                }
+                else if (LastInstance is ReturnReference ReturnReference) {
+                    return ReturnReference.ReturnValue;
+                }
+                else if (LastInstance is StopReference) {
+                    return Api.Nil;
+                }
             }
             finally {
                 // Deactivate debounce

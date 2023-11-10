@@ -4,7 +4,7 @@ using static Embers.Script;
 namespace Embers
 {
     public static class Info {
-        public const string Version = "1.7.7";
+        public const string Version = "1.7.8";
         public const string ReleaseDate = "2023-11-10";
         public const string Copyright = "Embers - Copyright © 2023 Joyless";
         public const string RubyCopyright = "Ruby - Copyright © 1995 Yukihiro Matsumoto";
@@ -26,23 +26,7 @@ namespace Embers
     public class ApiException : EmbersException {
         public ApiException(string Message) : base(Message) { }
     }
-    public abstract class NonErrorException : EmbersException {
-        public bool ThrownInYieldMethod = false;
-        public NonErrorException(string Message) : base(Message) {}
-        public NonErrorException() {}
-    }
-    public abstract class LoopControlException : NonErrorException { }
-    public class BreakException : LoopControlException { }
-    public class RetryException : LoopControlException { }
-    public class RedoException : LoopControlException { }
-    public class NextException : LoopControlException { }
-    public class ReturnException : NonErrorException {
-        public readonly Instance Instance;
-        public ReturnException(Instance instance) {
-            Instance = instance;
-        }
-    }
-    public class ThrowException : NonErrorException {
+    public class ThrowException : Exception {
         public readonly string Identifier;
         public static ThrowException New(Instance Identifier) {
             string Message = $"uncaught throw {Identifier.Inspect()}";
@@ -52,8 +36,6 @@ namespace Embers
             Identifier = identifier;
         }
     }
-    public class ExitException : NonErrorException { }
-    public class StopException : NonErrorException { }
 
     public readonly struct DebugLocation {
         public readonly int Line;

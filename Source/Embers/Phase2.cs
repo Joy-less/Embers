@@ -823,18 +823,19 @@ namespace Embers
             Method ToMethod() {
                 return new Method(async Input => {
                     Redo:
-                    try {
-                        return await Input.Script.InternalInterpretAsync(BlockStatements);
+                    Instance Result = await Input.Script.InternalInterpretAsync(BlockStatements);
+                    if (Result is LoopControlReference LoopControlReference) {
+                        if (LoopControlReference.Type is LoopControlType.Redo) {
+                            goto Redo;
+                        }
+                        else if (LoopControlReference.Type is LoopControlType.Next) {
+                            return Input.Api.Nil;
+                        }
+                        else {
+                            throw new SyntaxErrorException($"{Input.Location}: {LoopControlReference.Type} not valid in for loop");
+                        }
                     }
-                    catch (RedoException) {
-                        goto Redo;
-                    }
-                    catch (NextException) {
-                        return Input.Api.Nil;
-                    }
-                    catch (LoopControlException Ex) {
-                        throw new SyntaxErrorException($"{Input.Location}: {Ex.GetType().Name} not valid in for loop");
-                    }
+                    return Result;
                 }, null, VariableNames);
             }
         }

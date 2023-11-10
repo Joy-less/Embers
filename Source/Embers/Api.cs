@@ -560,17 +560,14 @@ namespace Embers
             Method? OnYield = Input.OnYield ?? throw new RuntimeException($"{Input.Location}: No block given for loop");
 
             while (true) {
-                try {
-                    await OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
-                }
-                catch (BreakException) {
-                    break;
-                }
-                catch (LoopControlException Ex) when (Ex is RetryException or RedoException or NextException) {
-                    continue;
-                }
-                catch (LoopControlException Ex) {
-                    throw new SyntaxErrorException($"{Input.Location}: {Ex.GetType().Name} not valid in loop do end");
+                Instance Result = await OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                if (Result is LoopControlReference LoopControlReference) {
+                    if (LoopControlReference.Type is Phase2.LoopControlType.Break) {
+                        break;
+                    }
+                    else if (LoopControlReference.Type is Phase2.LoopControlType.Retry or Phase2.LoopControlType.Redo or Phase2.LoopControlType.Next) {
+                        continue;
+                    }
                 }
             }
             return Input.Api.Nil;
@@ -604,18 +601,17 @@ namespace Embers
             return new StringInstance(Input.Api.String, Output);
         }
         static async Task<Instance> exit(MethodInput Input) {
-            throw new ExitException();
+            return new StopReference(true, Input.Interpreter);
         }
         static async Task<Instance> eval(MethodInput Input) {
-            try {
-                return await Input.Script.InternalEvaluateAsync(Input.Arguments[0].String);
+            Instance Result = await Input.Script.InternalEvaluateAsync(Input.Arguments[0].String);
+            if (Result is LoopControlReference LoopControlReference) {
+                throw new SyntaxErrorException($"{Input.Location}: Can't escape from eval with {LoopControlReference.Type}");
             }
-            catch (LoopControlException Ex) {
-                throw new SyntaxErrorException($"{Input.Location}: Can't escape from eval with {Ex.GetType().Name}");
+            else if (Result is ReturnReference ReturnReference) {
+                return ReturnReference.ReturnValue;
             }
-            catch (ReturnException Ex) {
-                return Ex.Instance;
-            }
+            return Result;
         }
         static async Task<Instance> local_variables(MethodInput Input) {
             List<Instance> Variables = new();
@@ -1209,28 +1205,30 @@ namespace Embers
                     bool TakesArgument = Input.OnYield.ArgumentNames.Count == 1;
 
                     for (DynInteger i = 0; i < Times; i++) {
-                        try {
-                            // x.times do |n|
-                            if (TakesArgument) {
-                                await Input.OnYield.Call(Input.Script, null, new IntegerInstance(Input.Api.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        Instance Result;
+                        // x.times do |n|
+                        if (TakesArgument) {
+                            Result = await Input.OnYield.Call(Input.Script, null, new IntegerInstance(Input.Api.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        }
+                        // x.times do
+                        else {
+                            Result = await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        }
+
+                        if (Result is LoopControlReference LoopControlReference) {
+                            if (LoopControlReference.Type is Phase2.LoopControlType.Break) {
+                                break;
                             }
-                            // x.times do
+                            else if (LoopControlReference.Type is Phase2.LoopControlType.Redo) {
+                                i--;
+                                continue;
+                            }
+                            else if (LoopControlReference.Type is Phase2.LoopControlType.Next) {
+                                continue;
+                            }
                             else {
-                                await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                throw new SyntaxErrorException($"{Input.Location}: {LoopControlReference.Type} not valid in {Times}.times");
                             }
-                        }
-                        catch (BreakException) {
-                            break;
-                        }
-                        catch (RedoException) {
-                            i--;
-                            continue;
-                        }
-                        catch (NextException) {
-                            continue;
-                        }
-                        catch (LoopControlException Ex) {
-                            throw new SyntaxErrorException($"{Input.Location}: {Ex.GetType().Name} not valid in {Times}.times");
                         }
                     }
                 }
@@ -1514,28 +1512,30 @@ namespace Embers
                     
                     bool TakesArgument = Input.OnYield.ArgumentNames.Count == 1;
                     for (long i = Min; i <= Max; i++) {
-                        try {
-                            // x.each do |n|
-                            if (TakesArgument) {
-                                await Input.OnYield.Call(Input.Script, null, new IntegerInstance(Input.Api.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        Instance Result;
+                        // x.each do |n|
+                        if (TakesArgument) {
+                            Result = await Input.OnYield.Call(Input.Script, null, new IntegerInstance(Input.Api.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        }
+                        // x.each do
+                        else {
+                            Result = await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        }
+
+                        if (Result is LoopControlReference LoopControlReference) {
+                            if (LoopControlReference.Type is Phase2.LoopControlType.Break) {
+                                break;
                             }
-                            // x.each do
+                            else if (LoopControlReference.Type is Phase2.LoopControlType.Redo) {
+                                i--;
+                                continue;
+                            }
+                            else if (LoopControlReference.Type is Phase2.LoopControlType.Next) {
+                                continue;
+                            }
                             else {
-                                await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                throw new SyntaxErrorException($"{Input.Location}: {LoopControlReference.Type} not valid in range.each");
                             }
-                        }
-                        catch (BreakException) {
-                            break;
-                        }
-                        catch (RedoException) {
-                            i--;
-                            continue;
-                        }
-                        catch (NextException) {
-                            continue;
-                        }
-                        catch (LoopControlException Ex) {
-                            throw new SyntaxErrorException($"{Input.Location}: {Ex.GetType().Name} not valid in range.each");
                         }
                     }
                 }
@@ -1549,28 +1549,30 @@ namespace Embers
                     
                     bool TakesArgument = Input.OnYield.ArgumentNames.Count == 1;
                     for (long i = Max; i >= Min; i--) {
-                        try {
-                            // x.reverse_each do |n|
-                            if (TakesArgument) {
-                                await Input.OnYield.Call(Input.Script, null, new IntegerInstance(Input.Api.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        Instance Result;
+                        // x.reverse_each do |n|
+                        if (TakesArgument) {
+                            Result = await Input.OnYield.Call(Input.Script, null, new IntegerInstance(Input.Api.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        }
+                        // x.reverse_each do
+                        else {
+                            Result = await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        }
+
+                        if (Result is LoopControlReference LoopControlReference) {
+                            if (LoopControlReference.Type is Phase2.LoopControlType.Break) {
+                                break;
                             }
-                            // x.reverse_each do
+                            else if (LoopControlReference.Type is Phase2.LoopControlType.Redo) {
+                                i--;
+                                continue;
+                            }
+                            else if (LoopControlReference.Type is Phase2.LoopControlType.Next) {
+                                continue;
+                            }
                             else {
-                                await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                throw new SyntaxErrorException($"{Input.Location}: {LoopControlReference.Type} not valid in range.reverse_each");
                             }
-                        }
-                        catch (BreakException) {
-                            break;
-                        }
-                        catch (RedoException) {
-                            i--;
-                            continue;
-                        }
-                        catch (NextException) {
-                            continue;
-                        }
-                        catch (LoopControlException Ex) {
-                            throw new SyntaxErrorException($"{Input.Location}: {Ex.GetType().Name} not valid in range.reverse_each");
                         }
                     }
                 }
@@ -1840,32 +1842,34 @@ namespace Embers
                     
                     int TakesArguments = Input.OnYield.ArgumentNames.Count;
                     for (int i = 0; i < Array.Count; i++) {
-                        try {
-                            // x.each do |n, i|
-                            if (TakesArguments == 2) {
-                                await Input.OnYield.Call(Input.Script, null, new List<Instance>() { Array[i], new IntegerInstance(Input.Api.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        Instance Result;
+                        // x.each do |n, i|
+                        if (TakesArguments == 2) {
+                            Result = await Input.OnYield.Call(Input.Script, null, new List<Instance>() { Array[i], new IntegerInstance(Input.Api.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        }
+                        // x.each do |n|
+                        else if (TakesArguments == 1) {
+                            Result = await Input.OnYield.Call(Input.Script, null, Array[i], BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        }
+                        // x.each do
+                        else {
+                            Result = await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        }
+
+                        if (Result is LoopControlReference LoopControlReference) {
+                            if (LoopControlReference.Type is Phase2.LoopControlType.Break) {
+                                break;
                             }
-                            // x.each do |n|
-                            else if (TakesArguments == 1) {
-                                await Input.OnYield.Call(Input.Script, null, Array[i], BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            else if (LoopControlReference.Type is Phase2.LoopControlType.Redo) {
+                                i--;
+                                continue;
                             }
-                            // x.each do
+                            else if (LoopControlReference.Type is Phase2.LoopControlType.Next) {
+                                continue;
+                            }
                             else {
-                                await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                throw new SyntaxErrorException($"{Input.Location}: {LoopControlReference.Type} not valid in array.each");
                             }
-                        }
-                        catch (BreakException) {
-                            break;
-                        }
-                        catch (RedoException) {
-                            i--;
-                            continue;
-                        }
-                        catch (NextException) {
-                            continue;
-                        }
-                        catch (LoopControlException Ex) {
-                            throw new SyntaxErrorException($"{Input.Location}: {Ex.GetType().Name} not valid in array.each");
                         }
                     }
                 }
@@ -1877,32 +1881,34 @@ namespace Embers
                     
                     int TakesArguments = Input.OnYield.ArgumentNames.Count;
                     for (int i = Array.Count - 1; i >= 0; i--) {
-                        try {
-                            // x.reverse_each do |n, i|
-                            if (TakesArguments == 2) {
-                                await Input.OnYield.Call(Input.Script, null, new List<Instance>() { Array[i], new IntegerInstance(Input.Api.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        Instance Result;
+                        // x.reverse_each do |n, i|
+                        if (TakesArguments == 2) {
+                            Result = await Input.OnYield.Call(Input.Script, null, new List<Instance>() { Array[i], new IntegerInstance(Input.Api.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        }
+                        // x.reverse_each do |n|
+                        else if (TakesArguments == 1) {
+                            Result = await Input.OnYield.Call(Input.Script, null, Array[i], BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        }
+                        // x.reverse_each do
+                        else {
+                            Result = await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        }
+
+                        if (Result is LoopControlReference LoopControlReference) {
+                            if (LoopControlReference.Type is Phase2.LoopControlType.Break) {
+                                break;
                             }
-                            // x.reverse_each do |n|
-                            else if (TakesArguments == 1) {
-                                await Input.OnYield.Call(Input.Script, null, Array[i], BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            else if (LoopControlReference.Type is Phase2.LoopControlType.Redo) {
+                                i--;
+                                continue;
                             }
-                            // x.reverse_each do
+                            else if (LoopControlReference.Type is Phase2.LoopControlType.Next) {
+                                continue;
+                            }
                             else {
-                                await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                throw new SyntaxErrorException($"{Input.Location}: {LoopControlReference.Type} not valid in array.reverse_each");
                             }
-                        }
-                        catch (BreakException) {
-                            break;
-                        }
-                        catch (RedoException) {
-                            i--;
-                            continue;
-                        }
-                        catch (NextException) {
-                            continue;
-                        }
-                        catch (LoopControlException Ex) {
-                            throw new SyntaxErrorException($"{Input.Location}: {Ex.GetType().Name} not valid in array.reverse_each");
                         }
                     }
                 }
@@ -2112,31 +2118,33 @@ namespace Embers
                     int TakesArguments = Input.OnYield.ArgumentNames.Count;
                     foreach (KeyValuePair<Instance, Instance> Match in Hash.KeyValues) {
                         Redo:
-                        try {
-                            // x.each do |key, value|
-                            if (TakesArguments == 2) {
-                                await Input.OnYield.Call(Input.Script, null, new List<Instance>() {Match.Key, Match.Value}, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        Instance Result;
+                        // x.each do |key, value|
+                        if (TakesArguments == 2) {
+                            Result = await Input.OnYield.Call(Input.Script, null, new List<Instance>() {Match.Key, Match.Value}, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        }
+                        // x.each do |key|
+                        else if (TakesArguments == 1) {
+                            Result = await Input.OnYield.Call(Input.Script, null, Match.Key, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        }
+                        // x.each do
+                        else {
+                            Result = await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                        }
+
+                        if (Result is LoopControlReference LoopControlReference) {
+                            if (LoopControlReference.Type is Phase2.LoopControlType.Break) {
+                                break;
                             }
-                            // x.each do |key|
-                            else if (TakesArguments == 1) {
-                                await Input.OnYield.Call(Input.Script, null, Match.Key, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            else if (LoopControlReference.Type is Phase2.LoopControlType.Redo) {
+                                goto Redo;
                             }
-                            // x.each do
+                            else if (LoopControlReference.Type is Phase2.LoopControlType.Next) {
+                                continue;
+                            }
                             else {
-                                await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                                throw new SyntaxErrorException($"{Input.Location}: {LoopControlReference.Type} not valid in hash.each");
                             }
-                        }
-                        catch (BreakException) {
-                            break;
-                        }
-                        catch (RedoException) {
-                            goto Redo;
-                        }
-                        catch (NextException) {
-                            continue;
-                        }
-                        catch (LoopControlException Ex) {
-                            throw new SyntaxErrorException($"{Input.Location}: {Ex.GetType().Name} not valid in hash.each");
                         }
                     }
                 }
