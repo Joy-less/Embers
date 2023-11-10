@@ -110,6 +110,15 @@ namespace Embers
             }
             return HashInspection;
         }
+        public static bool TryFindMethod(this LockingDictionary<string, Method> MethodsDict, string MethodName, out Method? Method) {
+            if (MethodsDict.TryGetValue(MethodName, out Method)) {
+                return true;
+            }
+            else if (MethodsDict.TryGetValue("method_missing", out Method)) {
+                return true;
+            }
+            return false;
+        }
         public static string Serialise<T>(this LockingDictionary<T, T> Dictionary) where T : Phase2Object {
             string Serialised = $"new {typeof(LockingDictionary<T, T>).GetPath()}() {{";
             bool IsFirst = true;

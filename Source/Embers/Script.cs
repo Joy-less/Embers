@@ -35,7 +35,7 @@ namespace Embers
 
         public class Block {
             public readonly LockingDictionary<string, Instance> LocalVariables = new();
-            public LockingDictionary<string, Instance> Constants {get; protected set;} = new();
+            public readonly LockingDictionary<string, Instance> Constants = new();
         }
         public class Scope : Block {
         }
@@ -47,41 +47,21 @@ namespace Embers
         }
         public class Module : Block {
             public readonly string Name;
-            public readonly ReactiveDictionary<string, Method> Methods;
-            public readonly ReactiveDictionary<string, Method> InstanceMethods;
+            public readonly LockingDictionary<string, Method> Methods = new();
+            public readonly LockingDictionary<string, Method> InstanceMethods = new();
             public readonly LockingDictionary<string, Instance> InstanceVariables = new();
             public readonly LockingDictionary<string, Instance> ClassVariables = new();
             public readonly Interpreter Interpreter;
             public readonly Module? SuperModule;
-            public readonly WeakCollection<Module> SubModules = new();
-            public readonly WeakCollection<Instance> SubInstances = new();
             public Module(string name, Module parent, Module? superModule = null) {
                 Name = name;
                 Interpreter = parent.Interpreter;
                 SuperModule = superModule ?? Interpreter.Class;
-                Methods = new ReactiveDictionary<string, Method>(ForwardMethodChanges, ForwardMethodChanges);
-                InstanceMethods = new ReactiveDictionary<string, Method>(ForwardInstanceMethodChanges, ForwardInstanceMethodChanges);
-                Constants = new ReactiveDictionary<string, Instance>(ForwardConstantChanges, ForwardConstantChanges);
-                Setup();
             }
             public Module(string name, Interpreter interpreter, Module? superModule = null) {
                 Name = name;
                 Interpreter = interpreter;
                 SuperModule = superModule;
-                Methods = new ReactiveDictionary<string, Method>(ForwardMethodChanges, ForwardMethodChanges);
-                InstanceMethods = new ReactiveDictionary<string, Method>(ForwardInstanceMethodChanges, ForwardInstanceMethodChanges);
-                Constants = new ReactiveDictionary<string, Instance>(ForwardConstantChanges, ForwardConstantChanges);
-                Setup();
-            }
-            protected virtual void Setup() {
-                // Copy superclass class and instance methods
-                if (SuperModule != null) {
-                    // Add to parent module
-                    SuperModule.SubModules.Add(this);
-                    // Copy methods and instance methods
-                    SuperModule.Methods.CopyTo(Methods);
-                    SuperModule.InstanceMethods.CopyTo(InstanceMethods);
-                }
             }
             public bool InheritsFrom(Module? Ancestor) {
                 if (Ancestor == null) return false;
@@ -93,16 +73,38 @@ namespace Embers
                 }
                 return false;
             }
+            public bool TryGetMethod(string MethodName, out Method? Method) {
+                Method = TryGetMethod(Module => Module.Methods, MethodName);
+                return Method != null;
+            }
             public async Task<Instance> CallMethod(Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
-                // Found
-                if (Methods.TryGetValue(MethodName, out Method? FindMethod)) {
-                    return await FindMethod.Call(Script, new ModuleReference(this), Arguments, OnYield);
+                return await CallMethod(Module => Module.Methods, null, Script, MethodName, Arguments, OnYield);
+            }
+            public bool TryGetInstanceMethod(string MethodName, out Method? Method) {
+                Method = TryGetMethod(Module => Module.InstanceMethods, MethodName);
+                return Method != null;
+            }
+            public async Task<Instance> CallInstanceMethod(Instance? OnInstance, Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
+                return await CallMethod(Module => Module.InstanceMethods, OnInstance, Script, MethodName, Arguments, OnYield);
+            }
+            private Method? TryGetMethod(Func<Module, LockingDictionary<string, Method>> MethodsDict, string MethodName) {
+                Module? CurrentSuperModule = this;
+                while (true) {
+                    if (MethodsDict(CurrentSuperModule).TryFindMethod(MethodName, out Method? FindMethod)) return FindMethod;
+                    CurrentSuperModule = CurrentSuperModule.SuperModule;
+                    if (CurrentSuperModule == null) return null;
                 }
-                else if (Methods.TryGetValue("method_missing", out Method? FindMissingMethod)) {
+            }
+            private async Task<Instance> CallMethod(Func<Module, LockingDictionary<string, Method>> MethodsDict, Instance? OnInstance, Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
+                Method? Method = TryGetMethod(MethodsDict, MethodName);
+                if (Method == null) {
+                    throw new RuntimeException($"{Script.ApproximateLocation}: Undefined method '{MethodName}' for {Name}");
+                }
+                else if (Method.Name == "method_missing") {
                     // Get arguments (method_name, *args)
                     Instances MethodMissingArguments;
                     if (Arguments != null) {
-                        List<Instance> GivenArguments = Arguments.MultiInstance;
+                        List<Instance> GivenArguments = new(Arguments.MultiInstance);
                         GivenArguments.Insert(0, Script.Api.GetSymbol(MethodName));
                         MethodMissingArguments = new Instances(GivenArguments);
                     }
@@ -110,66 +112,35 @@ namespace Embers
                         MethodMissingArguments = Script.Api.GetSymbol(MethodName);
                     }
                     // Call method_missing
-                    return await FindMissingMethod.Call(Script, null, MethodMissingArguments, OnYield);
+                    return await Method.Call(Script, OnInstance ?? new ModuleReference(this), MethodMissingArguments, OnYield);
                 }
-                // Error
                 else {
-                    throw new RuntimeException($"{Script.ApproximateLocation}: Undefined method '{MethodName}' for {Name}");
-                }
-            }
-            void ForwardMethodChanges(string MethodName, Method Method) {
-                foreach (Module SubModule in SubModules) {
-                    SubModule.Methods[MethodName] = Method;
-                }
-            }
-            void ForwardMethodChanges(string MethodName) {
-                foreach (Module SubModule in SubModules) {
-                    SubModule.Methods.Remove(MethodName);
-                }
-            }
-            void ForwardInstanceMethodChanges(string MethodName, Method Method) {
-                foreach (Module SubModule in SubModules) {
-                    SubModule.InstanceMethods[MethodName] = Method;
-                }
-                foreach (Instance Instance in SubInstances) {
-                    Instance.InstanceMethods[MethodName] = Method;
-                }
-            }
-            void ForwardInstanceMethodChanges(string MethodName) {
-                foreach (Module SubModule in SubModules) {
-                    SubModule.InstanceMethods.Remove(MethodName);
-                }
-                foreach (Instance Instance in SubInstances) {
-                    Instance.InstanceMethods.Remove(MethodName);
-                }
-            }
-            void ForwardConstantChanges(string ConstantName, Instance Instance) {
-                foreach (Module SubModule in SubModules) {
-                    SubModule.Constants[ConstantName] = Instance;
-                }
-            }
-            void ForwardConstantChanges(string ConstantName) {
-                foreach (Module SubModule in SubModules) {
-                    SubModule.Constants.Remove(ConstantName);
+                    return await Method.Call(Script, OnInstance ?? new ModuleReference(this), Arguments, OnYield);
                 }
             }
         }
         public class Class : Module {
-            public Class(string name, Module parent, Module? superClass = null) : base(name, parent, superClass) { }
-            public Class(string name, Interpreter interpreter) : base(name, interpreter) { }
-            protected override void Setup() {
+            public Class(string name, Module parent, Module? superClass = null) : base(name, parent, superClass) {
+                Setup();
+            }
+            public Class(string name, Interpreter interpreter) : base(name, interpreter) {
+                Setup();
+            }
+            void Setup() {
                 // Default method: new
-                Methods["new"] = new Method(async Input => {
-                    Instance NewInstance = Input.Api.CreateInstanceFromClass(Input.Script, (Class)Input.Instance.Module!);
-                    await NewInstance.CallInstanceMethod(Input.Script, "initialize", Input.Arguments, Input.OnYield);
-                    return NewInstance;
-                }, null);
+                if (!TryGetMethod("new", out _)) {
+                    Methods["new"] = new Method(async Input => {
+                        Instance NewInstance = Input.Api.CreateInstanceFromClass(Input.Script, (Class)Input.Instance.Module!);
+                        await NewInstance.CallInstanceMethod(Input.Script, "initialize", Input.Arguments, Input.OnYield);
+                        return NewInstance;
+                    }, null);
+                }
                 // Default method: initialize
-                InstanceMethods["initialize"] = new Method(async Input => {
-                    return Input.Api.Nil;
-                }, 0);
-                // Base setup
-                base.Setup();
+                if (!TryGetInstanceMethod("initialize", out _)) {
+                    InstanceMethods["initialize"] = new Method(async Input => {
+                        return Input.Api.Nil;
+                    }, 0);
+                }
             }
         }
         public class Instance {
@@ -206,7 +177,6 @@ namespace Embers
                 InstanceVariables.CopyTo(Clone.InstanceVariables);
                 Clone.InstanceMethods = new();
                 InstanceMethods.CopyTo(Clone.InstanceMethods);
-                Clone.Setup();
                 return Clone;
             }
             public static async Task<Instance> CreateFromToken(Script Script, Phase2Token Token) {
@@ -252,33 +222,31 @@ namespace Embers
                 if (this is not PseudoInstance) {
                     ObjectId = fromModule.Interpreter.GenerateObjectId();
                 }
-                Setup();
             }
             public Instance(Interpreter interpreter) {
                 Module = null;
                 if (this is not PseudoInstance) {
                     ObjectId = interpreter.GenerateObjectId();
                 }
-                Setup();
             }
-            void Setup() {
-                if (Module != null && this is not ModuleReference) {
-                    // Add to module
-                    Module.SubInstances.Add(this);
-                    // Copy instance methods
-                    Module.InstanceMethods.CopyTo(InstanceMethods);
+            public bool TryGetInstanceMethod(string MethodName, out Method? Method) {
+                if (this is not PseudoInstance) {
+                    if (InstanceMethods.TryFindMethod(MethodName, out Method? FindMethod)) {
+                        Method = FindMethod;
+                        return true;
+                    }
                 }
+                return Module!.TryGetInstanceMethod(MethodName, out Method);
             }
             public async Task<Instance> CallInstanceMethod(Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
-                // Found
-                if (InstanceMethods.TryGetValue(MethodName, out Method? FindMethod)) {
-                    return await FindMethod.Call(Script, this, Arguments, OnYield);
+                if (this is not PseudoInstance || !TryGetInstanceMethod(MethodName, out Method? Method)) {
+                    return await Module!.CallInstanceMethod(this, Script, MethodName, Arguments, OnYield);
                 }
-                else if (InstanceMethods.TryGetValue("method_missing", out Method? FindMissingMethod)) {
+                else if (Method!.Name == "method_missing") {
                     // Get arguments (method_name, *args)
                     Instances MethodMissingArguments;
                     if (Arguments != null) {
-                        List<Instance> GivenArguments = Arguments.MultiInstance;
+                        List<Instance> GivenArguments = new(Arguments.MultiInstance);
                         GivenArguments.Insert(0, Script.Api.GetSymbol(MethodName));
                         MethodMissingArguments = new Instances(GivenArguments);
                     }
@@ -286,11 +254,10 @@ namespace Embers
                         MethodMissingArguments = Script.Api.GetSymbol(MethodName);
                     }
                     // Call method_missing
-                    return await FindMissingMethod.Call(Script, this, MethodMissingArguments, OnYield);
+                    return await Method.Call(Script, this, MethodMissingArguments, OnYield);
                 }
-                // Error
                 else {
-                    throw new RuntimeException($"{Script.ApproximateLocation}: Undefined method '{MethodName}' for {Inspect()}");
+                    return await Method.Call(Script, this, Arguments, OnYield);
                 }
             }
             public override int GetHashCode() {
@@ -708,7 +675,7 @@ namespace Embers
         }
         public bool TryGetLocalInstanceMethod(string Name, out Method? LocalInstanceMethod) {
             foreach (object Object in CurrentObject) {
-                if (Object is Instance Instance && (Instance is PseudoInstance ? Instance.Module!.InstanceMethods : Instance.InstanceMethods).TryGetValue(Name, out Method? FindLocalInstanceMethod)) {
+                if (Object is Instance Instance && Instance.TryGetInstanceMethod(Name, out Method? FindLocalInstanceMethod)) {
                     LocalInstanceMethod = FindLocalInstanceMethod;
                     return true;
                 }
@@ -837,7 +804,7 @@ namespace Embers
                         }
                         else {
                             // Return instance method
-                            if (ParentInstance.InstanceMethods.ContainsKey(PathExpression.Token.Value!)) {
+                            if (ParentInstance.TryGetInstanceMethod(PathExpression.Token.Value!, out _)) {
                                 return new VariableReference(ParentInstance, PathExpression.Token);
                             }
                             // Error
@@ -1153,7 +1120,7 @@ namespace Embers
                 else {
                     Instance MethodInstance = MethodNameRef.Instance ?? CurrentInstance;
                     // Prevent redefining unsafe API methods
-                    if (!AllowUnsafeApi && MethodInstance.InstanceMethods.TryGetValue(MethodName, out Method? ExistingMethod) && ExistingMethod.Unsafe) {
+                    if (!AllowUnsafeApi && MethodInstance.TryGetInstanceMethod(MethodName, out Method? ExistingMethod) && ExistingMethod!.Unsafe) {
                         throw new RuntimeException($"{DefineMethodStatement.Location}: The instance method '{MethodName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
                     }
                     // Create or overwrite instance method
@@ -1240,12 +1207,12 @@ namespace Embers
             Module CurrentModule = this.CurrentModule;
             string? SuperMethodName = CurrentMethodScope.Method?.Name;
             if (CurrentModule != Interpreter.RootModule && CurrentModule.SuperModule is Module SuperModule) {
-                if (SuperMethodName != null && SuperModule.InstanceMethods.TryGetValue(SuperMethodName, out Method? SuperMethod)) {
+                if (SuperMethodName != null && SuperModule.TryGetInstanceMethod(SuperMethodName, out Method? SuperMethod)) {
                     Instances? Arguments = null;
                     if (SuperExpression.Arguments != null) {
                         Arguments = await InterpretExpressionsAsync(SuperExpression.Arguments);
                     }
-                    return await SuperMethod.Call(this, null, Arguments, BypassAccessModifiers: true);
+                    return await SuperMethod!.Call(this, null, Arguments, BypassAccessModifiers: true);
                 }
             }
             throw new RuntimeException($"{SuperExpression.Location}: No super method '{SuperMethodName}' to call");
@@ -1258,11 +1225,19 @@ namespace Embers
                     // Get target methods dictionary
                     LockingDictionary<string, Method> TargetMethods = MethodAliasRef.Instance != null ? MethodAliasRef.Instance.InstanceMethods
                         : (MethodAliasRef.Module != null ? MethodAliasRef.Module.Methods : CurrentInstance.InstanceMethods);
-                    // Get origin methods dictionary
-                    LockingDictionary<string, Method> OriginMethods = MethodOriginRef.Instance != null ? MethodOriginRef.Instance.InstanceMethods
-                        : (MethodOriginRef.Module != null ? MethodOriginRef.Module.Methods : CurrentInstance.InstanceMethods);
+                    // Get origin method
+                    Method OriginMethod;
+                    if (MethodOriginRef.Instance != null) {
+                        MethodOriginRef.Instance.TryGetInstanceMethod(MethodOriginRef.Token.Value!, out OriginMethod!);
+                    }
+                    else if (MethodOriginRef.Module != null) {
+                        MethodOriginRef.Module.TryGetMethod(MethodOriginRef.Token.Value!, out OriginMethod!);
+                    }
+                    else {
+                        CurrentInstance.TryGetInstanceMethod(MethodOriginRef.Token.Value!, out OriginMethod!);
+                    }
                     // Create alias for method
-                    TargetMethods[AliasStatement.AliasAs.Token.Value!] = OriginMethods[MethodOriginRef.Token.Value!];
+                    TargetMethods[AliasStatement.AliasAs.Token.Value!] = OriginMethod;
                 }
                 else {
                     throw new SyntaxErrorException($"{AliasStatement.Location}: Expected method to alias, got '{MethodOrigin.Inspect()}'");
