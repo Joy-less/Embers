@@ -1,5 +1,4 @@
 ﻿using System;
-using static Embers.Script;
 
 namespace Embers
 {
@@ -12,7 +11,7 @@ namespace Embers
 
     public abstract class EmbersException : Exception {
         public EmbersException(string Message) : base(Message) { }
-        public EmbersException() { }
+        public EmbersException() : base() {}
     }
     public class SyntaxErrorException : EmbersException {
         public SyntaxErrorException(string Message) : base(Message) { }
@@ -25,16 +24,6 @@ namespace Embers
     }
     public class ApiException : EmbersException {
         public ApiException(string Message) : base(Message) { }
-    }
-    public class ThrowException : Exception {
-        public readonly string Identifier;
-        public static ThrowException New(Instance Identifier) {
-            string Message = $"uncaught throw {Identifier.Inspect()}";
-            return new ThrowException(Message, Identifier.String);
-        }
-        private ThrowException(string Message, string identifier) : base(Message) {
-            Identifier = identifier;
-        }
     }
 
     public readonly struct DebugLocation {

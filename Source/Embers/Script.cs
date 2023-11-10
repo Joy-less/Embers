@@ -165,7 +165,7 @@ namespace Embers
             public virtual WeakReference<Instance> WeakRef { get { throw new RuntimeException("Instance is not a WeakRef"); } }
             public virtual System.Net.Http.HttpResponseMessage HttpResponse { get { throw new RuntimeException("Instance is not a HttpResponse"); } }
             public virtual string Inspect() {
-                return $"#<{Module?.Name}:0x{GetHashCode():x16}>";
+                return $"#<{Module?.Name}:0x{base.GetHashCode():x16}>";
             }
             public virtual string LightInspect() {
                 return Inspect();
@@ -305,25 +305,32 @@ namespace Embers
                 Method = method;
             }
         }
-        public class LoopControlReference : PseudoInstance {
-            public readonly LoopControlType Type;
+        public abstract class ReturnCodeInstance : PseudoInstance {
             public bool CalledInYieldMethod;
-            public LoopControlReference(LoopControlType type, Interpreter interpreter) : base(interpreter) {
+            public ReturnCodeInstance(Interpreter interpreter) : base(interpreter) {}
+        }
+        public class LoopControlReturnCode : ReturnCodeInstance {
+            public readonly LoopControlType Type;
+            public LoopControlReturnCode(LoopControlType type, Interpreter interpreter) : base(interpreter) {
                 Type = type;
             }
         }
-        public class ReturnReference : PseudoInstance {
+        public class ReturnReturnCode : ReturnCodeInstance {
             public readonly Instance ReturnValue;
-            public bool CalledInYieldMethod;
-            public ReturnReference(Instance returnValue, Interpreter interpreter) : base(interpreter) {
+            public ReturnReturnCode(Instance returnValue, Interpreter interpreter) : base(interpreter) {
                 ReturnValue = returnValue;
             }
         }
-        public class StopReference : PseudoInstance {
+        public class StopReturnCode : ReturnCodeInstance {
             public readonly bool Manual;
-            public bool CalledInYieldMethod;
-            public StopReference(bool manual, Interpreter interpreter) : base(interpreter) {
+            public StopReturnCode(bool manual, Interpreter interpreter) : base(interpreter) {
                 Manual = manual;
+            }
+        }
+        public class ThrowReturnCode : ReturnCodeInstance {
+            public readonly Instance Identifier;
+            public ThrowReturnCode(Instance identifier, Interpreter interpreter) : base(interpreter) {
+                Identifier = identifier;
             }
         }
         public class ScriptThread {
@@ -389,15 +396,15 @@ namespace Embers
             }
             public async Task<Instance> Call(Script Script, Instance? OnInstance, Instances? Arguments = null, Method? OnYield = null, BreakHandleType BreakHandleType = BreakHandleType.Invalid, bool CatchReturn = true, bool BypassAccessModifiers = false) {
                 if (Unsafe && !Script.AllowUnsafeApi)
-                    throw new RuntimeException($"{Script.ApproximateLocation}: The method '{Name}' is unavailable since 'AllowUnsafeApi' is disabled for this script.");
+                    throw new RuntimeException($"{Script.ApproximateLocation}: The method '{Name}' is unavailable since AllowUnsafeApi is disabled for this script.");
                 if (!BypassAccessModifiers) {
                     if (AccessModifier == AccessModifier.Private) {
                         if (OnInstance != null && Script.CurrentModule != OnInstance.Module!)
-                            throw new RuntimeException($"{Script.ApproximateLocation}: Private method '{Name}' called {(OnInstance != null ? $"for {OnInstance.Module!.Name}" : "")}");
+                            throw new RuntimeException($"{Script.ApproximateLocation}: Private method '{Name}' called for {OnInstance.Module!.Name}.");
                     }
                     else if (AccessModifier == AccessModifier.Protected) {
                         if (OnInstance != null && !Script.CurrentModule.InheritsFrom(OnInstance.Module!))
-                            throw new RuntimeException($"{Script.ApproximateLocation}: Protected method '{Name}' called {(OnInstance != null ? $"for {OnInstance.Module!.Name}" : "")}");
+                            throw new RuntimeException($"{Script.ApproximateLocation}: Protected method '{Name}' called for {OnInstance.Module!.Name}.");
                     }
                 }
 
@@ -414,40 +421,40 @@ namespace Embers
                     MethodScope MethodScope = new(this);
                     Script.CurrentObject.Push(MethodScope);
                     
-                    Instance ReturnValue;
                     try {
                         // Create method input
                         MethodInput Input = new(Script, OnInstance, Arguments, OnYield);
                         // Set argument variables
                         await SetArgumentVariables(MethodScope, Input);
                         // Call method
-                        ReturnValue = await Function(Input);
-                        // Handle loop control
-                        if (ReturnValue is LoopControlReference LoopControlReference) {
-                            // Break
-                            if (LoopControlReference.Type == LoopControlType.Break) {
-                                if (LoopControlReference.CalledInYieldMethod) {
-                                    LoopControlReference.CalledInYieldMethod = false;
+                        Instance ReturnValue = await Function(Input);
+                        // Handle return codes
+                        if (ReturnValue is ReturnCodeInstance ReturnCodeInstance) {
+                            if (ReturnCodeInstance.CalledInYieldMethod) {
+                                ReturnCodeInstance.CalledInYieldMethod = false;
+                            }
+                            else {
+                                if (ReturnValue is LoopControlReturnCode LoopControlReturnCode) {
+                                    // Break
+                                    if (LoopControlReturnCode.Type == LoopControlType.Break) {
+                                        if (BreakHandleType != BreakHandleType.Rethrow) {
+                                            if (BreakHandleType == BreakHandleType.Destroy)
+                                                ReturnValue = Script.Api.Nil;
+                                            else
+                                                throw new SyntaxErrorException($"{Script.ApproximateLocation}: Invalid break (break must be in a loop)");
+                                        }
+                                    }
                                 }
-                                else if (BreakHandleType != BreakHandleType.Rethrow) {
-                                    if (BreakHandleType == BreakHandleType.Destroy)
-                                        ReturnValue = Script.Api.Nil;
-                                    else
-                                        throw new SyntaxErrorException($"{Script.ApproximateLocation}: Invalid break (break must be in a loop)");
+                                // Return
+                                else if (ReturnValue is ReturnReturnCode ReturnReturnCode) {
+                                    if (CatchReturn) {
+                                        ReturnValue = ReturnReturnCode.ReturnValue;
+                                    }
                                 }
                             }
                         }
-                        // Handle return
-                        else if (ReturnValue is ReturnReference ReturnReference) {
-                            if (CatchReturn) {
-                                if (ReturnReference.CalledInYieldMethod) {
-                                    ReturnReference.CalledInYieldMethod = false;
-                                }
-                                else {
-                                    ReturnValue = ReturnReference.ReturnValue;
-                                }
-                            }
-                        }
+                        // Return method return value
+                        return ReturnValue;
                     }
                     finally {
                         // Step back a scope
@@ -460,8 +467,6 @@ namespace Embers
                             Script.CurrentObject.Pop();
                         }
                     }
-                    // Return method return value
-                    return ReturnValue;
                 }
                 else {
                     throw new RuntimeException($"{Script.ApproximateLocation}: Wrong number of arguments for '{Name}' (given {Arguments.Count}, expected {ArgumentCountRange})");
@@ -749,8 +754,8 @@ namespace Embers
                             await Current.SetArgumentVariables(Input.Script.CurrentScope, Input);
                             return await CurrentFunction(Input);
                         });
-                        if (Result is LoopControlReference LoopControlReference) {
-                            LoopControlReference.CalledInYieldMethod = true;
+                        if (Result is ReturnCodeInstance ReturnCodeInstance) {
+                            ReturnCodeInstance.CalledInYieldMethod = true;
                         }
                         return Result;
                     }
@@ -761,33 +766,39 @@ namespace Embers
             }
             return Current;
         }
+        async Task<Instances> InterpretArgumentsAsync(List<Expression> Expressions) {
+            List<Instance> Arguments = new();
+            foreach (Expression Expression in Expressions) {
+                Instance Argument = await InterpretExpressionAsync(Expression);
+                if (Argument is ReturnCodeInstance) {
+                    return Argument;
+                }
+                Arguments.Add(Argument);
+            }
+            return Arguments;
+        }
 
         async Task<Instance> InterpretMethodCallExpression(MethodCallExpression MethodCallExpression) {
             Instance MethodPath = await InterpretExpressionAsync(MethodCallExpression.MethodPath, ReturnType.HypotheticalVariable);
             if (MethodPath is VariableReference MethodReference) {
+                // Get arguments
+                Instances Arguments = await InterpretArgumentsAsync(MethodCallExpression.Arguments);
+                if (Arguments.Count == 1 && Arguments[0] is ReturnCodeInstance ReturnCodeInstance) {
+                    return ReturnCodeInstance;
+                }
                 // Static method
                 if (MethodReference.Module != null) {
                     // Get class/module which owns method
                     Module MethodModule = MethodReference.Module;
                     // Call class method
-                    return await MethodModule.CallMethod(this, MethodReference.Token.Value!,
-                        await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToYieldMethod(this, CurrentOnYield));
+                    return await MethodModule.CallMethod(this, MethodReference.Token.Value!, Arguments, MethodCallExpression.OnYield?.ToYieldMethod(this, CurrentOnYield));
                 }
                 // Instance method
                 else {
-                    Instance MethodInstance;
-                    // Local
-                    if (MethodReference.IsLocalReference) {
-                        MethodInstance = CurrentInstance;
-                    }
-                    // Path
-                    else {
-                        MethodInstance = MethodReference.Instance!;
-                    }
+                    // Get instance which owns method
+                    Instance MethodInstance = MethodReference.IsLocalReference ? CurrentInstance : MethodReference.Instance!;
                     // Call instance method
-                    return await MethodInstance.CallInstanceMethod(this, MethodReference.Token.Value!,
-                        await InterpretExpressionsAsync(MethodCallExpression.Arguments), MethodCallExpression.OnYield?.ToYieldMethod(this, CurrentOnYield)
-                    );
+                    return await MethodInstance.CallInstanceMethod(this, MethodReference.Token.Value!, Arguments, MethodCallExpression.OnYield?.ToYieldMethod(this, CurrentOnYield));
                 }
             }
             else {
@@ -1066,16 +1077,19 @@ namespace Embers
         async Task<Instance> InterpretWhileExpression(WhileExpression WhileExpression) {
             while ((await InterpretExpressionAsync(WhileExpression.Condition!)).IsTruthy != WhileExpression.Inverse) {
                 Instance Result = await InternalInterpretAsync(WhileExpression.Statements, CurrentOnYield);
-                if (Result is LoopControlReference LoopControlReference) {
-                    if (LoopControlReference.Type is LoopControlType.Break) {
+                if (Result is LoopControlReturnCode LoopControlReturnCode) {
+                    if (LoopControlReturnCode.Type is LoopControlType.Break) {
                         break;
                     }
-                    else if (LoopControlReference.Type is LoopControlType.Retry) {
+                    else if (LoopControlReturnCode.Type is LoopControlType.Retry) {
                         throw new SyntaxErrorException($"{ApproximateLocation}: Retry not valid in while loop");
                     }
-                    else if (LoopControlReference.Type is LoopControlType.Redo or LoopControlType.Next) {
+                    else if (LoopControlReturnCode.Type is LoopControlType.Redo or LoopControlType.Next) {
                         continue;
                     }
+                }
+                else if (Result is ReturnCodeInstance) {
+                    return Result;
                 }
             }
             return Api.Nil;
@@ -1132,8 +1146,8 @@ namespace Embers
                 if (MethodNameRef.Module != null) {
                     Module MethodModule = MethodNameRef.Module;
                     // Prevent redefining unsafe API methods
-                    if (!AllowUnsafeApi && MethodModule.Methods.TryGetValue(MethodName, out Method? ExistingMethod) && ExistingMethod.Unsafe) {
-                        throw new RuntimeException($"{DefineMethodStatement.Location}: The static method '{MethodName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
+                    if (!AllowUnsafeApi && MethodModule.TryGetMethod(MethodName, out Method? ExistingMethod) && ExistingMethod!.Unsafe) {
+                        throw new RuntimeException($"{DefineMethodStatement.Location}: The static method '{MethodName}' cannot be redefined since AllowUnsafeApi is disabled for this script.");
                     }
                     // Create or overwrite static method
                     MethodModule.Methods[MethodName] = DefineMethodStatement.MethodExpression.ToMethod(CurrentAccessModifier);
@@ -1143,7 +1157,7 @@ namespace Embers
                     Instance MethodInstance = MethodNameRef.Instance ?? CurrentInstance;
                     // Prevent redefining unsafe API methods
                     if (!AllowUnsafeApi && MethodInstance.TryGetInstanceMethod(MethodName, out Method? ExistingMethod) && ExistingMethod!.Unsafe) {
-                        throw new RuntimeException($"{DefineMethodStatement.Location}: The instance method '{MethodName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
+                        throw new RuntimeException($"{DefineMethodStatement.Location}: The instance method '{MethodName}' cannot be redefined since AllowUnsafeApi is disabled for this script.");
                     }
                     // Create or overwrite instance method
                     Method NewInstanceMethod = DefineMethodStatement.MethodExpression.ToMethod(CurrentAccessModifier);
@@ -1216,9 +1230,13 @@ namespace Embers
         }
         async Task<Instance> InterpretYieldExpression(YieldExpression YieldExpression) {
             if (CurrentOnYield != null) {
-                List<Instance> YieldArgs = YieldExpression.YieldValues != null
-                    ? await InterpretExpressionsAsync(YieldExpression.YieldValues)
-                    : new();
+                Instances? YieldArgs = null;
+                if (YieldExpression.YieldValues != null) {
+                    YieldArgs = await InterpretArgumentsAsync(YieldExpression.YieldValues);
+                    if (YieldArgs.Count == 1 && YieldArgs[0] is ReturnCodeInstance ReturnCodeInstance) {
+                        throw new SyntaxErrorException($"{YieldExpression.Location}: Invalid {ReturnCodeInstance.GetType().Name}");
+                    }
+                }
                 return await CurrentOnYield.Call(this, null, YieldArgs, BreakHandleType: BreakHandleType.Destroy, CatchReturn: false);
             }
             else {
@@ -1232,7 +1250,10 @@ namespace Embers
                 if (SuperMethodName != null && SuperModule.TryGetInstanceMethod(SuperMethodName, out Method? SuperMethod)) {
                     Instances? Arguments = null;
                     if (SuperExpression.Arguments != null) {
-                        Arguments = await InterpretExpressionsAsync(SuperExpression.Arguments);
+                        Arguments = await InterpretArgumentsAsync(SuperExpression.Arguments);
+                        if (Arguments.Count == 1 && Arguments[0] is ReturnCodeInstance ReturnCodeInstance) {
+                            return ReturnCodeInstance;
+                        }
                     }
                     return await SuperMethod!.Call(this, null, Arguments, BypassAccessModifiers: true);
                 }
@@ -1606,7 +1627,7 @@ namespace Embers
 
             // Stop script
             if (Stopping)
-                return new StopReference(false, Interpreter);
+                return new StopReturnCode(false, Interpreter);
 
             // Interpret expression
             return Expression switch {
@@ -1626,14 +1647,14 @@ namespace Embers
                 NotExpression NotExpression => await InterpretNotExpression(NotExpression),
                 DefineMethodStatement DefineMethodStatement => await InterpretDefineMethodStatement(DefineMethodStatement),
                 DefineClassStatement DefineClassStatement => await InterpretDefineClassStatement(DefineClassStatement),
-                ReturnStatement ReturnStatement => new ReturnReference(ReturnStatement.ReturnValue != null
+                ReturnStatement ReturnStatement => new ReturnReturnCode(ReturnStatement.ReturnValue != null
                                                         ? await InterpretExpressionAsync(ReturnStatement.ReturnValue) : Api.Nil,
                                                         Interpreter),
                 LoopControlStatement LoopControlStatement => LoopControlStatement.Type switch {
-                    LoopControlType.Break => new LoopControlReference(LoopControlType.Break, Interpreter),
-                    LoopControlType.Retry => new LoopControlReference(LoopControlType.Retry, Interpreter),
-                    LoopControlType.Redo => new LoopControlReference(LoopControlType.Redo, Interpreter),
-                    LoopControlType.Next => new LoopControlReference(LoopControlType.Next, Interpreter),
+                    LoopControlType.Break => new LoopControlReturnCode(LoopControlType.Break, Interpreter),
+                    LoopControlType.Retry => new LoopControlReturnCode(LoopControlType.Retry, Interpreter),
+                    LoopControlType.Redo => new LoopControlReturnCode(LoopControlType.Redo, Interpreter),
+                    LoopControlType.Next => new LoopControlReturnCode(LoopControlType.Next, Interpreter),
                     _ => throw new InternalErrorException($"{Expression.Location}: Loop control type not handled: '{LoopControlStatement.Type}'")},
                 YieldExpression YieldExpression => await InterpretYieldExpression(YieldExpression),
                 SuperExpression SuperExpression => await InterpretSuperExpression(SuperExpression),
@@ -1650,16 +1671,6 @@ namespace Embers
                 _ => throw new InternalErrorException($"{Expression.Location}: Not sure how to interpret expression {Expression.GetType().Name} ({Expression.Inspect()})"),
             };
         }
-        async Task<List<Instance>> InterpretExpressionsAsync(List<Expression> Expressions) {
-            List<Instance> Results = new();
-            foreach (Expression Expression in Expressions) {
-                Results.Add(await InterpretExpressionAsync(Expression));
-                if (Results[^1] is LoopControlReference or ReturnReference or StopReference) {
-                    throw new SyntaxErrorException($"{Expression.Location}: Invalid {Results[^1].GetType().Name}");
-                }
-            }
-            return Results;
-        }
         internal async Task<Instance> InternalInterpretAsync(List<Expression> Statements, Method? OnYield = null) {
             try {
                 // Set on yield
@@ -1668,7 +1679,7 @@ namespace Embers
                 Instance LastInstance = Api.Nil;
                 foreach (Expression Statement in Statements) {
                     LastInstance = await InterpretExpressionAsync(Statement);
-                    if (LastInstance is LoopControlReference or ReturnReference or StopReference) {
+                    if (LastInstance is ReturnCodeInstance) {
                         break;
                     }
                 }
@@ -1698,14 +1709,20 @@ namespace Embers
             Instance LastInstance;
             try {
                 LastInstance = await InternalInterpretAsync(Statements, OnYield);
-                if (LastInstance is LoopControlReference LoopControlReference) {
-                    throw new SyntaxErrorException($"{ApproximateLocation}: Invalid {LoopControlReference.Type} (must be in a loop)");
+                if (LastInstance is LoopControlReturnCode LoopControlReturnCode) {
+                    throw new SyntaxErrorException($"{ApproximateLocation}: Invalid {LoopControlReturnCode.Type} (must be in a loop)");
                 }
-                else if (LastInstance is ReturnReference ReturnReference) {
-                    return ReturnReference.ReturnValue;
+                else if (LastInstance is ReturnReturnCode ReturnReturnCode) {
+                    return ReturnReturnCode.ReturnValue;
                 }
-                else if (LastInstance is StopReference) {
+                else if (LastInstance is StopReturnCode) {
                     return Api.Nil;
+                }
+                else if (LastInstance is ThrowReturnCode ThrowReturnCode) {
+                    throw new RuntimeException($"{ApproximateLocation}: uncaught throw {ThrowReturnCode.Identifier.Inspect()}");
+                }
+                else if (LastInstance is ReturnCodeInstance) {
+                    throw new RuntimeException($"{ApproximateLocation}: Invalid {LastInstance.GetType().Name}");
                 }
             }
             finally {

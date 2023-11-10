@@ -532,18 +532,23 @@ namespace Embers
             }
         }
         static async Task<Instance> @throw(MethodInput Input) {
-            throw ThrowException.New(Input.Arguments[0]);
+            Instance ThrowIdentifier = Input.Arguments[0];
+            return new ThrowReturnCode(ThrowIdentifier, Input.Interpreter);
         }
         static async Task<Instance> @catch(MethodInput Input) {
             Method? OnYield = Input.OnYield ?? throw new RuntimeException($"{Input.Location}: No block given for catch");
 
-            string CatchIdentifier = Input.Arguments[0].String;
-            try {
-                await OnYield.Call(Input.Script, null, CatchReturn: false);
-            }
-            catch (ThrowException Ex) {
-                if (Ex.Identifier != CatchIdentifier)
-                    throw Ex;
+            Instance CatchIdentifier = Input.Arguments[0];
+            Instance Result = await OnYield.Call(Input.Script, null, CatchReturn: false);
+            if (Result is ThrowReturnCode ThrowReturnCode) {
+                if (ThrowReturnCode.Identifier.String != CatchIdentifier.String) {
+                    // uncaught throw
+                    return ThrowReturnCode;
+                }
+                else {
+                    // caught throw
+                    return ThrowReturnCode.Identifier;
+                }
             }
             return Input.Api.Nil;
         }
@@ -561,13 +566,16 @@ namespace Embers
 
             while (true) {
                 Instance Result = await OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
-                if (Result is LoopControlReference LoopControlReference) {
-                    if (LoopControlReference.Type is Phase2.LoopControlType.Break) {
+                if (Result is LoopControlReturnCode LoopControlReturnCode) {
+                    if (LoopControlReturnCode.Type is Phase2.LoopControlType.Break) {
                         break;
                     }
-                    else if (LoopControlReference.Type is Phase2.LoopControlType.Retry or Phase2.LoopControlType.Redo or Phase2.LoopControlType.Next) {
+                    else if (LoopControlReturnCode.Type is Phase2.LoopControlType.Retry or Phase2.LoopControlType.Redo or Phase2.LoopControlType.Next) {
                         continue;
                     }
+                }
+                else if (Result is ReturnCodeInstance) {
+                    return Result;
                 }
             }
             return Input.Api.Nil;
@@ -601,15 +609,15 @@ namespace Embers
             return new StringInstance(Input.Api.String, Output);
         }
         static async Task<Instance> exit(MethodInput Input) {
-            return new StopReference(true, Input.Interpreter);
+            return new StopReturnCode(true, Input.Interpreter);
         }
         static async Task<Instance> eval(MethodInput Input) {
             Instance Result = await Input.Script.InternalEvaluateAsync(Input.Arguments[0].String);
-            if (Result is LoopControlReference LoopControlReference) {
-                throw new SyntaxErrorException($"{Input.Location}: Can't escape from eval with {LoopControlReference.Type}");
+            if (Result is LoopControlReturnCode LoopControlReturnCode) {
+                throw new SyntaxErrorException($"{Input.Location}: Can't escape from eval with {LoopControlReturnCode.Type}");
             }
-            else if (Result is ReturnReference ReturnReference) {
-                return ReturnReference.ReturnValue;
+            else if (Result is ReturnReturnCode ReturnReturnCode) {
+                return ReturnReturnCode.ReturnValue;
             }
             return Result;
         }
@@ -669,15 +677,15 @@ namespace Embers
                 Method? FindMethod;
                 bool Found;
                 if (Input.Instance is ModuleReference) {
-                    Found = Input.Instance.Module!.Methods.TryGetValue(MethodName, out FindMethod);
+                    Found = Input.Instance.Module!.TryGetMethod(MethodName, out FindMethod);
                 }
                 else {
-                    Found = Input.Instance.InstanceMethods.TryGetValue(MethodName, out FindMethod);
+                    Found = Input.Instance.TryGetInstanceMethod(MethodName, out FindMethod);
                 }
                 // Return method if found
                 if (Found) {
                     if (!Input.Script.AllowUnsafeApi && FindMethod!.Unsafe) {
-                        throw new RuntimeException($"{Input.Location}: The method '{MethodName}' is unavailable since 'AllowUnsafeApi' is disabled for this script.");
+                        throw new RuntimeException($"{Input.Location}: The method '{MethodName}' is unavailable since AllowUnsafeApi is disabled for this script.");
                     }
                     return new ProcInstance(Input.Api.Proc, FindMethod!);
                 }
@@ -768,8 +776,8 @@ namespace Embers
             public static async Task<Instance> attr_reader(MethodInput Input) {
                 string VariableName = Input.Arguments[0].String;
                 // Prevent redefining unsafe API methods
-                if (!Input.Script.AllowUnsafeApi && Input.Instance.InstanceMethods.TryGetValue(VariableName, out Method? ExistingMethod) && ExistingMethod.Unsafe) {
-                    throw new RuntimeException($"{Input.Location}: The instance method '{VariableName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
+                if (!Input.Script.AllowUnsafeApi && Input.Instance.TryGetInstanceMethod(VariableName, out Method? ExistingMethod) && ExistingMethod!.Unsafe) {
+                    throw new RuntimeException($"{Input.Location}: The instance method '{VariableName}' cannot be redefined since AllowUnsafeApi is disabled for this script.");
                 }
                 // Create or overwrite instance method
                 Input.Instance.InstanceMethods[VariableName] = Input.Script.CreateMethod(async Input2 => {
@@ -782,8 +790,8 @@ namespace Embers
             public static async Task<Instance> attr_writer(MethodInput Input) {
                 string VariableName = Input.Arguments[0].String;
                 // Prevent redefining unsafe API methods
-                if (!Input.Script.AllowUnsafeApi && Input.Instance.InstanceMethods.TryGetValue(VariableName, out Method? ExistingMethod) && ExistingMethod.Unsafe) {
-                    throw new RuntimeException($"{Input.Location}: The instance method '{VariableName}' cannot be redefined since 'AllowUnsafeApi' is disabled for this script.");
+                if (!Input.Script.AllowUnsafeApi && Input.Instance.TryGetInstanceMethod(VariableName, out Method? ExistingMethod) && ExistingMethod!.Unsafe) {
+                    throw new RuntimeException($"{Input.Location}: The instance method '{VariableName}' cannot be redefined since AllowUnsafeApi is disabled for this script.");
                 }
                 // Create or overwrite instance method
                 Input.Instance.InstanceMethods[$"{VariableName}="] = Input.Script.CreateMethod(async Input2 => {
@@ -1215,20 +1223,23 @@ namespace Embers
                             Result = await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
 
-                        if (Result is LoopControlReference LoopControlReference) {
-                            if (LoopControlReference.Type is Phase2.LoopControlType.Break) {
+                        if (Result is LoopControlReturnCode LoopControlReturnCode) {
+                            if (LoopControlReturnCode.Type is Phase2.LoopControlType.Break) {
                                 break;
                             }
-                            else if (LoopControlReference.Type is Phase2.LoopControlType.Redo) {
+                            else if (LoopControlReturnCode.Type is Phase2.LoopControlType.Redo) {
                                 i--;
                                 continue;
                             }
-                            else if (LoopControlReference.Type is Phase2.LoopControlType.Next) {
+                            else if (LoopControlReturnCode.Type is Phase2.LoopControlType.Next) {
                                 continue;
                             }
                             else {
-                                throw new SyntaxErrorException($"{Input.Location}: {LoopControlReference.Type} not valid in {Times}.times");
+                                throw new SyntaxErrorException($"{Input.Location}: {LoopControlReturnCode.Type} not valid in {Times}.times");
                             }
+                        }
+                        else if (Result is ReturnCodeInstance) {
+                            return Result;
                         }
                     }
                 }
@@ -1522,20 +1533,23 @@ namespace Embers
                             Result = await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
 
-                        if (Result is LoopControlReference LoopControlReference) {
-                            if (LoopControlReference.Type is Phase2.LoopControlType.Break) {
+                        if (Result is LoopControlReturnCode LoopControlReturnCode) {
+                            if (LoopControlReturnCode.Type is Phase2.LoopControlType.Break) {
                                 break;
                             }
-                            else if (LoopControlReference.Type is Phase2.LoopControlType.Redo) {
+                            else if (LoopControlReturnCode.Type is Phase2.LoopControlType.Redo) {
                                 i--;
                                 continue;
                             }
-                            else if (LoopControlReference.Type is Phase2.LoopControlType.Next) {
+                            else if (LoopControlReturnCode.Type is Phase2.LoopControlType.Next) {
                                 continue;
                             }
                             else {
-                                throw new SyntaxErrorException($"{Input.Location}: {LoopControlReference.Type} not valid in range.each");
+                                throw new SyntaxErrorException($"{Input.Location}: {LoopControlReturnCode.Type} not valid in range.each");
                             }
+                        }
+                        else if (Result is ReturnCodeInstance) {
+                            return Result;
                         }
                     }
                 }
@@ -1559,20 +1573,23 @@ namespace Embers
                             Result = await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
 
-                        if (Result is LoopControlReference LoopControlReference) {
-                            if (LoopControlReference.Type is Phase2.LoopControlType.Break) {
+                        if (Result is LoopControlReturnCode LoopControlReturnCode) {
+                            if (LoopControlReturnCode.Type is Phase2.LoopControlType.Break) {
                                 break;
                             }
-                            else if (LoopControlReference.Type is Phase2.LoopControlType.Redo) {
+                            else if (LoopControlReturnCode.Type is Phase2.LoopControlType.Redo) {
                                 i--;
                                 continue;
                             }
-                            else if (LoopControlReference.Type is Phase2.LoopControlType.Next) {
+                            else if (LoopControlReturnCode.Type is Phase2.LoopControlType.Next) {
                                 continue;
                             }
                             else {
-                                throw new SyntaxErrorException($"{Input.Location}: {LoopControlReference.Type} not valid in range.reverse_each");
+                                throw new SyntaxErrorException($"{Input.Location}: {LoopControlReturnCode.Type} not valid in range.reverse_each");
                             }
+                        }
+                        else if (Result is ReturnCodeInstance) {
+                            return Result;
                         }
                     }
                 }
@@ -1856,20 +1873,23 @@ namespace Embers
                             Result = await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
 
-                        if (Result is LoopControlReference LoopControlReference) {
-                            if (LoopControlReference.Type is Phase2.LoopControlType.Break) {
+                        if (Result is LoopControlReturnCode LoopControlReturnCode) {
+                            if (LoopControlReturnCode.Type is Phase2.LoopControlType.Break) {
                                 break;
                             }
-                            else if (LoopControlReference.Type is Phase2.LoopControlType.Redo) {
+                            else if (LoopControlReturnCode.Type is Phase2.LoopControlType.Redo) {
                                 i--;
                                 continue;
                             }
-                            else if (LoopControlReference.Type is Phase2.LoopControlType.Next) {
+                            else if (LoopControlReturnCode.Type is Phase2.LoopControlType.Next) {
                                 continue;
                             }
                             else {
-                                throw new SyntaxErrorException($"{Input.Location}: {LoopControlReference.Type} not valid in array.each");
+                                throw new SyntaxErrorException($"{Input.Location}: {LoopControlReturnCode.Type} not valid in array.each");
                             }
+                        }
+                        else if (Result is ReturnCodeInstance) {
+                            return Result;
                         }
                     }
                 }
@@ -1895,20 +1915,23 @@ namespace Embers
                             Result = await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
 
-                        if (Result is LoopControlReference LoopControlReference) {
-                            if (LoopControlReference.Type is Phase2.LoopControlType.Break) {
+                        if (Result is LoopControlReturnCode LoopControlReturnCode) {
+                            if (LoopControlReturnCode.Type is Phase2.LoopControlType.Break) {
                                 break;
                             }
-                            else if (LoopControlReference.Type is Phase2.LoopControlType.Redo) {
+                            else if (LoopControlReturnCode.Type is Phase2.LoopControlType.Redo) {
                                 i--;
                                 continue;
                             }
-                            else if (LoopControlReference.Type is Phase2.LoopControlType.Next) {
+                            else if (LoopControlReturnCode.Type is Phase2.LoopControlType.Next) {
                                 continue;
                             }
                             else {
-                                throw new SyntaxErrorException($"{Input.Location}: {LoopControlReference.Type} not valid in array.reverse_each");
+                                throw new SyntaxErrorException($"{Input.Location}: {LoopControlReturnCode.Type} not valid in array.reverse_each");
                             }
+                        }
+                        else if (Result is ReturnCodeInstance) {
+                            return Result;
                         }
                     }
                 }
@@ -2132,19 +2155,22 @@ namespace Embers
                             Result = await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
 
-                        if (Result is LoopControlReference LoopControlReference) {
-                            if (LoopControlReference.Type is Phase2.LoopControlType.Break) {
+                        if (Result is LoopControlReturnCode LoopControlReturnCode) {
+                            if (LoopControlReturnCode.Type is Phase2.LoopControlType.Break) {
                                 break;
                             }
-                            else if (LoopControlReference.Type is Phase2.LoopControlType.Redo) {
+                            else if (LoopControlReturnCode.Type is Phase2.LoopControlType.Redo) {
                                 goto Redo;
                             }
-                            else if (LoopControlReference.Type is Phase2.LoopControlType.Next) {
+                            else if (LoopControlReturnCode.Type is Phase2.LoopControlType.Next) {
                                 continue;
                             }
                             else {
-                                throw new SyntaxErrorException($"{Input.Location}: {LoopControlReference.Type} not valid in hash.each");
+                                throw new SyntaxErrorException($"{Input.Location}: {LoopControlReturnCode.Type} not valid in hash.each");
                             }
+                        }
+                        else if (Result is ReturnCodeInstance) {
+                            return Result;
                         }
                     }
                 }

@@ -78,7 +78,7 @@ namespace Embers_Tests
                 a = (b = 2)
                 c = d = 3.0
                 return a, b, c, d
-            ", new object[] {new DynInteger(2), new DynInteger(2), new DynFloat(3.0d), new DynFloat(3.0d)});
+            ", new object[] {new DynInteger(2), new DynInteger(2), new DynFloat(3.0), new DynFloat(3.0)});
 
             // If statements
             AssertEqual(@"
@@ -231,7 +231,7 @@ namespace Embers_Tests
                 c = (- 3.4)
                 d = (true ? 5 : 2) + 6
                 return a, b, c, d
-            ", new object[] {new DynInteger(-1L), new DynInteger(-2L), new DynFloat(-3.4d), new DynInteger(11)});
+            ", new object[] {new DynInteger(-1), new DynInteger(-2), new DynFloat(-3.4), new DynInteger(11)});
 
             // Hashes
             AssertEqual(@"
@@ -239,7 +239,7 @@ namespace Embers_Tests
                 b = a[:hi]
                 a[:hi] = 21
                 return b, a[:hi]
-            ", new object[] {new DynFloat(56.1d), new DynInteger(21) });
+            ", new object[] {new DynFloat(56.1), new DynInteger(21) });
 
             // Splat Arguments
             AssertEqual(@"
@@ -256,7 +256,7 @@ namespace Embers_Tests
             // Ranges
             AssertEqual(@"
                 return (5..7).max, (5...7).max
-            ", new object[] {new DynInteger(7), new DynInteger(6L)});
+            ", new object[] {new DynInteger(7), new DynInteger(6)});
             AssertEqual(@"
                 return 'Hi there'[2..10]
             ", " there");
@@ -390,7 +390,7 @@ namespace Embers_Tests
                 $c = (a, b = 1, 2)
                 $d, $e = [5, 6]
                 return a, b, $c[0], $d, $e
-            ", new object[] {new DynInteger(1L), new DynInteger(2L), new DynInteger(1L), new DynInteger(5L), new DynInteger(6L)});
+            ", new object[] {new DynInteger(1), new DynInteger(2), new DynInteger(1), new DynInteger(5), new DynInteger(6)});
 
             // Or & not priority
             // Not works differently in Ruby, but imo, it's better in Embers.
@@ -433,6 +433,17 @@ namespace Embers_Tests
                 end
                 a {|x| 7.to_s + x}
             ", "7hi");
+
+            // Throw catch
+            AssertEqual(@"
+                catch :a do
+                    if true
+                        throw :a
+                    end
+                    return 5
+                end
+                return 6
+            ", new DynInteger(6));
         }
 
 

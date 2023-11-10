@@ -824,15 +824,15 @@ namespace Embers
                 return new Method(async Input => {
                     Redo:
                     Instance Result = await Input.Script.InternalInterpretAsync(BlockStatements);
-                    if (Result is LoopControlReference LoopControlReference) {
-                        if (LoopControlReference.Type is LoopControlType.Redo) {
+                    if (Result is LoopControlReturnCode LoopControlReturnCode) {
+                        if (LoopControlReturnCode.Type is LoopControlType.Redo) {
                             goto Redo;
                         }
-                        else if (LoopControlReference.Type is LoopControlType.Next) {
+                        else if (LoopControlReturnCode.Type is LoopControlType.Next) {
                             return Input.Api.Nil;
                         }
                         else {
-                            throw new SyntaxErrorException($"{Input.Location}: {LoopControlReference.Type} not valid in for loop");
+                            throw new SyntaxErrorException($"{Input.Location}: {LoopControlReturnCode.Type} not valid in for loop");
                         }
                     }
                     return Result;
