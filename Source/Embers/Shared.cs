@@ -5,7 +5,7 @@ namespace Embers
 {
     public static class Info {
         public const string Version = "1.7.7";
-        public const string ReleaseDate = "2023-11-09";
+        public const string ReleaseDate = "2023-11-10";
         public const string Copyright = "Embers - Copyright © 2023 Joyless";
         public const string RubyCopyright = "Ruby - Copyright © 1995 Yukihiro Matsumoto";
     }

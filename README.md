@@ -108,7 +108,7 @@ MyScript.Evaluate("puts 3.double_number"); // 6
 MyInterpreter.Integer.InstanceMethods.Add("catify", MyScript.CreateMethod(async Input => {
     // Get target number
     Instance OnNumber = Input.Instance;
-    Instance OnString = await OnNumber.InstanceMethods["to_s"].Call(Input.Script, OnNumber);
+    Instance OnString = await OnNumber.CallInstanceMethod(Input.Script, "to_s", OnNumber);
     // Catify
     long CatifyFactor = (long)Input.Arguments[0].Integer;
     string CatifiedString = OnString.String;

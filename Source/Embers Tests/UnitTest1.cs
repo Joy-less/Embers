@@ -236,8 +236,10 @@ namespace Embers_Tests
             // Hashes
             AssertEqual(@"
                 a = {:hi => 56.1}
-                return a[:hi]
-            ", new DynFloat(56.1d));
+                b = a[:hi]
+                a[:hi] = 21
+                return b, a[:hi]
+            ", new object[] {new DynFloat(56.1d), new DynInteger(21) });
 
             // Splat Arguments
             AssertEqual(@"

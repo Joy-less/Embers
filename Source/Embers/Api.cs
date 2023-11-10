@@ -746,7 +746,7 @@ namespace Embers
             public static async Task<Instance> in7(MethodInput Input) {
                 List<Instance> Array = Input.Arguments[0].Array;
                 foreach (Instance Item in Array) {
-                    if ((await Item.InstanceMethods["=="].Call(Input.Script, Item, Input.Instance)).IsTruthy) {
+                    if ((await Item.CallInstanceMethod(Input.Script, "==", Input.Instance)).IsTruthy) {
                         return Input.Api.True;
                     }
                 }
@@ -1600,7 +1600,7 @@ namespace Embers
         static class _Array {
             private static async Task<Instance> _GetIndex(MethodInput Input, int ArrayIndex) {
                 Instance Index = new IntegerInstance(Input.Api.Integer, ArrayIndex);
-                return await Input.Instance.InstanceMethods["[]"].Call(Input.Script, Input.Instance, new Instances(Index));
+                return await Input.Instance.CallInstanceMethod(Input.Script, "[]", new Instances(Index));
             }
             private static int _RealisticIndex(MethodInput Input, DynInteger RawIndex) {
                 if (RawIndex < int.MinValue || RawIndex > int.MaxValue) {
@@ -1744,7 +1744,7 @@ namespace Embers
                     // Count how many times the item appears in the array
                     int Count = 0;
                     foreach (Instance Item in Items) {
-                        Instances IsEqual = await Item.InstanceMethods["=="].Call(Input.Script, Item, ItemToCount);
+                        Instances IsEqual = await Item.CallInstanceMethod(Input.Script, "==", ItemToCount);
                         if (IsEqual[0].IsTruthy) {
                             Count++;
                         }
@@ -1964,7 +1964,7 @@ namespace Embers
             public static async Task<Instance> include7(MethodInput Input) {
                 Instance ItemToFind = Input.Arguments[0];
                 foreach (Instance Item in Input.Instance.Array) {
-                    if ((await Item.InstanceMethods["=="].Call(Input.Script, Item, ItemToFind)).IsTruthy) {
+                    if ((await Item.CallInstanceMethod(Input.Script, "==", ItemToFind)).IsTruthy) {
                         return Input.Api.True;
                     }
                 }
