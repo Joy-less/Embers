@@ -3,8 +3,8 @@
 namespace Embers
 {
     public static class Info {
-        public const string Version = "1.7.8";
-        public const string ReleaseDate = "2023-11-10";
+        public const string Version = "2.0.0";
+        public const string ReleaseDate = "2023-11-15";
         public const string Copyright = "Embers - Copyright © 2023 Joyless";
         public const string RubyCopyright = "Ruby - Copyright © 1995 Yukihiro Matsumoto";
     }
@@ -29,11 +29,11 @@ namespace Embers
     public readonly struct DebugLocation {
         public readonly int Line;
         public readonly int Column;
-        public readonly bool IsUnknown;
-        public DebugLocation(int line, int column, bool isUnknown = false) {
+        public readonly bool IsUnknown = true;
+        public DebugLocation(int line, int column) {
             Line = line;
             Column = column;
-            IsUnknown = isUnknown;
+            IsUnknown = false;
         }
         public override string ToString() {
             return !IsUnknown ? $"{Line}:{Column}" : "?";
@@ -44,6 +44,5 @@ namespace Embers
             else
                 return "new DebugLocation()";
         }
-        public static readonly DebugLocation Unknown = new(-1, 0);
     }
 }

@@ -1,18 +1,30 @@
 ﻿using System;
 using System.Diagnostics;
-using static Embers.Script;
 
 namespace Embers
 {
     internal class Program
     {
+        static string ToSnakeCase(string String) {
+            if (String.Length == 0) return String;
+            else if (String.Length == 1) return String.ToLower();
+            else {
+                string SnakeString = "";
+                foreach (char Chara in String) {
+                    SnakeString += char.IsUpper(Chara)
+                        ? "_" + char.ToLower(Chara)
+                        : Chara;
+                }
+                return SnakeString.TrimStart('_');
+            }
+        }
+
         static void Main() {
             // Test
             {
-                Interpreter Interpreter = new();
-                Script Script = new(Interpreter);
+                Scope Scope = new();
                 Benchmark(() =>
-                    Script.Evaluate(@"
+                    Scope.Evaluate(@"
 def fibonacci(n)
   if n <= 1
     return n
@@ -33,10 +45,9 @@ t = Time.now.to_f; i = 0; for i in 1..1_000_000 do i += 1 end; puts Time.now.to_
             }
             // Benchmark
             {
-                Interpreter Interpreter = new();
-                Script Script = new(Interpreter);
+                Scope Scope = new();
                 Benchmark(() =>
-                    Script.Evaluate("1_000_000.times do end")
+                    Scope.Evaluate("1_000_000.times do end")
                 );
                 Console.ReadLine();
             }

@@ -1,347 +1,53 @@
 ﻿using System;
-using System.Runtime.CompilerServices;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
+using System.Numerics;
 using static Embers.Phase2;
-using static Embers.SpecialTypes;
-using static Embers.Api;
 
 #nullable enable
 #pragma warning disable CS1998
 
 namespace Embers
 {
-    public sealed class Script
-    {
-        public readonly Interpreter Interpreter;
+    public abstract class RubyObject {
+        public Interpreter Interpreter { get; private set; }
+        public RubyObject(Interpreter interpreter) {
+            Interpreter = interpreter;
+        }
+        internal void SetInterpreter(Interpreter interpreter) {
+            Interpreter = interpreter;
+        }
+    }
+    public class Scope : RubyObject {
+        public Scope? ParentScope { get; protected set; }
         public readonly bool AllowUnsafeApi;
         public Api Api => Interpreter.Api;
-        public bool Running { get; private set; }
-        public bool Stopping { get; private set; }
-        public DebugLocation ApproximateLocation { get; private set; } = DebugLocation.Unknown;
+        public DebugLocation ApproximateLocation { get; private set; }
+        public readonly LockingDictionary<string, Instance> LocalVariables = new();
+        public readonly LockingDictionary<string, Instance> Constants = new();
+        public readonly HashSet<ScopeThread> Threads = new();
 
-        Stack<object> CurrentObject = new();
-        Block CurrentBlock => CurrentObject.First<Block>();
-        Scope CurrentScope => CurrentObject.First<Scope>();
-        MethodScope CurrentMethodScope => CurrentObject.First<MethodScope>();
-        Module CurrentModule => CurrentObject.First<Module>();
-        Instance CurrentInstance => CurrentObject.First<Instance>();
+        public AccessModifier CurrentAccessModifier { get; internal set; } = AccessModifier.Public;
+        public Method CurrentMethod { get => FindScopeWhere(Scope => Scope.LocalCurrentMethod != null).LocalCurrentMethod!; internal set => LocalCurrentMethod = value; }
+        public Module CurrentModule { get => FindScopeWhere(Scope => Scope.LocalCurrentModule != null).LocalCurrentModule!; internal set => LocalCurrentModule = value; }
+        public Instance CurrentInstance { get => FindScopeWhere(Scope => Scope.LocalCurrentInstance != null).LocalCurrentInstance!; internal set => LocalCurrentInstance = value; }
+        public Method? CurrentOnYield { get; internal set; }
 
-        public AccessModifier CurrentAccessModifier = AccessModifier.Public;
-        internal readonly ConditionalWeakTable<Exception, ExceptionInstance> ExceptionsTable = new();
-        public readonly HashSet<ScriptThread> ScriptThreads = new();
-        public Method? CurrentOnYield { get; private set; }
+        private Method? LocalCurrentMethod;
+        private Module? LocalCurrentModule;
+        private Instance? LocalCurrentInstance;
 
-        public class Block {
-            public readonly LockingDictionary<string, Instance> LocalVariables = new();
-            public readonly LockingDictionary<string, Instance> Constants = new();
-        }
-        public class Scope : Block {
-        }
-        public class MethodScope : Scope {
-            public readonly Method? Method;
-            public MethodScope(Method method) : base() {
-                Method = method;
-            }
-        }
-        public class Module : Block {
-            public readonly string Name;
-            public readonly LockingDictionary<string, Method> Methods = new();
-            public readonly LockingDictionary<string, Method> InstanceMethods = new();
-            public readonly LockingDictionary<string, Instance> InstanceVariables = new();
-            public readonly LockingDictionary<string, Instance> ClassVariables = new();
-            public readonly Interpreter Interpreter;
-            public readonly Module? SuperModule;
-            public Module(string name, Module parent, Module? superModule = null) {
-                Name = name;
-                Interpreter = parent.Interpreter;
-                SuperModule = superModule ?? Interpreter.Class;
-            }
-            public Module(string name, Interpreter interpreter, Module? superModule = null) {
-                Name = name;
-                Interpreter = interpreter;
-                SuperModule = superModule;
-            }
-            public bool InheritsFrom(Module? Ancestor) {
-                if (Ancestor == null) return false;
-                Module? CurrentAncestor = this;
-                while (CurrentAncestor != null) {
-                    if (CurrentAncestor == Ancestor)
-                        return true;
-                    CurrentAncestor = CurrentAncestor.SuperModule;
-                }
-                return false;
-            }
-            public bool TryGetMethod(string MethodName, out Method? Method) {
-                Method = TryGetMethod(Module => Module.Methods, MethodName);
-                return Method != null;
-            }
-            public async Task<Instance> CallMethod(Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
-                return await CallMethod(Module => Module.Methods, null, Script, MethodName, Arguments, OnYield);
-            }
-            public bool TryGetInstanceMethod(string MethodName, out Method? Method) {
-                Method = TryGetMethod(Module => Module.InstanceMethods, MethodName);
-                return Method != null;
-            }
-            public async Task<Instance> CallInstanceMethod(Instance? OnInstance, Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
-                return await CallMethod(Module => Module.InstanceMethods, OnInstance, Script, MethodName, Arguments, OnYield);
-            }
-            private Method? TryGetMethod(Func<Module, LockingDictionary<string, Method>> MethodsDict, string MethodName) {
-                Module? CurrentSuperModule = this;
-                while (true) {
-                    if (MethodsDict(CurrentSuperModule).TryFindMethod(MethodName, out Method? FindMethod)) return FindMethod;
-                    CurrentSuperModule = CurrentSuperModule.SuperModule;
-                    if (CurrentSuperModule == null) return null;
-                }
-            }
-            private async Task<Instance> CallMethod(Func<Module, LockingDictionary<string, Method>> MethodsDict, Instance? OnInstance, Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
-                Method? Method = TryGetMethod(MethodsDict, MethodName);
-                if (Method == null) {
-                    throw new RuntimeException($"{Script.ApproximateLocation}: Undefined method '{MethodName}' for {Name}");
-                }
-                else if (Method.Name == "method_missing") {
-                    // Get arguments (method_name, *args)
-                    Instances MethodMissingArguments;
-                    if (Arguments != null) {
-                        List<Instance> GivenArguments = new(Arguments.MultiInstance);
-                        GivenArguments.Insert(0, Script.Api.GetSymbol(MethodName));
-                        MethodMissingArguments = new Instances(GivenArguments);
-                    }
-                    else {
-                        MethodMissingArguments = Script.Api.GetSymbol(MethodName);
-                    }
-                    // Call method_missing
-                    return await Method.Call(Script, OnInstance ?? new ModuleReference(this), MethodMissingArguments, OnYield);
-                }
-                else {
-                    return await Method.Call(Script, OnInstance ?? new ModuleReference(this), Arguments, OnYield);
-                }
-            }
-        }
-        public class Class : Module {
-            public Class(string name, Module parent, Module? superClass = null) : base(name, parent, superClass) {
-                Setup();
-            }
-            public Class(string name, Interpreter interpreter) : base(name, interpreter) {
-                Setup();
-            }
-            void Setup() {
-                // Default method: new
-                if (!TryGetMethod("new", out _)) {
-                    Methods["new"] = new Method(async Input => {
-                        Instance NewInstance = Input.Api.CreateInstanceFromClass(Input.Script, (Class)Input.Instance.Module!);
-                        await NewInstance.CallInstanceMethod(Input.Script, "initialize", Input.Arguments, Input.OnYield);
-                        return NewInstance;
-                    }, null);
-                }
-                // Default method: initialize
-                if (!TryGetInstanceMethod("initialize", out _)) {
-                    InstanceMethods["initialize"] = new Method(async Input => {
-                        return Input.Api.Nil;
-                    }, 0);
-                }
-            }
-        }
-        public class Instance {
-            /// <summary>Module will be null if instance is a PseudoInstance.</summary>
-            public readonly Module? Module;
-            public long ObjectId { get; private set; }
-            public LockingDictionary<string, Instance> InstanceVariables { get; protected set; } = new();
-            public LockingDictionary<string, Method> InstanceMethods { get; protected set; } = new();
-            public bool IsTruthy => Object is not (null or false);
-            public virtual object? Object { get { return null; } }
-            public virtual bool Boolean { get { throw new RuntimeException("Instance is not a Boolean"); } }
-            public virtual string String { get { throw new RuntimeException("Instance is not a String"); } }
-            public virtual DynInteger Integer { get { throw new RuntimeException("Instance is not an Integer"); } }
-            public virtual DynFloat Float { get { throw new RuntimeException("Instance is not a Float"); } }
-            public virtual Method Proc { get { throw new RuntimeException("Instance is not a Proc"); } }
-            public virtual ScriptThread? Thread { get { throw new RuntimeException("Instance is not a Thread"); } }
-            public virtual IntegerRange Range { get { throw new RuntimeException("Instance is not a Range"); } }
-            public virtual List<Instance> Array { get { throw new RuntimeException("Instance is not an Array"); } }
-            public virtual HashDictionary Hash { get { throw new RuntimeException("Instance is not a Hash"); } }
-            public virtual Exception Exception { get { throw new RuntimeException("Instance is not an Exception"); } }
-            public virtual DateTimeOffset Time { get { throw new RuntimeException("Instance is not a Time"); } }
-            public virtual WeakReference<Instance> WeakRef { get { throw new RuntimeException("Instance is not a WeakRef"); } }
-            public virtual System.Net.Http.HttpResponseMessage HttpResponse { get { throw new RuntimeException("Instance is not a HttpResponse"); } }
-            public virtual string Inspect() {
-                return $"#<{Module?.Name}:0x{base.GetHashCode():x16}>";
-            }
-            public virtual string LightInspect() {
-                return Inspect();
-            }
-            public Instance Clone(Interpreter Interpreter) {
-                Instance Clone = (Instance)MemberwiseClone();
-                Clone.ObjectId = Interpreter.GenerateObjectId();
-                Clone.InstanceVariables = new();
-                InstanceVariables.CopyTo(Clone.InstanceVariables);
-                Clone.InstanceMethods = new();
-                InstanceMethods.CopyTo(Clone.InstanceMethods);
-                return Clone;
-            }
-            public static async Task<Instance> CreateFromToken(Script Script, Phase2Token Token) {
-                if (Token.ProcessFormatting) {
-                    string String = Token.Value!;
-                    Stack<int> FormatPositions = new();
-                    char? LastChara = null;
-                    for (int i = 0; i < String.Length; i++) {
-                        char Chara = String[i];
+        private bool Stopping;
 
-                        if (LastChara == '#' && Chara == '{') {
-                            FormatPositions.Push(i - 1);
-                        }
-                        else if (Chara == '}') {
-                            if (FormatPositions.TryPop(out int StartPosition)) {
-                                string FirstHalf = String[..StartPosition];
-                                string ToFormat = String[(StartPosition + 2)..i];
-                                string SecondHalf = String[(i + 1)..];
-
-                                string Formatted = (await Script.InternalEvaluateAsync(ToFormat)).LightInspect();
-                                String = FirstHalf + Formatted + SecondHalf;
-                                i = FirstHalf.Length - 1;
-                            }
-                        }
-                        LastChara = Chara;
-                    }
-                    return new StringInstance(Script.Api.String, String);
-                }
-
-                return Token.Type switch {
-                    Phase2TokenType.Nil => Script.Api.Nil,
-                    Phase2TokenType.True => Script.Api.True,
-                    Phase2TokenType.False => Script.Api.False,
-                    Phase2TokenType.String => new StringInstance(Script.Api.String, Token.Value!),
-                    Phase2TokenType.Symbol => Script.Api.GetSymbol(Token.Value!),
-                    Phase2TokenType.Integer => new IntegerInstance(Script.Api.Integer, Token.ValueAsInteger),
-                    Phase2TokenType.Float => new FloatInstance(Script.Api.Float, Token.ValueAsFloat),
-                    _ => throw new InternalErrorException($"{Token.Location}: Cannot create new object from token type {Token.Type}")
-                };
-            }
-            public Instance(Module fromModule) {
-                Module = fromModule;
-                if (this is not PseudoInstance) {
-                    ObjectId = fromModule.Interpreter.GenerateObjectId();
-                }
-            }
-            public Instance(Interpreter interpreter) {
-                Module = null;
-                if (this is not PseudoInstance) {
-                    ObjectId = interpreter.GenerateObjectId();
-                }
-            }
-            public bool TryGetInstanceMethod(string MethodName, out Method? Method) {
-                if (this is not PseudoInstance) {
-                    if (InstanceMethods.TryFindMethod(MethodName, out Method? FindMethod)) {
-                        Method = FindMethod;
-                        return true;
-                    }
-                }
-                return Module!.TryGetInstanceMethod(MethodName, out Method);
-            }
-            public async Task<Instance> CallInstanceMethod(Script Script, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
-                if (this is not PseudoInstance || !TryGetInstanceMethod(MethodName, out Method? Method)) {
-                    return await Module!.CallInstanceMethod(this, Script, MethodName, Arguments, OnYield);
-                }
-                else if (Method!.Name == "method_missing") {
-                    // Get arguments (method_name, *args)
-                    Instances MethodMissingArguments;
-                    if (Arguments != null) {
-                        List<Instance> GivenArguments = new(Arguments.MultiInstance);
-                        GivenArguments.Insert(0, Script.Api.GetSymbol(MethodName));
-                        MethodMissingArguments = new Instances(GivenArguments);
-                    }
-                    else {
-                        MethodMissingArguments = Script.Api.GetSymbol(MethodName);
-                    }
-                    // Call method_missing
-                    return await Method.Call(Script, this, MethodMissingArguments, OnYield);
-                }
-                else {
-                    return await Method.Call(Script, this, Arguments, OnYield);
-                }
-            }
-            public override int GetHashCode() {
-                return Inspect().GetHashCode();
-            }
-        }
-        public abstract class PseudoInstance : Instance {
-            public PseudoInstance(Module module) : base(module) { }
-            public PseudoInstance(Interpreter interpreter) : base(interpreter) { }
-        }
-        public class VariableReference : PseudoInstance {
-            public Instance? Instance;
-            public Phase2Token Token;
-            public bool IsLocalReference => Module == null && Instance == null;
-            public override string Inspect() {
-                return $"{(Module != null ? Module.GetType().Name : (Instance != null ? Instance.Inspect() : Token.Inspect()))} var ref in {Token.Inspect()}";
-            }
-            public VariableReference(Module module, Phase2Token token) : base(module) {
-                Token = token;
-            }
-            public VariableReference(Instance instance, Phase2Token token) : base(instance.Module!.Interpreter) {
-                Instance = instance;
-                Token = token;
-            }
-            public VariableReference(Phase2Token token, Interpreter interpreter) : base(interpreter) {
-                Token = token;
-            }
-        }
-        public class ScopeReference : PseudoInstance {
-            public Scope Scope;
-            public override string Inspect() {
-                return Scope.GetType().Name;
-            }
-            public ScopeReference(Scope scope, Interpreter interpreter) : base(interpreter) {
-                Scope = scope;
-            }
-        }
-        public class MethodReference : PseudoInstance {
-            readonly Method Method;
-            public override object? Object { get { return Method; } }
-            public override string Inspect() {
-                return Method.ToString()!;
-            }
-            public MethodReference(Method method, Interpreter interpreter) : base(interpreter) {
-                Method = method;
-            }
-        }
-        public abstract class ReturnCodeInstance : PseudoInstance {
-            public bool CalledInYieldMethod;
-            public ReturnCodeInstance(Interpreter interpreter) : base(interpreter) {}
-        }
-        public class LoopControlReturnCode : ReturnCodeInstance {
-            public readonly LoopControlType Type;
-            public LoopControlReturnCode(LoopControlType type, Interpreter interpreter) : base(interpreter) {
-                Type = type;
-            }
-        }
-        public class ReturnReturnCode : ReturnCodeInstance {
-            public readonly Instance ReturnValue;
-            public ReturnReturnCode(Instance returnValue, Interpreter interpreter) : base(interpreter) {
-                ReturnValue = returnValue;
-            }
-        }
-        public class StopReturnCode : ReturnCodeInstance {
-            public readonly bool Manual;
-            public StopReturnCode(bool manual, Interpreter interpreter) : base(interpreter) {
-                Manual = manual;
-            }
-        }
-        public class ThrowReturnCode : ReturnCodeInstance {
-            public readonly Instance Identifier;
-            public ThrowReturnCode(Instance identifier, Interpreter interpreter) : base(interpreter) {
-                Identifier = identifier;
-            }
-        }
-        public class ScriptThread {
+        public class ScopeThread {
             public Task? Running { get; private set; }
-            public readonly Script ParentScript;
-            public readonly Script ThreadScript;
+            public Scope? ThreadScope { get; private set; }
+            public readonly Scope ParentScope;
             public Method? Method;
             private static readonly TimeSpan ShortTimeSpan = TimeSpan.FromMilliseconds(5);
-            public ScriptThread(Script parentScript) {
-                ParentScript = parentScript;
-                ThreadScript = new Script(ParentScript.Interpreter, ParentScript.AllowUnsafeApi);
+            public ScopeThread(Scope parentScript) {
+                ParentScope = parentScript;
             }
             public async Task Run(Instances? Arguments = null, Method? OnYield = null) {
                 // If already running, wait until it's finished
@@ -350,272 +56,58 @@ namespace Embers
                     return;
                 }
                 // Add thread to running threads
-                lock (ParentScript.ScriptThreads)
-                    ParentScript.ScriptThreads.Add(this);
+                lock (ParentScope.Threads) ParentScope.Threads.Add(this);
                 try {
                     // Create a new script
-                    ThreadScript.CurrentObject = new Stack<object>(ParentScript.CurrentObject);
+                    ThreadScope = new Scope(ParentScope);
                     // Call the method in the script
-                    Running = Method!.Call(ThreadScript, null, Arguments, OnYield);
-                    while (!ThreadScript.Stopping && !ParentScript.Stopping && !Running.IsCompleted) {
+                    Running = Method!.Call(ThreadScope, null, Arguments, OnYield);
+                    while (!ThreadScope.Stopping && !ParentScope.Stopping && !Running.IsCompleted) {
                         await Running.WaitAsync(ShortTimeSpan);
                     }
                     // Stop the script
-                    ThreadScript.Stop();
+                    ThreadScope?.Stop();
                 }
                 finally {
                     // Decrease thread counter
-                    lock (ParentScript.ScriptThreads)
-                        ParentScript.ScriptThreads.Remove(this);
+                    lock (ParentScope.Threads) ParentScope.Threads.Remove(this);
                 }
             }
             public void Stop() {
-                ThreadScript.Stop();
+                ThreadScope?.Stop();
             }
         }
-        public class Method {
-            public string? Name {get; private set;}
-            public Func<MethodInput, Task<Instance>> Function {get; private set;}
-            public readonly IntRange ArgumentCountRange;
-            public readonly List<MethodArgumentExpression> ArgumentNames;
-            public readonly bool Unsafe;
-            public AccessModifier AccessModifier { get; private set; }
-            public Method(Func<MethodInput, Task<Instance>> function, IntRange? argumentCountRange, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false, AccessModifier accessModifier = AccessModifier.Public) {
-                Function = function;
-                ArgumentCountRange = argumentCountRange ?? new IntRange();
-                ArgumentNames = argumentNames ?? new();
-                Unsafe = IsUnsafe;
-                AccessModifier = accessModifier;
-            }
-            public Method(Func<MethodInput, Task<Instance>> function, int argumentCount, List<MethodArgumentExpression>? argumentNames = null, bool IsUnsafe = false, AccessModifier accessModifier = AccessModifier.Public) {
-                Function = function;
-                ArgumentCountRange = new IntRange(argumentCount, argumentCount);
-                ArgumentNames = argumentNames ?? new();
-                Unsafe = IsUnsafe;
-                AccessModifier = accessModifier;
-            }
-            public async Task<Instance> Call(Script Script, Instance? OnInstance, Instances? Arguments = null, Method? OnYield = null, BreakHandleType BreakHandleType = BreakHandleType.Invalid, bool CatchReturn = true, bool BypassAccessModifiers = false) {
-                if (Unsafe && !Script.AllowUnsafeApi)
-                    throw new RuntimeException($"{Script.ApproximateLocation}: The method '{Name}' is unavailable since AllowUnsafeApi is disabled for this script.");
-                if (!BypassAccessModifiers) {
-                    if (AccessModifier == AccessModifier.Private) {
-                        if (OnInstance != null && Script.CurrentModule != OnInstance.Module!)
-                            throw new RuntimeException($"{Script.ApproximateLocation}: Private method '{Name}' called for {OnInstance.Module!.Name}.");
-                    }
-                    else if (AccessModifier == AccessModifier.Protected) {
-                        if (OnInstance != null && !Script.CurrentModule.InheritsFrom(OnInstance.Module!))
-                            throw new RuntimeException($"{Script.ApproximateLocation}: Protected method '{Name}' called for {OnInstance.Module!.Name}.");
-                    }
-                }
 
-                Arguments ??= Instances.None;
-                if (ArgumentCountRange.IsInRange(Arguments.Count)) {
-                    // Create temporary scope
-                    if (OnInstance != null) {
-                        Script.CurrentObject.Push(OnInstance.Module!);
-                        Script.CurrentObject.Push(OnInstance);
-                    }
-                    else if (OnInstance != null) {
-                        Script.CurrentObject.Push(OnInstance.Module!);
-                    }
-                    MethodScope MethodScope = new(this);
-                    Script.CurrentObject.Push(MethodScope);
-                    
-                    try {
-                        // Create method input
-                        MethodInput Input = new(Script, OnInstance, Arguments, OnYield);
-                        // Set argument variables
-                        await SetArgumentVariables(MethodScope, Input);
-                        // Call method
-                        Instance ReturnValue = await Function(Input);
-                        // Handle return codes
-                        if (ReturnValue is ReturnCodeInstance ReturnCodeInstance) {
-                            if (ReturnCodeInstance.CalledInYieldMethod) {
-                                ReturnCodeInstance.CalledInYieldMethod = false;
-                            }
-                            else {
-                                if (ReturnValue is LoopControlReturnCode LoopControlReturnCode) {
-                                    // Break
-                                    if (LoopControlReturnCode.Type == LoopControlType.Break) {
-                                        if (BreakHandleType != BreakHandleType.Rethrow) {
-                                            if (BreakHandleType == BreakHandleType.Destroy)
-                                                ReturnValue = Script.Api.Nil;
-                                            else
-                                                throw new SyntaxErrorException($"{Script.ApproximateLocation}: Invalid break (break must be in a loop)");
-                                        }
-                                    }
-                                }
-                                // Return
-                                else if (ReturnValue is ReturnReturnCode ReturnReturnCode) {
-                                    if (CatchReturn) {
-                                        ReturnValue = ReturnReturnCode.ReturnValue;
-                                    }
-                                }
-                            }
-                        }
-                        // Return method return value
-                        return ReturnValue;
-                    }
-                    finally {
-                        // Step back a scope
-                        Script.CurrentObject.Pop();
-                        if (OnInstance != null) {
-                            Script.CurrentObject.Pop();
-                            Script.CurrentObject.Pop();
-                        }
-                        else if (OnInstance != null) {
-                            Script.CurrentObject.Pop();
-                        }
-                    }
-                }
-                else {
-                    throw new RuntimeException($"{Script.ApproximateLocation}: Wrong number of arguments for '{Name}' (given {Arguments.Count}, expected {ArgumentCountRange})");
-                }
-            }
-            public void SetName(string? name) {
-                Name = name;
-                if (name == "initialize") AccessModifier = AccessModifier.Private;
-            }
-            public void ChangeFunction(Func<MethodInput, Task<Instance>> function) {
-                Function = function;
-            }
-            public async Task SetArgumentVariables(Scope Scope, MethodInput Input) {
-                Instances Arguments = Input.Arguments;
-                // Set argument variables
-                int ArgumentNameIndex = 0;
-                int ArgumentIndex = 0;
-                while (ArgumentNameIndex < ArgumentNames.Count) {
-                    MethodArgumentExpression ArgumentName = ArgumentNames[ArgumentNameIndex];
-                    string ArgumentIdentifier = ArgumentName.ArgumentName.Value!;
-                    // Declare argument as variable in local scope
-                    if (ArgumentIndex < Arguments.Count) {
-                        // Splat argument
-                        if (ArgumentName.SplatType == SplatType.Single) {
-                            // Add splat arguments while there will be enough remaining arguments
-                            List<Instance> SplatArguments = new();
-                            while (Arguments.Count - ArgumentIndex >= ArgumentNames.Count - ArgumentNameIndex) {
-                                SplatArguments.Add(Arguments[ArgumentIndex]);
-                                ArgumentIndex++;
-                            }
-                            if (SplatArguments.Count != 0)
-                                ArgumentIndex--;
-                            // Add extra ungiven double splat argument if available
-                            if (ArgumentNameIndex + 1 < ArgumentNames.Count && ArgumentNames[ArgumentNameIndex + 1].SplatType == SplatType.Double
-                                && Arguments[^1] is not HashArgumentsInstance)
-                            {
-                                SplatArguments.Add(Arguments[ArgumentIndex]);
-                                ArgumentIndex++;
-                            }
-                            // Create array from splat arguments
-                            ArrayInstance SplatArgumentsArray = new(Input.Api.Array, SplatArguments);
-                            // Add array to scope
-                            Scope.LocalVariables[ArgumentIdentifier] = SplatArgumentsArray;
-                        }
-                        // Double splat argument
-                        else if (ArgumentName.SplatType == SplatType.Double && Arguments[^1] is HashArgumentsInstance DoubleSplatArgumentsHash) {
-                            // Add hash to scope
-                            Scope.LocalVariables[ArgumentIdentifier] = DoubleSplatArgumentsHash.Value;
-                        }
-                        // Normal argument
-                        else {
-                            Scope.LocalVariables[ArgumentIdentifier] = Arguments[ArgumentIndex];
-                        }
-                    }
-                    // Optional argument not given
-                    else {
-                        Instance DefaultValue = ArgumentName.DefaultValue != null ? (await Input.Script.InterpretExpressionAsync(ArgumentName.DefaultValue)) : Input.Api.Nil;
-                        Scope.LocalVariables[ArgumentIdentifier] = DefaultValue;
-                    }
-                    ArgumentNameIndex++;
-                    ArgumentIndex++;
-                }
+        public IEnumerator<Scope> GetEnumerator() {
+            Scope FindScope = this;
+            while (true) {
+                yield return FindScope;
+                if (FindScope.ParentScope == null) break;
+                FindScope = FindScope.ParentScope;
             }
         }
-        public class MethodInput {
-            public readonly Script Script;
-            public readonly Interpreter Interpreter;
-            public readonly Api Api;
-            public readonly Instances Arguments;
-            public readonly Method? OnYield;
-            public Instance Instance => InputInstance!;
-            readonly Instance? InputInstance;
-            public MethodInput(Script script, Instance? instance, Instances arguments, Method? onYield = null) {
-                Script = script;
-                Interpreter = script.Interpreter;
-                Api = Interpreter.Api;
-                InputInstance = instance;
-                Arguments = arguments;
-                OnYield = onYield;
-            }
-            public DebugLocation Location => Script.ApproximateLocation;
-        }
-        public class Instances {
-            // At least one of Instance or InstanceList will be null
-            readonly Instance? Instance;
-            readonly List<Instance>? InstanceList;
-            public readonly int Count;
-
-            public static readonly Instances None = new();
-
-            public Instances(Instance? instance = null) {
-                Instance = instance;
-                Count = instance != null ? 1 : 0;
-            }
-            public Instances(List<Instance> instanceList) {
-                InstanceList = instanceList;
-                Count = instanceList.Count;
-            }
-            public Instances(params Instance[] instanceArray) {
-                InstanceList = instanceArray.ToList();
-                Count = InstanceList.Count;
-            }
-            public static implicit operator Instances(Instance Instance) {
-                return new Instances(Instance);
-            }
-            public static implicit operator Instances(List<Instance> InstanceList) {
-                return new Instances(InstanceList);
-            }
-            public static implicit operator Instance(Instances Instances) {
-                if (Instances.Count != 1) {
-                    if (Instances.Count == 0)
-                        throw new RuntimeException($"Cannot implicitly cast Instances to Instance because there are none");
-                    else
-                        throw new RuntimeException($"Cannot implicitly cast Instances to Instance because {Instances.Count - 1} instances would be overlooked");
-                }
-                return Instances[0];
-            }
-            public Instance this[Index i] => InstanceList != null
-                ? InstanceList[i]
-                : (i.Value == 0 && Instance != null ? Instance : throw new ApiException("Index was outside the range of the instances"));
-            public IEnumerator<Instance> GetEnumerator() {
-                if (InstanceList != null) {
-                    for (int i = 0; i < InstanceList.Count; i++) {
-                        yield return InstanceList[i];
-                    }
-                }
-                else if (Instance != null) {
-                    yield return Instance;
+        Scope FindScopeWhere(Func<Scope, bool> Condition) {
+            foreach (Scope Scope in this) {
+                if (Condition(Scope)) {
+                    return Scope;
                 }
             }
-            public Instance SingleInstance => Count == 1
-                ? this[0]
-                : throw new SyntaxErrorException($"Unexpected instances (expected one, got {Count})");
-            public List<Instance> MultiInstance => InstanceList ?? (Instance != null
-                ? new List<Instance>() { Instance }
-                : new List<Instance>());
+            throw new InternalErrorException("No scope matched with condition");
         }
 
         public async Task Warn(string Message) {
             await CurrentInstance.CallInstanceMethod(this, "warn", new StringInstance(Api.String, Message));
         }
         public Module CreateModule(string Name, Module? Parent = null, Module? InheritsFrom = null) {
-            Parent ??= Interpreter.RootModule;
+            Parent ??= CurrentModule;
+            InheritsFrom ??= Interpreter.Class;
             Module NewModule = new(Name, Parent, InheritsFrom);
             Parent.Constants[Name] = new ModuleReference(NewModule);
             return NewModule;
         }
         public Class CreateClass(string Name, Module? Parent = null, Module? InheritsFrom = null) {
-            Parent ??= Interpreter.RootModule;
+            Parent ??= CurrentModule;
+            InheritsFrom ??= Interpreter.Class;
             Class NewClass = new(Name, Parent, InheritsFrom);
             Parent.Constants[Name] = new ModuleReference(NewClass);
             return NewClass;
@@ -632,63 +124,9 @@ namespace Embers
             Method NewMethod = new(Function, ArgumentCount, IsUnsafe: IsUnsafe, accessModifier: CurrentAccessModifier);
             return NewMethod;
         }
-        async Task<T> CreateTemporaryClassScope<T>(Module Module, Func<Task<T>> Do) {
-            // Create temporary class/module scope
-            CurrentObject.Push(Module);
-            try {
-                // Do action
-                return await Do();
-            }
-            finally {
-                // Step back a class/module
-                CurrentObject.Pop();
-            }
-        }
-        async Task<T> CreateTemporaryInstanceScope<T>(Instance Instance, Func<Task<T>> Do) {
-            // Create temporary instance scope
-            CurrentObject.Push(Instance);
-            try {
-                // Do action
-                return await Do();
-            }
-            finally {
-                // Step back an instance
-                CurrentObject.Pop();
-            }
-        }
-        async Task<T> CreateTemporaryScope<T>(Scope Scope, Func<Task<T>> Do) {
-            // Create temporary scope
-            CurrentObject.Push(Scope);
-            try {
-                // Do action
-                return await Do();
-            }
-            finally {
-                // Step back a scope
-                CurrentObject.Pop();
-            }
-        }
-        async Task<T> CreateTemporaryScope<T>(Func<Task<T>> Do) {
-            return await CreateTemporaryScope(new Scope(), Do);
-        }
-        async Task CreateTemporaryScope(Scope Scope, Func<Task> Do) {
-            // Create temporary scope
-            CurrentObject.Push(Scope);
-            try {
-                // Do action
-                await Do();
-            }
-            finally {
-                // Step back a scope
-                CurrentObject.Pop();
-            }
-        }
-        async Task CreateTemporaryScope(Func<Task> Do) {
-            await CreateTemporaryScope(new Scope(), Do);
-        }
         public bool TryGetLocalVariable(string Name, out Instance? LocalVariable) {
-            foreach (object Object in CurrentObject) {
-                if (Object is Block Block && Block.LocalVariables.TryGetValue(Name, out Instance? FindLocalVariable)) {
+            foreach (Scope Scope in this) {
+                if (Scope.LocalVariables.TryGetValue(Name, out Instance? FindLocalVariable)) {
                     LocalVariable = FindLocalVariable;
                     return true;
                 }
@@ -697,8 +135,8 @@ namespace Embers
             return false;
         }
         public bool TryGetLocalConstant(string Name, out Instance? LocalConstant) {
-            foreach (object Object in CurrentObject) {
-                if (Object is Block Block && Block.Constants.TryGetValue(Name, out Instance? FindLocalConstant)) {
+            foreach (Scope Scope in this) {
+                if (Scope.Constants.TryGetValue(Name, out Instance? FindLocalConstant) || (Scope.LocalCurrentModule != null && Scope.LocalCurrentModule.Constants.TryGetValue(Name, out FindLocalConstant))) {
                     LocalConstant = FindLocalConstant;
                     return true;
                 }
@@ -706,62 +144,55 @@ namespace Embers
             LocalConstant = null;
             return false;
         }
-        public bool TryGetLocalInstanceMethod(string Name, out Method? LocalInstanceMethod) {
-            foreach (object Object in CurrentObject) {
-                if (Object is Instance Instance && Instance.TryGetInstanceMethod(Name, out Method? FindLocalInstanceMethod)) {
+        public bool TryGetLocalInstanceMethod(string Name, out Method? LocalInstanceMethod, out Instance? OnInstance) {
+            foreach (Scope Scope in this) {
+                if (Scope.CurrentInstance != null && Scope.CurrentInstance.TryGetInstanceMethod(Name, out Method? FindLocalInstanceMethod)) {
                     LocalInstanceMethod = FindLocalInstanceMethod;
+                    OnInstance = Scope.CurrentInstance;
                     return true;
                 }
             }
             LocalInstanceMethod = null;
+            OnInstance = null;
             return false;
         }
         public Dictionary<string, Instance> GetAllLocalVariables() {
             Dictionary<string, Instance> LocalVariables = new();
-            foreach (object Object in CurrentObject) {
-                if (Object is Block Block) {
-                    foreach (KeyValuePair<string, Instance> LocalVariable in Block.LocalVariables) {
-                        LocalVariables[LocalVariable.Key] = LocalVariable.Value;
-                    }
+            foreach (Scope Scope in this) {
+                foreach (KeyValuePair<string, Instance> LocalVariable in Scope.LocalVariables) {
+                    LocalVariables[LocalVariable.Key] = LocalVariable.Value;
                 }
             }
             return LocalVariables;
         }
         public Dictionary<string, Instance> GetAllLocalConstants() {
             Dictionary<string, Instance> Constants = new();
-            foreach (object Object in CurrentObject) {
-                if (Object is Block Block) {
-                    foreach (KeyValuePair<string, Instance> Constant in Block.Constants) {
+            foreach (Scope Scope in this) {
+                if (Scope.CurrentModule != null) {
+                    foreach (KeyValuePair<string, Instance> Constant in Scope.CurrentModule.Constants) {
                         Constants[Constant.Key] = Constant.Value;
                     }
-                    if (Object is Module) break;
                 }
+                foreach (KeyValuePair<string, Instance> Constant in Scope.Constants) {
+                    Constants[Constant.Key] = Constant.Value;
+                }
+                if (Scope.CurrentModule != null) break;
             }
             return Constants;
         }
         internal Method? ToYieldMethod(Method? Current) {
             // This makes yield methods (do ... end) be called back in the scope they're defined in, not in the scope of the method.
             // e.g. 5.times do ... end should be called in the scope of the line, not in the instance of 5.
-            // If you're modifying this function, ensure you're referencing Input.Script and not this script.
             if (Current != null) {
                 Func<MethodInput, Task<Instance>> CurrentFunction = Current.Function;
-                object[] OriginalSnapshot = CurrentObject.ToArray();
                 Current.ChangeFunction(async Input => {
-                    object[] TemporarySnapshot = Input.Script.CurrentObject.ToArray();
-                    Input.Script.CurrentObject.ReplaceContentsWith(OriginalSnapshot);
-                    try {
-                        Instance Result = await Input.Script.CreateTemporaryScope(async () => {
-                            await Current.SetArgumentVariables(Input.Script.CurrentScope, Input);
-                            return await CurrentFunction(Input);
-                        });
-                        if (Result is ReturnCodeInstance ReturnCodeInstance) {
-                            ReturnCodeInstance.CalledInYieldMethod = true;
-                        }
-                        return Result;
+                    Input.OverrideScope(this);
+                    await Current.SetArgumentVariables(Input.Scope, Input);
+                    Instance Result = await CurrentFunction(Input);
+                    if (Result is ReturnCodeInstance ReturnCodeInstance) {
+                        ReturnCodeInstance.CalledInYieldMethod = true;
                     }
-                    finally {
-                        Input.Script.CurrentObject.ReplaceContentsWith(TemporarySnapshot);
-                    }
+                    return Result;
                 });
             }
             return Current;
@@ -907,10 +338,10 @@ namespace Embers
                                     }
                                 }
                                 // Method
-                                else if (TryGetLocalInstanceMethod(ObjectTokenExpression.Token.Value!, out Method? Method)) {
+                                else if (TryGetLocalInstanceMethod(ObjectTokenExpression.Token.Value!, out Method? Method, out Instance? OnInstance)) {
                                     // Call local method
                                     if (ReturnType == ReturnType.InterpretResult) {
-                                        return await Method!.Call(this, CurrentInstance);
+                                        return await Method!.Call(this, OnInstance!);
                                     }
                                     // Return method reference
                                     else {
@@ -919,7 +350,7 @@ namespace Embers
                                 }
                                 // Undefined
                                 else {
-                                    throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Undefined local variable or method '{ObjectTokenExpression.Token.Value!}' for {CurrentObject.Peek()}");
+                                    throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Undefined local variable or method '{ObjectTokenExpression.Token.Value!}' for {this}");
                                 }
                             }
                             // Global variable
@@ -952,10 +383,10 @@ namespace Embers
                                     }
                                 }
                                 // Method
-                                else if (TryGetLocalInstanceMethod(ObjectTokenExpression.Token.Value!, out Method? Method)) {
+                                else if (TryGetLocalInstanceMethod(ObjectTokenExpression.Token.Value!, out Method? Method, out Instance? OnInstance)) {
                                     // Call local method
                                     if (ReturnType == ReturnType.InterpretResult) {
-                                        return await Method!.Call(this, CurrentInstance);
+                                        return await Method!.Call(this, OnInstance!);
                                     }
                                     // Return method reference
                                     else {
@@ -996,7 +427,7 @@ namespace Embers
                                     }
                                 }
                                 else {
-                                    throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Uninitialized class variable '{ObjectTokenExpression.Token.Value!}' for {CurrentModule}");
+                                    throw new RuntimeException($"{ObjectTokenExpression.Token.Location}: Uninitialized class variable '{ObjectTokenExpression.Token.Value!}' for {CurrentModule.Name}");
                                 }
                             }
                             // Error
@@ -1013,7 +444,7 @@ namespace Embers
         }
         async Task<Instance> InterpretIfExpression(IfExpression IfExpression) {
             if (IfExpression.Condition == null || (await InterpretExpressionAsync(IfExpression.Condition)).IsTruthy != IfExpression.Inverse) {
-                return await InternalInterpretAsync(IfExpression.Statements, CurrentOnYield);
+                return await new Scope(this, CurrentOnYield).InternalInterpretAsync(IfExpression.Statements);
             }
             return Api.Nil;
         }
@@ -1055,7 +486,7 @@ namespace Embers
                 }
                 // Run when statements
                 if (WhenApplies) {
-                    return await InternalInterpretAsync(Branch.Statements, CurrentOnYield);
+                    return await new Scope(this, CurrentOnYield).InternalInterpretAsync(Branch.Statements);
                 }
             }
             return Api.Nil;
@@ -1076,7 +507,7 @@ namespace Embers
         }
         async Task<Instance> InterpretWhileExpression(WhileExpression WhileExpression) {
             while ((await InterpretExpressionAsync(WhileExpression.Condition!)).IsTruthy != WhileExpression.Inverse) {
-                Instance Result = await InternalInterpretAsync(WhileExpression.Statements, CurrentOnYield);
+                Instance Result = await new Scope(this, CurrentOnYield).InternalInterpretAsync(WhileExpression.Statements);
                 if (Result is LoopControlReturnCode LoopControlReturnCode) {
                     if (LoopControlReturnCode.Type is LoopControlType.Break) {
                         break;
@@ -1096,9 +527,7 @@ namespace Embers
         }
         async Task<Instance> InterpretWhileStatement(WhileStatement WhileStatement) {
             // Run statements
-            await CreateTemporaryScope(async () =>
-                await InterpretExpressionAsync(WhileStatement.WhileExpression)
-            );
+            await new Scope(this).InterpretExpressionAsync(WhileStatement.WhileExpression);
             return Api.Nil;
         }
         async Task<Instance> InterpretForStatement(ForStatement ForStatement) {
@@ -1185,11 +614,9 @@ namespace Embers
                 // Create or patch class
                 Module NewModule;
                 // Patch class
-                if ((ClassNameRef.Module != null && ClassNameRef.Module.Constants.TryGetValue(ClassName, out Instance? ConstantValue) || ClassNameRef.Module == null && CurrentModule.Constants.TryGetValue(ClassName, out ConstantValue))
-                    && ConstantValue is ModuleReference ModuleReference)
-                {
+                if ((ClassNameRef.Module ?? CurrentModule).Constants.TryGetValue(ClassName, out Instance? ConstantValue) && ConstantValue is ModuleReference ModuleReference) {
                     if (InheritsFrom != null) {
-                        throw new SyntaxErrorException($"{DefineClassStatement.Location}: Patch for already defined class/module cannot inherit");
+                        throw new SyntaxErrorException($"{DefineClassStatement.Location}: Cannot change the inheritance of a class/module");
                     }
                     NewModule = ModuleReference.Module!;
                 }
@@ -1200,7 +627,7 @@ namespace Embers
                             NewModule = CreateModule(ClassName, ClassNameRef.Module, InheritsFrom);
                         }
                         else {
-                            NewModule = CreateModule(ClassName, (ClassNameRef.Instance ?? CurrentInstance).Module, InheritsFrom);
+                            NewModule = CreateModule(ClassName, (ClassNameRef.Instance ?? CurrentInstance).Module!, InheritsFrom);
                         }
                     }
                     else {
@@ -1208,20 +635,13 @@ namespace Embers
                             NewModule = CreateClass(ClassName, ClassNameRef.Module, InheritsFrom);
                         }
                         else {
-                            NewModule = CreateClass(ClassName, (ClassNameRef.Instance ?? CurrentInstance).Module, InheritsFrom);
+                            NewModule = CreateClass(ClassName, (ClassNameRef.Instance ?? CurrentInstance).Module!, InheritsFrom);
                         }
                     }
                 }
-
                 // Interpret class statements
-                AccessModifier PreviousAccessModifier = CurrentAccessModifier;
-                CurrentAccessModifier = AccessModifier.Public;
-                await CreateTemporaryClassScope(NewModule, async () =>
-                    await CreateTemporaryInstanceScope(new ModuleReference(NewModule), async () =>
-                        await InternalInterpretAsync(DefineClassStatement.BlockStatements, CurrentOnYield)
-                    )
-                );
-                CurrentAccessModifier = PreviousAccessModifier;
+                Scope ModuleScope = new(this, CurrentOnYield) { CurrentModule = NewModule, CurrentInstance = new ModuleReference(NewModule), CurrentAccessModifier = AccessModifier.Public };
+                await ModuleScope.InternalInterpretAsync(DefineClassStatement.BlockStatements);
             }
             else {
                 throw new InternalErrorException($"{DefineClassStatement.Location}: Invalid class/module name: {ClassNameObject}");
@@ -1245,8 +665,8 @@ namespace Embers
         }
         async Task<Instance> InterpretSuperExpression(SuperExpression SuperExpression) {
             Module CurrentModule = this.CurrentModule;
-            string? SuperMethodName = CurrentMethodScope.Method?.Name;
-            if (CurrentModule != Interpreter.RootModule && CurrentModule.SuperModule is Module SuperModule) {
+            string? SuperMethodName = CurrentMethod?.Name;
+            if (CurrentModule.SuperModule is Module SuperModule) {
                 if (SuperMethodName != null && SuperModule.TryGetInstanceMethod(SuperMethodName, out Method? SuperMethod)) {
                     Instances? Arguments = null;
                     if (SuperExpression.Arguments != null) {
@@ -1318,17 +738,13 @@ namespace Embers
                     Instance ConditionResult = await InterpretExpressionAsync(Branch.Condition);
                     if (ConditionResult.IsTruthy != Branch.Inverse) {
                         // Run statements
-                        return await CreateTemporaryScope(async () =>
-                            await InternalInterpretAsync(Branch.Statements, CurrentOnYield)
-                        );
+                        return await new Scope(this, CurrentOnYield).InternalInterpretAsync(Branch.Statements);
                     }
                 }
                 // Else
                 else {
                     // Run statements
-                    return await CreateTemporaryScope(async () =>
-                        await InternalInterpretAsync(Branch.Statements, CurrentOnYield)
-                    );
+                    return await new Scope(this, CurrentOnYield).InternalInterpretAsync(Branch.Statements);
                 }
             }
             return Api.Nil;
@@ -1336,12 +752,9 @@ namespace Embers
         async Task<Instance> InterpretBeginBranchesStatement(BeginBranchesStatement BeginBranchesStatement) {
             // Begin
             BeginStatement BeginBranch = (BeginStatement)BeginBranchesStatement.Branches[0];
-            Exception? ExceptionToRescue = null;
+            Exception ExceptionToRescue;
             try {
-                await CreateTemporaryScope(async () =>
-                    // Run statements
-                    await InternalInterpretAsync(BeginBranch.Statements, CurrentOnYield)
-                );
+                return await new Scope(this, CurrentOnYield).InternalInterpretAsync(BeginBranch.Statements);
             }
             catch (Exception Ex) {
                 ExceptionToRescue = Ex;
@@ -1355,7 +768,7 @@ namespace Embers
                     BeginComponentStatement Branch = BeginBranchesStatement.Branches[i];
                     if (Branch is RescueStatement RescueStatement) {
                         // Get or create the exception to rescue
-                        ExceptionsTable.TryGetValue(ExceptionToRescue, out ExceptionInstance? ExceptionInstance);
+                        Interpreter.ExceptionsTable.TryGetValue(ExceptionToRescue, out ExceptionInstance? ExceptionInstance);
                         ExceptionInstance ??= new ExceptionInstance(Api.RuntimeError, ExceptionToRescue);
                         // Get the rescuing exception type
                         Module RescuingExceptionModule = RescueStatement.Exception != null
@@ -1371,13 +784,13 @@ namespace Embers
                         // Run the statements in the rescue block
                         if (CanRescue) {
                             Rescued = true;
-                            await CreateTemporaryScope(async () => {
-                                // Set exception variable to exception instance
-                                if (RescueStatement.ExceptionVariable != null) {
-                                    CurrentScope.LocalVariables[RescueStatement.ExceptionVariable.Value!] = ExceptionInstance;
-                                }
-                                await InternalInterpretAsync(RescueStatement.Statements, CurrentOnYield);
-                            });
+                            Scope RescueScope = new(this, CurrentOnYield);
+                            // Set exception variable to exception instance
+                            if (RescueStatement.ExceptionVariable != null) {
+                                RescueScope.LocalVariables[RescueStatement.ExceptionVariable.Value!] = ExceptionInstance;
+                            }
+                            // Run statements
+                            await RescueScope.InternalInterpretAsync(RescueStatement.Statements);
                             break;
                         }
                     }
@@ -1391,15 +804,27 @@ namespace Embers
                 BeginComponentStatement Branch = BeginBranchesStatement.Branches[i];
                 if (Branch is EnsureStatement || (Branch is RescueElseStatement && !Rescued)) {
                     // Run statements
-                    await CreateTemporaryScope(async () =>
-                        await InternalInterpretAsync(Branch.Statements, CurrentOnYield)
-                    );
+                    await new Scope(this, CurrentOnYield).InternalInterpretAsync(Branch.Statements);
                 }
             }
 
             return Api.Nil;
         }
         async Task AssignToVariable(VariableReference Variable, Instance Value) {
+            Scope FindMostAppropriateScope(Func<Scope, bool> IsAppropriate) {
+                Scope SetScope = this;
+                foreach (Scope Scope in this) {
+                    if (IsAppropriate(Scope)) {
+                        SetScope = Scope;
+                        break;
+                    }
+                    else if (Scope.CurrentModule != null || Scope.CurrentInstance != null) {
+                        break;
+                    }
+                }
+                return SetScope;
+            }
+
             switch (Variable.Token.Type) {
                 case Phase2TokenType.LocalVariableOrMethod:
                     // call instance.variable=
@@ -1408,28 +833,24 @@ namespace Embers
                     }
                     // set variable =
                     else {
-                        // Find appropriate local variable block
-                        Block SetBlock = CurrentBlock;
-                        foreach (object Object in CurrentObject) {
-                            if (Object is Block Block) {
-                                if (Block.LocalVariables.ContainsKey(Variable.Token.Value!)) {
-                                    SetBlock = Block;
-                                    break;
-                                }
-                            }
-                            else break;
-                        }
+                        // Find most appropriate local variable scope
+                        Scope SetLocalVariableScope = FindMostAppropriateScope(Scope => Scope.LocalVariables.ContainsKey(Variable.Token.Value!));
                         // Set local variable
-                        SetBlock.LocalVariables[Variable.Token.Value!] = Value;
+                        SetLocalVariableScope.LocalVariables[Variable.Token.Value!] = Value;
                     }
                     break;
                 case Phase2TokenType.GlobalVariable:
                     Interpreter.GlobalVariables[Variable.Token.Value!] = Value;
                     break;
                 case Phase2TokenType.ConstantOrMethod:
-                    if (CurrentBlock.Constants.ContainsKey(Variable.Token.Value!))
+                    // Find appropriate constant scope
+                    Scope SetLocalConstantScope = FindMostAppropriateScope(Scope => Scope.Constants.ContainsKey(Variable.Token.Value!));
+                    // Warn if constant already initialized
+                    if (SetLocalConstantScope.Constants.ContainsKey(Variable.Token.Value!)) {
                         await Warn($"{Variable.Token.Location}: Already initialized constant '{Variable.Token.Value!}'");
-                    CurrentBlock.Constants[Variable.Token.Value!] = Value;
+                    }
+                    // Set local constant
+                    SetLocalConstantScope.Constants[Variable.Token.Value!] = Value;
                     break;
                 case Phase2TokenType.InstanceVariable:
                     CurrentInstance.InstanceVariables[Variable.Token.Value!] = Value;
@@ -1536,7 +957,7 @@ namespace Embers
                     if (TryGetLocalVariable(ObjectToken.Token.Value!, out _)) {
                         return new StringInstance(Api.String, "local-variable");
                     }
-                    else if (TryGetLocalInstanceMethod(ObjectToken.Token.Value!, out _)) {
+                    else if (TryGetLocalInstanceMethod(ObjectToken.Token.Value!, out _, out _)) {
                         return new StringInstance(Api.String, "method");
                     }
                     else {
@@ -1555,7 +976,7 @@ namespace Embers
                     if (TryGetLocalConstant(ObjectToken.Token.Value!, out _)) {
                         return new StringInstance(Api.String, "constant");
                     }
-                    else if (TryGetLocalInstanceMethod(ObjectToken.Token.Value!, out _)) {
+                    else if (TryGetLocalInstanceMethod(ObjectToken.Token.Value!, out _, out _)) {
                         return new StringInstance(Api.String, "method");
                     }
                     else {
@@ -1621,7 +1042,7 @@ namespace Embers
             FoundVariable,
             HypotheticalVariable
         }
-        async Task<Instance> InterpretExpressionAsync(Expression Expression, ReturnType ReturnType = ReturnType.InterpretResult) {
+        internal async Task<Instance> InterpretExpressionAsync(Expression Expression, ReturnType ReturnType = ReturnType.InterpretResult) {
             // Set approximate location
             ApproximateLocation = Expression.Location;
 
@@ -1671,25 +1092,17 @@ namespace Embers
                 _ => throw new InternalErrorException($"{Expression.Location}: Not sure how to interpret expression {Expression.GetType().Name} ({Expression.Inspect()})"),
             };
         }
-        internal async Task<Instance> InternalInterpretAsync(List<Expression> Statements, Method? OnYield = null) {
-            try {
-                // Set on yield
-                CurrentOnYield = OnYield;
-                // Interpret statements
-                Instance LastInstance = Api.Nil;
-                foreach (Expression Statement in Statements) {
-                    LastInstance = await InterpretExpressionAsync(Statement);
-                    if (LastInstance is ReturnCodeInstance) {
-                        break;
-                    }
+        internal async Task<Instance> InternalInterpretAsync(List<Expression> Statements) {
+            // Interpret statements
+            Instance LastInstance = Api.Nil;
+            foreach (Expression Statement in Statements) {
+                LastInstance = await InterpretExpressionAsync(Statement);
+                if (LastInstance is ReturnCodeInstance) {
+                    break;
                 }
-                // Return last instance
-                return LastInstance;
             }
-            finally {
-                // Reset on yield
-                CurrentOnYield = null;
-            }
+            // Return last instance
+            return LastInstance;
         }
         internal async Task<Instance> InternalEvaluateAsync(string Code) {
             // Get statements from code
@@ -1700,34 +1113,23 @@ namespace Embers
             return await InternalInterpretAsync(Statements);
         }
 
-        public async Task<Instance> InterpretAsync(List<Expression> Statements, Method? OnYield = null) {
-            // Debounce
-            if (Running) throw new ApiException("The script is already running.");
-            Running = true;
-
+        public async Task<Instance> InterpretAsync(List<Expression> Statements) {
             // Interpret statements and store the result
-            Instance LastInstance;
-            try {
-                LastInstance = await InternalInterpretAsync(Statements, OnYield);
-                if (LastInstance is LoopControlReturnCode LoopControlReturnCode) {
-                    throw new SyntaxErrorException($"{ApproximateLocation}: Invalid {LoopControlReturnCode.Type} (must be in a loop)");
-                }
-                else if (LastInstance is ReturnReturnCode ReturnReturnCode) {
-                    return ReturnReturnCode.ReturnValue;
-                }
-                else if (LastInstance is StopReturnCode) {
-                    return Api.Nil;
-                }
-                else if (LastInstance is ThrowReturnCode ThrowReturnCode) {
-                    throw new RuntimeException($"{ApproximateLocation}: uncaught throw {ThrowReturnCode.Identifier.Inspect()}");
-                }
-                else if (LastInstance is ReturnCodeInstance) {
-                    throw new RuntimeException($"{ApproximateLocation}: Invalid {LastInstance.GetType().Name}");
-                }
+            Instance LastInstance = await InternalInterpretAsync(Statements);
+            if (LastInstance is LoopControlReturnCode LoopControlReturnCode) {
+                throw new SyntaxErrorException($"{ApproximateLocation}: Invalid {LoopControlReturnCode.Type} (must be in a loop)");
             }
-            finally {
-                // Deactivate debounce
-                Running = false;
+            else if (LastInstance is ReturnReturnCode ReturnReturnCode) {
+                return ReturnReturnCode.ReturnValue;
+            }
+            else if (LastInstance is StopReturnCode) {
+                return Api.Nil;
+            }
+            else if (LastInstance is ThrowReturnCode ThrowReturnCode) {
+                throw new RuntimeException($"{ApproximateLocation}: uncaught throw {ThrowReturnCode.Identifier.Inspect()}");
+            }
+            else if (LastInstance is ReturnCodeInstance) {
+                throw new RuntimeException($"{ApproximateLocation}: Invalid {LastInstance.GetType().Name}");
             }
             return LastInstance;
         }
@@ -1748,10 +1150,10 @@ namespace Embers
             return EvaluateAsync(Code).Result;
         }
         public async Task WaitForThreadsAsync() {
-            HashSet<ScriptThread> CurrentScriptThreads = new(ScriptThreads);
-            foreach (ScriptThread ScriptThread in CurrentScriptThreads) {
-                if (ScriptThread.Running != null) {
-                    await ScriptThread.Running;
+            HashSet<ScopeThread> CurrentThreads = new(Threads);
+            foreach (ScopeThread Thread in CurrentThreads) {
+                if (Thread.Running != null && !Thread.Running.IsCompleted) {
+                    await Thread.Running;
                 }
             }
         }
@@ -1763,13 +1165,207 @@ namespace Embers
             Stopping = true;
         }
 
-        public Script(Interpreter interpreter, bool AllowUnsafeApi = true) {
-            Interpreter = interpreter;
-            this.AllowUnsafeApi = AllowUnsafeApi;
+        /// <summary>Interop between C# and Ruby.</summary>
+        public object? this[string Key] {
+            get {
+                if (string.IsNullOrEmpty(Key)) throw new ApiException("Scope key must not be empty");
+                Dictionary<string, Instance> Dict = Key.IsConstantIdentifier() ? Constants : LocalVariables;
+                return Dict[Key].Object;
+            }
+            set {
+                if (string.IsNullOrEmpty(Key)) throw new ApiException("Scope key must not be empty");
 
-            CurrentObject.Push(Interpreter.RootModule);
-            CurrentObject.Push(Interpreter.RootInstance);
-            CurrentObject.Push(Interpreter.RootScope);
+                static Instance ObjectToInstance(Api Api, object? Object) {
+                    return Object switch {
+                        null => Api.Nil,
+                        true => Api.True,
+                        false => Api.False,
+                        int ValueInt => new IntegerInstance(Api.Integer, ValueInt),
+                        long ValueLong => new IntegerInstance(Api.Integer, ValueLong),
+                        BigInteger ValueBigInteger => new IntegerInstance(Api.Integer, ValueBigInteger),
+                        DynInteger ValueDynInteger => new IntegerInstance(Api.Integer, ValueDynInteger),
+                        float ValueFloat => new FloatInstance(Api.Float, ValueFloat),
+                        double ValueDouble => new FloatInstance(Api.Float, ValueDouble),
+                        decimal ValueDecimal => new FloatInstance(Api.Float, (double)ValueDecimal),
+                        string ValueString => new StringInstance(Api.String, ValueString),
+                        Range ValueRange => new RangeInstance(Api.Range, new IntegerInstance(Api.Integer, ValueRange.Start.IsFromEnd ? -ValueRange.Start.Value : ValueRange.Start.Value), new IntegerInstance(Api.Integer, ValueRange.End.IsFromEnd ? -ValueRange.End.Value : ValueRange.End.Value), true),
+                        Delegate ValueDelegate => new ProcInstance(Api.Proc, DelegateToMethod(Api, ValueDelegate)),
+                        _ => throw new ApiException($"Scope value type not valid: '{Object.GetType()}'"),
+                    };
+                }
+                static object? LenientlyConvertType(object? Object, Type TargetType) {
+                    if (Object is DynInteger DynInteger) {
+                        if (TargetType == typeof(int)) return (int)(long)DynInteger;
+                        else if (TargetType == typeof(uint)) return (uint)(long)DynInteger;
+                        else if (TargetType == typeof(short)) return (short)(long)DynInteger;
+                        else if (TargetType == typeof(ushort)) return (ushort)(long)DynInteger;
+                        else if (TargetType == typeof(byte)) return (byte)(long)DynInteger;
+                        else if (TargetType == typeof(sbyte)) return (sbyte)(long)DynInteger;
+                    }
+                    else if (Object is DynFloat DynFloat) {
+                        if (TargetType == typeof(float)) return (float)(double)DynFloat;
+                        else if (TargetType == typeof(decimal)) return (decimal)(double)DynFloat;
+                    }
+                    return Object;
+                }
+                static Method DelegateToMethod(Api Api, Delegate Delegate) {
+                    // Get argument count
+                    System.Reflection.ParameterInfo[] Parameters = Delegate.Method.GetParameters();
+                    int RequiredArgumentCount = Parameters.Count(Param => !Param.HasDefaultValue);
+                    int TotalArgumentCount = Parameters.Length;
+                    // Create method
+                    return new Method(
+                        async Input => {
+                            object?[] Arguments = new object?[TotalArgumentCount];
+                            for (int i = 0; i < Arguments.Length; i++) {
+                                // Set argument
+                                Arguments[i] = i < Input.Arguments.Count
+                                    ? Input.Arguments[i].Object
+                                    : Parameters[i].DefaultValue;
+                                // Convert argument if necessary
+                                Arguments[i] = LenientlyConvertType(Arguments[i], Parameters[i].ParameterType);
+                            }
+                            return ObjectToInstance(Api, Delegate.DynamicInvoke(Arguments));
+                        },
+                        new IntRange(RequiredArgumentCount, TotalArgumentCount)
+                    );
+                }
+
+                Dictionary<string, Instance> Dict = Key.IsConstantIdentifier() ? Constants : LocalVariables;
+                // Convert C# instance to Ruby instance
+                Dict[Key] = ObjectToInstance(Api, value);
+            }
+        }
+        
+        public Scope(Scope? parentScope, bool AllowUnsafeApi) : base(parentScope?.Interpreter!) {
+            this.AllowUnsafeApi = AllowUnsafeApi;
+            // Root scope
+            if (parentScope == null) {
+                this.AllowUnsafeApi = AllowUnsafeApi;
+                SetInterpreter(new Interpreter(this));
+            }
+            // Child scope
+            else {
+                ParentScope = parentScope;
+                CurrentAccessModifier = parentScope.CurrentAccessModifier;
+            }
+        }
+        public Scope(Scope? parentScope = null, Method? OnYield = null) : base(parentScope?.Interpreter!) {
+            CurrentOnYield = OnYield;
+            // Root scope
+            if (parentScope == null) {
+                AllowUnsafeApi = true;
+                SetInterpreter(new Interpreter(this));
+            }
+            // Child scope
+            else {
+                AllowUnsafeApi = parentScope.AllowUnsafeApi;
+                ParentScope = parentScope;
+                CurrentAccessModifier = parentScope.CurrentAccessModifier;
+            }
+        }
+    }
+    public class Module {
+        public readonly string Name;
+        public readonly LockingDictionary<string, Method> Methods = new();
+        public readonly LockingDictionary<string, Method> InstanceMethods = new();
+        public readonly LockingDictionary<string, Instance> InstanceVariables = new();
+        public readonly LockingDictionary<string, Instance> ClassVariables = new();
+        public readonly LockingDictionary<string, Instance> Constants = new();
+        public readonly Module? Parent;
+        public readonly Module? SuperModule;
+        public readonly Interpreter Interpreter;
+        public Module(string name, Module parent, Module? superModule) {
+            Name = name;
+            Parent = parent;
+            SuperModule = superModule;
+            Interpreter = parent.Interpreter;
+        }
+        public Module(string name, Interpreter interpreter, Module? superModule) {
+            Name = name;
+            SuperModule = superModule;
+            Interpreter = interpreter;
+        }
+        public bool InheritsFrom(Module? Ancestor) {
+            if (Ancestor == null) return false;
+            Module? CurrentAncestor = this;
+            while (CurrentAncestor != null) {
+                if (CurrentAncestor == Ancestor)
+                    return true;
+                CurrentAncestor = CurrentAncestor.SuperModule;
+            }
+            return false;
+        }
+        public bool TryGetMethod(string MethodName, out Method? Method) {
+            Method = TryGetMethod(Module => Module.Methods, MethodName);
+            return Method != null;
+        }
+        public async Task<Instance> CallMethod(Scope Scope, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
+            return await CallMethod(Module => Module.Methods, Scope, new ModuleReference(this), MethodName, Arguments, OnYield);
+        }
+        public bool TryGetInstanceMethod(string MethodName, out Method? Method) {
+            Method = TryGetMethod(Module => Module.InstanceMethods, MethodName);
+            return Method != null;
+        }
+        public async Task<Instance> CallInstanceMethod(Scope Scope, Instance OnInstance, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
+            return await CallMethod(Module => Module.InstanceMethods, Scope, OnInstance, MethodName, Arguments, OnYield);
+        }
+        private Method? TryGetMethod(Func<Module, LockingDictionary<string, Method>> MethodsDict, string MethodName) {
+            Module? CurrentSuperModule = this;
+            while (true) {
+                if (MethodsDict(CurrentSuperModule).TryFindMethod(MethodName, out Method? FindMethod)) return FindMethod;
+                CurrentSuperModule = CurrentSuperModule.SuperModule;
+                if (CurrentSuperModule == null) return null;
+            }
+        }
+        private async Task<Instance> CallMethod(Func<Module, LockingDictionary<string, Method>> MethodsDict, Scope Scope, Instance OnInstance, string MethodName, Instances? Arguments = null, Method? OnYield = null) {
+            Method? Method = TryGetMethod(MethodsDict, MethodName);
+            if (Method == null) {
+                throw new RuntimeException($"{Scope.ApproximateLocation}: Undefined method '{MethodName}' for {Name}");
+            }
+            else if (Method.Name == "method_missing") {
+                // Get arguments (method_name, *args)
+                Instances MethodMissingArguments;
+                if (Arguments != null) {
+                    List<Instance> GivenArguments = new(Arguments.MultiInstance);
+                    GivenArguments.Insert(0, Scope.Api.GetSymbol(MethodName));
+                    MethodMissingArguments = new Instances(GivenArguments);
+                }
+                else {
+                    MethodMissingArguments = Scope.Api.GetSymbol(MethodName);
+                }
+                // Call method_missing
+                return await Method.Call(Scope, OnInstance, MethodMissingArguments, OnYield);
+            }
+            else {
+                return await Method.Call(Scope, OnInstance, Arguments, OnYield);
+            }
+        }
+    }
+    public class Class : Module {
+        public Class(string name, Module parent, Module? superModule) : base(name, parent, superModule) {
+            Setup();
+        }
+        public Class(string name, Interpreter interpreter, Module? superModule) : base(name, interpreter, superModule) {
+            Setup();
+        }
+        void Setup() {
+            // Default method: new
+            if (!TryGetMethod("new", out _)) {
+                Methods["new"] = new Method(async Input => {
+                    Class Class = (Class)Input.Instance.Module!;
+                    Instance NewInstance = Input.Api.CreateInstanceFromClass(Input.Scope, Class);
+                    Scope NewInstanceScope = new(Input.Scope) { CurrentModule = Class, CurrentInstance = NewInstance };
+                    await NewInstance.CallInstanceMethod(NewInstanceScope, "initialize", Input.Arguments, Input.OnYield);
+                    return NewInstance;
+                }, null);
+            }
+            // Default method: initialize
+            if (!TryGetInstanceMethod("initialize", out _)) {
+                InstanceMethods["initialize"] = new Method(async Input => {
+                    return Input.Api.Nil;
+                }, 0);
+            }
         }
     }
 }

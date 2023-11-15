@@ -2,8 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using static Embers.Phase1;
-using static Embers.Script;
-using static Embers.SpecialTypes;
+using static Embers.Scope;
 
 #nullable enable
 
@@ -305,14 +304,16 @@ namespace Embers
             }
             public Method ToMethod(AccessModifier AccessModifier) {
                 Method Method = new(async Input => {
-                    return await Input.Script.InternalInterpretAsync(Statements, Input.OnYield);
+                    Input.Scope.CurrentOnYield = Input.OnYield;
+                    return await Input.Scope.InternalInterpretAsync(Statements);
                 }, ArgumentCount, Arguments, accessModifier: AccessModifier);
                 Method.SetName(Name);
                 return Method;
             }
-            public Method? ToYieldMethod(Script Script, Method? OnYield) {
-                Method? Method = Script.ToYieldMethod(new Method(async Input => {
-                    return await Input.Script.InternalInterpretAsync(Statements, OnYield);
+            public Method? ToYieldMethod(Scope Scope, Method? OnYield) {
+                Method? Method = Scope.ToYieldMethod(new Method(async Input => {
+                    Input.Scope.CurrentOnYield = OnYield;
+                    return await Input.Scope.InternalInterpretAsync(Statements);
                 }, ArgumentCount, Arguments, accessModifier: AccessModifier.Public));
                 Method?.SetName(Name);
                 return Method;
@@ -823,7 +824,7 @@ namespace Embers
             Method ToMethod() {
                 return new Method(async Input => {
                     Redo:
-                    Instance Result = await Input.Script.InternalInterpretAsync(BlockStatements);
+                    Instance Result = await Input.Scope.InternalInterpretAsync(BlockStatements);
                     if (Result is LoopControlReturnCode LoopControlReturnCode) {
                         if (LoopControlReturnCode.Type is LoopControlType.Redo) {
                             goto Redo;
@@ -890,7 +891,7 @@ namespace Embers
                 if (Token.NonNullValue.Length == 0) throw new SyntaxErrorException($"{Token.Location}: Identifier '@' not valid for instance variable");
                 Identifier = Token.NonNullValue[1..];
             }
-            else if (Token.NonNullValue[0].IsAsciiLetterUpper()) {
+            else if (Token.NonNullValue.IsConstantIdentifier()) {
                 IdentifierType = Phase2TokenType.ConstantOrMethod;
                 Identifier = Token.NonNullValue;
             }
@@ -1667,30 +1668,28 @@ namespace Embers
             Index++;
             ObjectTokenExpression? ExceptionExpression = null;
             Phase2Token? ExceptionVariable = null;
-            {
-                // Get exception
-                List<Phase2Object> ExceptionObjects = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type is Phase2TokenType.RightArrow or Phase2TokenType.EndOfStatement));
-                if (ExceptionObjects.Count != 0) {
-                    ExceptionExpression = ObjectsToExpression(ExceptionObjects) as ObjectTokenExpression
-                        ?? throw new SyntaxErrorException($"{Location}: Expected exception or end of statement after 'rescue', got '{ExceptionObjects.Inspect()}'");
-                }
-                // Get right arrow
-                if (StatementTokens[Index] is Phase2Token Tok && Tok.Type == Phase2TokenType.RightArrow) {
-                    Index++;
-                    // Get exception variable after right arrow
-                    List<Phase2Object> ExceptionVariableObjects = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type == Phase2TokenType.EndOfStatement));
-                    if (ExceptionVariableObjects.Count != 0) {
-                        Expression ExceptionVariableObject = ObjectsToExpression(ExceptionVariableObjects);
-                        if (ExceptionVariableObject.GetType() == typeof(ObjectTokenExpression)) {
-                            ExceptionVariable = ((ObjectTokenExpression)ExceptionVariableObject).Token;
-                        }
-                        else {
-                            throw new SyntaxErrorException($"{Location}: Expected exception name after '=>' after 'rescue', got {ExceptionVariableObject.GetType().Name}");
-                        }
+            // Get exception
+            List<Phase2Object> ExceptionObjects = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type is Phase2TokenType.RightArrow or Phase2TokenType.EndOfStatement));
+            if (ExceptionObjects.Count != 0) {
+                ExceptionExpression = ObjectsToExpression(ExceptionObjects) as ObjectTokenExpression
+                    ?? throw new SyntaxErrorException($"{Location}: Expected exception or end of statement after 'rescue', got '{ExceptionObjects.Inspect()}'");
+            }
+            // Get right arrow
+            if (StatementTokens[Index] is Phase2Token Tok && Tok.Type == Phase2TokenType.RightArrow) {
+                Index++;
+                // Get exception variable after right arrow
+                List<Phase2Object> ExceptionVariableObjects = GetObjectsUntil(StatementTokens, ref Index, Obj => Obj is Phase2Token Tok && (Tok.Type == Phase2TokenType.EndOfStatement));
+                if (ExceptionVariableObjects.Count != 0) {
+                    Expression ExceptionVariableObject = ObjectsToExpression(ExceptionVariableObjects);
+                    if (ExceptionVariableObject.GetType() == typeof(ObjectTokenExpression)) {
+                        ExceptionVariable = ((ObjectTokenExpression)ExceptionVariableObject).Token;
                     }
                     else {
-                        throw new SyntaxErrorException($"{Location}: Expected exception name after '=>' after 'rescue', got nothing");
+                        throw new SyntaxErrorException($"{Location}: Expected exception name after '=>' after 'rescue', got {ExceptionVariableObject.GetType().Name}");
                     }
+                }
+                else {
+                    throw new SyntaxErrorException($"{Location}: Expected exception name after '=>' after 'rescue', got nothing");
                 }
             }
 

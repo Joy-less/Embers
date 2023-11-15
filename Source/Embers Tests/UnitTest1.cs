@@ -1,7 +1,4 @@
 using Embers;
-using static Embers.Script;
-using static Embers.Api;
-using static Embers.SpecialTypes;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Embers_Tests
@@ -179,21 +176,6 @@ namespace Embers_Tests
             AssertErrors<SyntaxErrorException>(@"
                 break
             ");
-
-            // Lock script while running
-            {
-                bool Success = false;
-                try {
-                    Interpreter Interpreter = new();
-                    Script Script = new(Interpreter);
-                    _ = Script.EvaluateAsync("sleep(2)");
-                    Script.Evaluate("puts 'hi'");
-                }
-                catch (Exception) {
-                    Success = true;
-                }
-                Assert.IsTrue(Success);
-            }
 
             // attr_reader
             AssertEqual(@"
@@ -449,7 +431,7 @@ namespace Embers_Tests
 
         // Helper methods
         public static void AssertEqual(string Code, object?[] ExpectedResults, bool AllowUnsafeApi = true) {
-            Instance Result = new Script(new Interpreter(), AllowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
+            Instance Result = new Scope(null, AllowUnsafeApi).Evaluate(Code);
 
             Assert.IsTrue(Result is ArrayInstance);
             List<Instance> Results = Result.Array;
@@ -460,24 +442,24 @@ namespace Embers_Tests
             }
         }
         public static void AssertEqual(string Code, object? ExpectedResult, bool AllowUnsafeApi = true) {
-            Instance Result = new Script(new Interpreter(), AllowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
+            Instance Result = new Scope(null, AllowUnsafeApi).Evaluate(Code);
 
             Assert.AreEqual(ExpectedResult, Result.Object);
         }
         public static void AssertEqualToNull(string Code, bool AllowUnsafeApi = true) {
-            Instance Result = new Script(new Interpreter(), AllowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
+            Instance Result = new Scope(null, AllowUnsafeApi).Evaluate(Code);
 
             Assert.AreEqual(null, Result.Object);
         }
         public static void AssertEqual(string Code, Func<object?, bool> CheckEquality, bool AllowUnsafeApi = true) {
-            Instance Result = new Script(new Interpreter(), AllowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
+            Instance Result = new Scope(null, AllowUnsafeApi).Evaluate(Code);
 
             bool AreEqual = CheckEquality(Result);
             Assert.IsTrue(AreEqual);
         }
         public static void AssertErrors<TError>(string Code, bool AllowUnsafeApi = true) {
             try {
-                new Script(new Interpreter(), AllowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
+                new Scope(null, AllowUnsafeApi).Evaluate(Code);
             }
             catch (Exception Ex) {
                 if (Ex.InnerException is null) {
@@ -495,7 +477,7 @@ namespace Embers_Tests
         }
         public static void AssertDoesNotError(string Code, bool AllowUnsafeApi = true) {
             try {
-                new Script(new Interpreter(), AllowUnsafeApi: AllowUnsafeApi).Evaluate(Code);
+                new Scope(null, AllowUnsafeApi).Evaluate(Code);
             }
             catch (Exception Ex) {
                 Assert.Fail($"Code errored ({Ex.GetType().Name}): {Ex.Message}.");

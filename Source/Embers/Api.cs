@@ -8,8 +8,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics;
 using System.Net.Http;
-using static Embers.Script;
-using static Embers.SpecialTypes;
+using static Embers.Scope;
 
 #nullable enable
 #pragma warning disable CS1998
@@ -55,7 +54,7 @@ namespace Embers
         public SymbolInstance GetSymbol(string Value) {
             return Interpreter.Symbols[Value] ?? Interpreter.Symbols.Store(Value, new SymbolInstance(Symbol, Value));
         }
-        public Instance CreateInstanceFromClass(Script Script, Class Class) {
+        public Instance CreateInstanceFromClass(Scope Scope, Class Class) {
             if (Class.InheritsFrom(NilClass))
                 return new NilInstance(Class);
             else if (Class.InheritsFrom(TrueClass))
@@ -71,9 +70,9 @@ namespace Embers
             else if (Class.InheritsFrom(Float))
                 return new FloatInstance(Float, 0);
             else if (Class.InheritsFrom(Proc))
-                throw new RuntimeException($"{Script.ApproximateLocation}: Tried to create Proc instance without a block");
+                throw new RuntimeException($"{Scope.ApproximateLocation}: Tried to create Proc instance without a block");
             else if (Class.InheritsFrom(Range))
-                throw new RuntimeException($"{Script.ApproximateLocation}: Tried to create Range instance with new");
+                throw new RuntimeException($"{Scope.ApproximateLocation}: Tried to create Range instance with new");
             else if (Class.InheritsFrom(Array))
                 return new ArrayInstance(Class, new List<Instance>());
             else if (Class.InheritsFrom(Hash))
@@ -81,378 +80,377 @@ namespace Embers
             else if (Class.InheritsFrom(Exception))
                 return new ExceptionInstance(Class, "");
             else if (Class.InheritsFrom(Thread))
-                return new ThreadInstance(Class, Script);
+                return new ThreadInstance(Class, Scope);
             else if (Class.InheritsFrom(Time))
                 return new TimeInstance(Class, new DateTime());
             else if (Class.InheritsFrom(WeakRef))
                 return new WeakRefInstance(Class, new WeakReference<Instance>(Nil));
             else if (Class.InheritsFrom(HTTPResponse))
-                throw new RuntimeException($"{Script.ApproximateLocation}: Tried to create HTTPResponse instance with new");
+                throw new RuntimeException($"{Scope.ApproximateLocation}: Tried to create HTTPResponse instance with new");
             else
                 return new Instance(Class);
         }
 
-        public Api(Interpreter Interpreter) {
-            this.Interpreter = Interpreter;
-            Script Script = new(Interpreter);
+        public Api(Scope RootScope) {
+            Interpreter = RootScope.Interpreter;
 
             // Object
             Module Object = Interpreter.Object;
-            Object.InstanceMethods["==", "==="] = Object.Methods["==", "==="] = Script.CreateMethod(_Object._Equals, 1);
-            Object.InstanceMethods["!="] = Object.Methods["!="] = Script.CreateMethod(_Object._NotEquals, 1);
-            Object.InstanceMethods["<=>"] = Object.Methods["<=>"] = Script.CreateMethod(_Object._Spaceship, 1);
-            Object.InstanceMethods["inspect"] = Object.Methods["inspect"] = Script.CreateMethod(_Object.inspect, 0);
-            Object.InstanceMethods["class"] = Object.Methods["class"] = Script.CreateMethod(_Object.@class, 0);
-            Object.InstanceMethods["to_s"] = Object.Methods["to_s"] = Script.CreateMethod(_Object.to_s, 0);
-            Object.InstanceMethods["method"] = Object.Methods["method"] = Script.CreateMethod(_Object.method, 1);
-            Object.InstanceMethods["constants"] = Object.Methods["constants"] = Script.CreateMethod(_Object.constants, 0);
-            Object.InstanceMethods["object_id"] = Object.Methods["object_id"] = Script.CreateMethod(_Object.object_id, 0);
-            Object.InstanceMethods["hash"] = Object.Methods["hash"] = Script.CreateMethod(_Object.hash, 0);
-            Object.InstanceMethods["eql?"] = Object.Methods["eql?"] = Script.CreateMethod(_Object.eql7, 1);
-            Object.InstanceMethods["methods"] = Object.Methods["methods"] = Script.CreateMethod(_Object.methods, 0);
-            Object.InstanceMethods["is_a?"] = Object.Methods["is_a?"] = Script.CreateMethod(_Object.is_a7, 1);
-            Object.InstanceMethods["instance_of?"] = Object.Methods["instance_of?"] = Script.CreateMethod(_Object.instance_of7, 1);
-            Object.InstanceMethods["in?"] = Object.Methods["in?"] = Script.CreateMethod(_Object.in7, 1);
-            Object.InstanceMethods["clone"] = Object.Methods["clone"] = Script.CreateMethod(_Object.clone, 0);
-            Object.InstanceMethods["instance_variables"] = Object.Methods["instance_variables"] = Script.CreateMethod(_Object.instance_variables, 0);
+            Object.InstanceMethods["==", "==="] = Object.Methods["==", "==="] = RootScope.CreateMethod(_Object._Equals, 1);
+            Object.InstanceMethods["!="] = Object.Methods["!="] = RootScope.CreateMethod(_Object._NotEquals, 1);
+            Object.InstanceMethods["<=>"] = Object.Methods["<=>"] = RootScope.CreateMethod(_Object._Spaceship, 1);
+            Object.InstanceMethods["inspect"] = Object.Methods["inspect"] = RootScope.CreateMethod(_Object.inspect, 0);
+            Object.InstanceMethods["class"] = Object.Methods["class"] = RootScope.CreateMethod(_Object.@class, 0);
+            Object.InstanceMethods["to_s"] = Object.Methods["to_s"] = RootScope.CreateMethod(_Object.to_s, 0);
+            Object.InstanceMethods["method"] = Object.Methods["method"] = RootScope.CreateMethod(_Object.method, 1);
+            Object.InstanceMethods["constants"] = Object.Methods["constants"] = RootScope.CreateMethod(_Object.constants, 0);
+            Object.InstanceMethods["object_id"] = Object.Methods["object_id"] = RootScope.CreateMethod(_Object.object_id, 0);
+            Object.InstanceMethods["hash"] = Object.Methods["hash"] = RootScope.CreateMethod(_Object.hash, 0);
+            Object.InstanceMethods["eql?"] = Object.Methods["eql?"] = RootScope.CreateMethod(_Object.eql7, 1);
+            Object.InstanceMethods["methods"] = Object.Methods["methods"] = RootScope.CreateMethod(_Object.methods, 0);
+            Object.InstanceMethods["is_a?"] = Object.Methods["is_a?"] = RootScope.CreateMethod(_Object.is_a7, 1);
+            Object.InstanceMethods["instance_of?"] = Object.Methods["instance_of?"] = RootScope.CreateMethod(_Object.instance_of7, 1);
+            Object.InstanceMethods["in?"] = Object.Methods["in?"] = RootScope.CreateMethod(_Object.in7, 1);
+            Object.InstanceMethods["clone"] = Object.Methods["clone"] = RootScope.CreateMethod(_Object.clone, 0);
+            Object.InstanceMethods["instance_variables"] = Object.Methods["instance_variables"] = RootScope.CreateMethod(_Object.instance_variables, 0);
 
-            Object.Methods["class_variables"] = Script.CreateMethod(_Object.class_variables, 0);
+            Object.Methods["class_variables"] = RootScope.CreateMethod(_Object.class_variables, 0);
 
-            Script.CurrentAccessModifier = AccessModifier.Private;
-            Object.InstanceMethods["puts"] = Object.Methods["puts"] = Script.CreateMethod(puts, null);
-            Object.InstanceMethods["print"] = Object.Methods["print"] = Script.CreateMethod(print, null);
-            Object.InstanceMethods["p"] = Object.Methods["p"] = Script.CreateMethod(p, null);
-            Object.InstanceMethods["gets"] = Object.Methods["gets"] = Script.CreateMethod(gets, 0);
-            Object.InstanceMethods["getc"] = Object.Methods["getc"] = Script.CreateMethod(getc, 0);
-            Object.InstanceMethods["warn"] = Object.Methods["warn"] = Script.CreateMethod(warn, null);
-            Object.InstanceMethods["sleep"] = Object.Methods["sleep"] = Script.CreateMethod(sleep, 0..1);
-            Object.InstanceMethods["raise"] = Object.Methods["raise"] = Script.CreateMethod(raise, 0..1);
-            Object.InstanceMethods["throw"] = Object.Methods["throw"] = Script.CreateMethod(@throw, 1);
-            Object.InstanceMethods["catch"] = Object.Methods["catch"] = Script.CreateMethod(@catch, 1);
-            Object.InstanceMethods["lambda"] = Object.Methods["lambda"] = Script.CreateMethod(lambda, 0);
-            Object.InstanceMethods["loop"] = Object.Methods["loop"] = Script.CreateMethod(loop, 0);
-            Object.InstanceMethods["rand"] = Object.Methods["rand"] = Script.CreateMethod(_Random.rand, 0..1);
-            Object.InstanceMethods["srand"] = Object.Methods["srand"] = Script.CreateMethod(_Random.srand, 0..1);
-            Object.InstanceMethods["exit"] = Object.Methods["exit"] = Script.CreateMethod(exit, 0);
-            Object.InstanceMethods["quit"] = Object.Methods["quit"] = Script.CreateMethod(exit, 0);
-            Object.InstanceMethods["eval"] = Object.Methods["eval"] = Script.CreateMethod(eval, 1);
-            Object.InstanceMethods["local_variables"] = Object.Methods["local_variables"] = Script.CreateMethod(local_variables, 0);
-            Object.InstanceMethods["global_variables"] = Object.Methods["global_variables"] = Script.CreateMethod(global_variables, 0);
-            Object.InstanceMethods["block_given?"] = Object.Methods["block_given?"] = Script.CreateMethod(block_given7, 0);
+            RootScope.CurrentAccessModifier = AccessModifier.Private;
+            Object.InstanceMethods["puts"] = Object.Methods["puts"] = RootScope.CreateMethod(puts, null);
+            Object.InstanceMethods["print"] = Object.Methods["print"] = RootScope.CreateMethod(print, null);
+            Object.InstanceMethods["p"] = Object.Methods["p"] = RootScope.CreateMethod(p, null);
+            Object.InstanceMethods["gets"] = Object.Methods["gets"] = RootScope.CreateMethod(gets, 0);
+            Object.InstanceMethods["getc"] = Object.Methods["getc"] = RootScope.CreateMethod(getc, 0);
+            Object.InstanceMethods["warn"] = Object.Methods["warn"] = RootScope.CreateMethod(warn, null);
+            Object.InstanceMethods["sleep"] = Object.Methods["sleep"] = RootScope.CreateMethod(sleep, 0..1);
+            Object.InstanceMethods["raise"] = Object.Methods["raise"] = RootScope.CreateMethod(raise, 0..1);
+            Object.InstanceMethods["throw"] = Object.Methods["throw"] = RootScope.CreateMethod(@throw, 1);
+            Object.InstanceMethods["catch"] = Object.Methods["catch"] = RootScope.CreateMethod(@catch, 1);
+            Object.InstanceMethods["lambda"] = Object.Methods["lambda"] = RootScope.CreateMethod(lambda, 0);
+            Object.InstanceMethods["loop"] = Object.Methods["loop"] = RootScope.CreateMethod(loop, 0);
+            Object.InstanceMethods["rand"] = Object.Methods["rand"] = RootScope.CreateMethod(_Random.rand, 0..1);
+            Object.InstanceMethods["srand"] = Object.Methods["srand"] = RootScope.CreateMethod(_Random.srand, 0..1);
+            Object.InstanceMethods["exit"] = Object.Methods["exit"] = RootScope.CreateMethod(exit, 0);
+            Object.InstanceMethods["quit"] = Object.Methods["quit"] = RootScope.CreateMethod(exit, 0);
+            Object.InstanceMethods["eval"] = Object.Methods["eval"] = RootScope.CreateMethod(eval, 1);
+            Object.InstanceMethods["local_variables"] = Object.Methods["local_variables"] = RootScope.CreateMethod(local_variables, 0);
+            Object.InstanceMethods["global_variables"] = Object.Methods["global_variables"] = RootScope.CreateMethod(global_variables, 0);
+            Object.InstanceMethods["block_given?"] = Object.Methods["block_given?"] = RootScope.CreateMethod(block_given7, 0);
 
-            Object.InstanceMethods["attr_reader"] = Script.CreateMethod(_Object.attr_reader, 1);
-            Object.InstanceMethods["attr_writer"] = Script.CreateMethod(_Object.attr_writer, 1);
-            Object.InstanceMethods["attr_accessor"] = Script.CreateMethod(_Object.attr_accessor, 1);
-            Object.InstanceMethods["public"] = Script.CreateMethod(_Object.@public, 0);
-            Object.InstanceMethods["private"] = Script.CreateMethod(_Object.@private, 0);
-            Object.InstanceMethods["protected"] = Script.CreateMethod(_Object.@protected, 0);
-            Script.CurrentAccessModifier = AccessModifier.Public;
+            Object.InstanceMethods["attr_reader"] = RootScope.CreateMethod(_Object.attr_reader, 1);
+            Object.InstanceMethods["attr_writer"] = RootScope.CreateMethod(_Object.attr_writer, 1);
+            Object.InstanceMethods["attr_accessor"] = RootScope.CreateMethod(_Object.attr_accessor, 1);
+            Object.InstanceMethods["public"] = RootScope.CreateMethod(_Object.@public, 0);
+            Object.InstanceMethods["private"] = RootScope.CreateMethod(_Object.@private, 0);
+            Object.InstanceMethods["protected"] = RootScope.CreateMethod(_Object.@protected, 0);
+            RootScope.CurrentAccessModifier = AccessModifier.Public;
 
             // Class
             Class Class = Interpreter.Class;
-            Class.Methods["name"] = Script.CreateMethod(_Class.name, 0);
-            Class.Methods["==="] = Script.CreateMethod(_Class._TripleEquals, 1);
+            Class.Methods["name"] = RootScope.CreateMethod(_Class.name, 0);
+            Class.Methods["==="] = RootScope.CreateMethod(_Class._TripleEquals, 1);
 
             // Nil
-            NilClass = Script.CreateClass("NilClass"); NilClass.InstanceMethods.Remove("initialize"); NilClass.Methods.Remove("new");
+            NilClass = RootScope.CreateClass("NilClass"); NilClass.InstanceMethods.Remove("initialize"); NilClass.Methods.Remove("new");
             Nil = new NilInstance(NilClass);
 
             // True
-            TrueClass = Script.CreateClass("TrueClass"); TrueClass.InstanceMethods.Remove("initialize"); TrueClass.Methods.Remove("new");
+            TrueClass = RootScope.CreateClass("TrueClass"); TrueClass.InstanceMethods.Remove("initialize"); TrueClass.Methods.Remove("new");
             True = new TrueInstance(TrueClass);
 
             // False
-            FalseClass = Script.CreateClass("FalseClass"); FalseClass.InstanceMethods.Remove("initialize"); FalseClass.Methods.Remove("new");
+            FalseClass = RootScope.CreateClass("FalseClass"); FalseClass.InstanceMethods.Remove("initialize"); FalseClass.Methods.Remove("new");
             False = new FalseInstance(FalseClass);
 
             // String
-            String = Script.CreateClass("String");
-            String.InstanceMethods["[]"] = Script.CreateMethod(_String._Indexer, 1);
-            String.InstanceMethods["[]="] = Script.CreateMethod(_String._IndexEquals, 2);
-            String.InstanceMethods["+"] = Script.CreateMethod(_String._Add, 1);
-            String.InstanceMethods["*"] = Script.CreateMethod(_String._Multiply, 1);
-            String.InstanceMethods["==", "==="] = Script.CreateMethod(_String._Equals, 1);
-            String.InstanceMethods["<"] = Script.CreateMethod(_String._LessThan, 1);
-            String.InstanceMethods[">"] = Script.CreateMethod(_String._GreaterThan, 1);
-            String.InstanceMethods["<="] = Script.CreateMethod(_String._LessThanOrEqualTo, 1);
-            String.InstanceMethods[">="] = Script.CreateMethod(_String._GreaterThanOrEqualTo, 1);
-            String.InstanceMethods["<=>"] = Script.CreateMethod(_String._Spaceship, 1);
-            String.InstanceMethods["initialize"] = Script.CreateMethod(_String.initialize, 0..1);
-            String.InstanceMethods["to_str"] = Script.CreateMethod(_String.to_str, 0);
-            String.InstanceMethods["to_i"] = Script.CreateMethod(_String.to_i, 0);
-            String.InstanceMethods["to_f"] = Script.CreateMethod(_String.to_f, 0);
-            String.InstanceMethods["to_sym"] = Script.CreateMethod(_String.to_sym, 0);
-            String.InstanceMethods["to_a"] = Script.CreateMethod(_String.to_a, 0);
-            String.InstanceMethods["length"] = Script.CreateMethod(_String.length, 0);
-            String.InstanceMethods["chomp"] = Script.CreateMethod(_String.chomp, 0..1);
-            String.InstanceMethods["chomp!"] = Script.CreateMethod(_String.chomp1, 0..1);
-            String.InstanceMethods["strip"] = Script.CreateMethod(_String.strip, 0);
-            String.InstanceMethods["strip!"] = Script.CreateMethod(_String.strip1, 0);
-            String.InstanceMethods["lstrip"] = Script.CreateMethod(_String.lstrip, 0);
-            String.InstanceMethods["lstrip!"] = Script.CreateMethod(_String.lstrip1, 0);
-            String.InstanceMethods["rstrip"] = Script.CreateMethod(_String.rstrip, 0);
-            String.InstanceMethods["rstrip!"] = Script.CreateMethod(_String.rstrip1, 0);
-            String.InstanceMethods["squeeze"] = Script.CreateMethod(_String.squeeze, 0);
-            String.InstanceMethods["squeeze!"] = Script.CreateMethod(_String.squeeze1, 0);
-            String.InstanceMethods["chop"] = Script.CreateMethod(_String.chop, 0);
-            String.InstanceMethods["chop!"] = Script.CreateMethod(_String.chop1, 0);
-            String.InstanceMethods["chr"] = Script.CreateMethod(_String.chr, 0);
-            String.InstanceMethods["capitalize"] = Script.CreateMethod(_String.capitalize, 0);
-            String.InstanceMethods["capitalize!"] = Script.CreateMethod(_String.capitalize1, 0);
-            String.InstanceMethods["upcase"] = Script.CreateMethod(_String.upcase, 0);
-            String.InstanceMethods["upcase!"] = Script.CreateMethod(_String.upcase1, 0);
-            String.InstanceMethods["downcase"] = Script.CreateMethod(_String.downcase, 0);
-            String.InstanceMethods["downcase!"] = Script.CreateMethod(_String.downcase1, 0);
-            String.InstanceMethods["sub"] = Script.CreateMethod(_String.sub, 2);
-            String.InstanceMethods["sub!"] = Script.CreateMethod(_String.sub1, 2);
-            String.InstanceMethods["gsub"] = Script.CreateMethod(_String.gsub, 2);
-            String.InstanceMethods["gsub!"] = Script.CreateMethod(_String.gsub1, 2);
-            String.InstanceMethods["split"] = Script.CreateMethod(_String.split, 0..2);
-            String.InstanceMethods["eql?"] = Script.CreateMethod(_String.eql7, 1);
-            String.InstanceMethods["include?", "contain?"] = Script.CreateMethod(_String.include7, 1);
+            String = RootScope.CreateClass("String");
+            String.InstanceMethods["[]"] = RootScope.CreateMethod(_String._Indexer, 1);
+            String.InstanceMethods["[]="] = RootScope.CreateMethod(_String._IndexEquals, 2);
+            String.InstanceMethods["+"] = RootScope.CreateMethod(_String._Add, 1);
+            String.InstanceMethods["*"] = RootScope.CreateMethod(_String._Multiply, 1);
+            String.InstanceMethods["==", "==="] = RootScope.CreateMethod(_String._Equals, 1);
+            String.InstanceMethods["<"] = RootScope.CreateMethod(_String._LessThan, 1);
+            String.InstanceMethods[">"] = RootScope.CreateMethod(_String._GreaterThan, 1);
+            String.InstanceMethods["<="] = RootScope.CreateMethod(_String._LessThanOrEqualTo, 1);
+            String.InstanceMethods[">="] = RootScope.CreateMethod(_String._GreaterThanOrEqualTo, 1);
+            String.InstanceMethods["<=>"] = RootScope.CreateMethod(_String._Spaceship, 1);
+            String.InstanceMethods["initialize"] = RootScope.CreateMethod(_String.initialize, 0..1);
+            String.InstanceMethods["to_str"] = RootScope.CreateMethod(_String.to_str, 0);
+            String.InstanceMethods["to_i"] = RootScope.CreateMethod(_String.to_i, 0);
+            String.InstanceMethods["to_f"] = RootScope.CreateMethod(_String.to_f, 0);
+            String.InstanceMethods["to_sym"] = RootScope.CreateMethod(_String.to_sym, 0);
+            String.InstanceMethods["to_a"] = RootScope.CreateMethod(_String.to_a, 0);
+            String.InstanceMethods["length"] = RootScope.CreateMethod(_String.length, 0);
+            String.InstanceMethods["chomp"] = RootScope.CreateMethod(_String.chomp, 0..1);
+            String.InstanceMethods["chomp!"] = RootScope.CreateMethod(_String.chomp1, 0..1);
+            String.InstanceMethods["strip"] = RootScope.CreateMethod(_String.strip, 0);
+            String.InstanceMethods["strip!"] = RootScope.CreateMethod(_String.strip1, 0);
+            String.InstanceMethods["lstrip"] = RootScope.CreateMethod(_String.lstrip, 0);
+            String.InstanceMethods["lstrip!"] = RootScope.CreateMethod(_String.lstrip1, 0);
+            String.InstanceMethods["rstrip"] = RootScope.CreateMethod(_String.rstrip, 0);
+            String.InstanceMethods["rstrip!"] = RootScope.CreateMethod(_String.rstrip1, 0);
+            String.InstanceMethods["squeeze"] = RootScope.CreateMethod(_String.squeeze, 0);
+            String.InstanceMethods["squeeze!"] = RootScope.CreateMethod(_String.squeeze1, 0);
+            String.InstanceMethods["chop"] = RootScope.CreateMethod(_String.chop, 0);
+            String.InstanceMethods["chop!"] = RootScope.CreateMethod(_String.chop1, 0);
+            String.InstanceMethods["chr"] = RootScope.CreateMethod(_String.chr, 0);
+            String.InstanceMethods["capitalize"] = RootScope.CreateMethod(_String.capitalize, 0);
+            String.InstanceMethods["capitalize!"] = RootScope.CreateMethod(_String.capitalize1, 0);
+            String.InstanceMethods["upcase"] = RootScope.CreateMethod(_String.upcase, 0);
+            String.InstanceMethods["upcase!"] = RootScope.CreateMethod(_String.upcase1, 0);
+            String.InstanceMethods["downcase"] = RootScope.CreateMethod(_String.downcase, 0);
+            String.InstanceMethods["downcase!"] = RootScope.CreateMethod(_String.downcase1, 0);
+            String.InstanceMethods["sub"] = RootScope.CreateMethod(_String.sub, 2);
+            String.InstanceMethods["sub!"] = RootScope.CreateMethod(_String.sub1, 2);
+            String.InstanceMethods["gsub"] = RootScope.CreateMethod(_String.gsub, 2);
+            String.InstanceMethods["gsub!"] = RootScope.CreateMethod(_String.gsub1, 2);
+            String.InstanceMethods["split"] = RootScope.CreateMethod(_String.split, 0..2);
+            String.InstanceMethods["eql?"] = RootScope.CreateMethod(_String.eql7, 1);
+            String.InstanceMethods["include?", "contain?"] = RootScope.CreateMethod(_String.include7, 1);
 
             // Symbol
-            Symbol = Script.CreateClass("Symbol");
+            Symbol = RootScope.CreateClass("Symbol");
 
             // Integer
-            Integer = Script.CreateClass("Integer");
-            Integer.InstanceMethods["+"] = Script.CreateMethod(_Integer._Add, 1);
-            Integer.InstanceMethods["-"] = Script.CreateMethod(_Integer._Subtract, 1);
-            Integer.InstanceMethods["*"] = Script.CreateMethod(_Integer._Multiply, 1);
-            Integer.InstanceMethods["/"] = Script.CreateMethod(_Integer._Divide, 1);
-            Integer.InstanceMethods["%"] = Script.CreateMethod(_Integer._Modulo, 1);
-            Integer.InstanceMethods["**"] = Script.CreateMethod(_Integer._Exponentiate, 1);
-            Integer.InstanceMethods["==", "==="] = Script.CreateMethod(_Float._Equals, 1);
-            Integer.InstanceMethods["<"] = Script.CreateMethod(_Float._LessThan, 1);
-            Integer.InstanceMethods[">"] = Script.CreateMethod(_Float._GreaterThan, 1);
-            Integer.InstanceMethods["<="] = Script.CreateMethod(_Float._LessThanOrEqualTo, 1);
-            Integer.InstanceMethods[">="] = Script.CreateMethod(_Float._GreaterThanOrEqualTo, 1);
-            Integer.InstanceMethods["<=>"] = Script.CreateMethod(_Float._Spaceship, 1);
-            Integer.InstanceMethods["+@"] = Script.CreateMethod(_Integer._UnaryPlus, 0);
-            Integer.InstanceMethods["-@"] = Script.CreateMethod(_Integer._UnaryMinus, 0);
-            Integer.InstanceMethods["to_i"] = Script.CreateMethod(_Integer.to_i, 0);
-            Integer.InstanceMethods["to_f"] = Script.CreateMethod(_Integer.to_f, 0);
-            Integer.InstanceMethods["times"] = Script.CreateMethod(_Integer.times, 0);
-            Integer.InstanceMethods["clamp"] = Script.CreateMethod(_Integer.clamp, 2);
-            Integer.InstanceMethods["round"] = Script.CreateMethod(_Float.round, 0..1);
-            Integer.InstanceMethods["floor"] = Script.CreateMethod(_Float.floor, 0);
-            Integer.InstanceMethods["ceil"] = Script.CreateMethod(_Float.ceil, 0);
-            Integer.InstanceMethods["truncate"] = Script.CreateMethod(_Float.truncate, 0);
-            Integer.InstanceMethods["abs"] = Script.CreateMethod(_Integer.abs, 0);
+            Integer = RootScope.CreateClass("Integer");
+            Integer.InstanceMethods["+"] = RootScope.CreateMethod(_Integer._Add, 1);
+            Integer.InstanceMethods["-"] = RootScope.CreateMethod(_Integer._Subtract, 1);
+            Integer.InstanceMethods["*"] = RootScope.CreateMethod(_Integer._Multiply, 1);
+            Integer.InstanceMethods["/"] = RootScope.CreateMethod(_Integer._Divide, 1);
+            Integer.InstanceMethods["%"] = RootScope.CreateMethod(_Integer._Modulo, 1);
+            Integer.InstanceMethods["**"] = RootScope.CreateMethod(_Integer._Exponentiate, 1);
+            Integer.InstanceMethods["==", "==="] = RootScope.CreateMethod(_Float._Equals, 1);
+            Integer.InstanceMethods["<"] = RootScope.CreateMethod(_Float._LessThan, 1);
+            Integer.InstanceMethods[">"] = RootScope.CreateMethod(_Float._GreaterThan, 1);
+            Integer.InstanceMethods["<="] = RootScope.CreateMethod(_Float._LessThanOrEqualTo, 1);
+            Integer.InstanceMethods[">="] = RootScope.CreateMethod(_Float._GreaterThanOrEqualTo, 1);
+            Integer.InstanceMethods["<=>"] = RootScope.CreateMethod(_Float._Spaceship, 1);
+            Integer.InstanceMethods["+@"] = RootScope.CreateMethod(_Integer._UnaryPlus, 0);
+            Integer.InstanceMethods["-@"] = RootScope.CreateMethod(_Integer._UnaryMinus, 0);
+            Integer.InstanceMethods["to_i"] = RootScope.CreateMethod(_Integer.to_i, 0);
+            Integer.InstanceMethods["to_f"] = RootScope.CreateMethod(_Integer.to_f, 0);
+            Integer.InstanceMethods["times"] = RootScope.CreateMethod(_Integer.times, 0);
+            Integer.InstanceMethods["clamp"] = RootScope.CreateMethod(_Integer.clamp, 2);
+            Integer.InstanceMethods["round"] = RootScope.CreateMethod(_Float.round, 0..1);
+            Integer.InstanceMethods["floor"] = RootScope.CreateMethod(_Float.floor, 0);
+            Integer.InstanceMethods["ceil"] = RootScope.CreateMethod(_Float.ceil, 0);
+            Integer.InstanceMethods["truncate"] = RootScope.CreateMethod(_Float.truncate, 0);
+            Integer.InstanceMethods["abs"] = RootScope.CreateMethod(_Integer.abs, 0);
 
             // Float
-            Float = Script.CreateClass("Float");
+            Float = RootScope.CreateClass("Float");
             Float.Constants["INFINITY"] = new FloatInstance(Float, double.PositiveInfinity);
-            Float.InstanceMethods["+"] = Script.CreateMethod(_Float._Add, 1);
-            Float.InstanceMethods["-"] = Script.CreateMethod(_Float._Subtract, 1);
-            Float.InstanceMethods["*"] = Script.CreateMethod(_Float._Multiply, 1);
-            Float.InstanceMethods["/"] = Script.CreateMethod(_Float._Divide, 1);
-            Float.InstanceMethods["%"] = Script.CreateMethod(_Float._Modulo, 1);
-            Float.InstanceMethods["**"] = Script.CreateMethod(_Float._Exponentiate, 1);
-            Float.InstanceMethods["==", "==="] = Script.CreateMethod(_Float._Equals, 1);
-            Float.InstanceMethods["<"] = Script.CreateMethod(_Float._LessThan, 1);
-            Float.InstanceMethods[">"] = Script.CreateMethod(_Float._GreaterThan, 1);
-            Float.InstanceMethods["<="] = Script.CreateMethod(_Float._LessThanOrEqualTo, 1);
-            Float.InstanceMethods[">="] = Script.CreateMethod(_Float._GreaterThanOrEqualTo, 1);
-            Float.InstanceMethods["<=>"] = Script.CreateMethod(_Float._Spaceship, 1);
-            Float.InstanceMethods["+@"] = Script.CreateMethod(_Float._UnaryPlus, 0);
-            Float.InstanceMethods["-@"] = Script.CreateMethod(_Float._UnaryMinus, 0);
-            Float.InstanceMethods["to_i"] = Script.CreateMethod(_Float.to_i, 0);
-            Float.InstanceMethods["to_f"] = Script.CreateMethod(_Float.to_f, 0);
-            Float.InstanceMethods["clamp"] = Script.CreateMethod(_Float.clamp, 2);
-            Float.InstanceMethods["round"] = Script.CreateMethod(_Float.round, 0..1);
-            Float.InstanceMethods["floor"] = Script.CreateMethod(_Float.floor, 0);
-            Float.InstanceMethods["ceil"] = Script.CreateMethod(_Float.ceil, 0);
-            Float.InstanceMethods["truncate"] = Script.CreateMethod(_Float.truncate, 0);
-            Float.InstanceMethods["abs"] = Script.CreateMethod(_Float.abs, 0);
+            Float.InstanceMethods["+"] = RootScope.CreateMethod(_Float._Add, 1);
+            Float.InstanceMethods["-"] = RootScope.CreateMethod(_Float._Subtract, 1);
+            Float.InstanceMethods["*"] = RootScope.CreateMethod(_Float._Multiply, 1);
+            Float.InstanceMethods["/"] = RootScope.CreateMethod(_Float._Divide, 1);
+            Float.InstanceMethods["%"] = RootScope.CreateMethod(_Float._Modulo, 1);
+            Float.InstanceMethods["**"] = RootScope.CreateMethod(_Float._Exponentiate, 1);
+            Float.InstanceMethods["==", "==="] = RootScope.CreateMethod(_Float._Equals, 1);
+            Float.InstanceMethods["<"] = RootScope.CreateMethod(_Float._LessThan, 1);
+            Float.InstanceMethods[">"] = RootScope.CreateMethod(_Float._GreaterThan, 1);
+            Float.InstanceMethods["<="] = RootScope.CreateMethod(_Float._LessThanOrEqualTo, 1);
+            Float.InstanceMethods[">="] = RootScope.CreateMethod(_Float._GreaterThanOrEqualTo, 1);
+            Float.InstanceMethods["<=>"] = RootScope.CreateMethod(_Float._Spaceship, 1);
+            Float.InstanceMethods["+@"] = RootScope.CreateMethod(_Float._UnaryPlus, 0);
+            Float.InstanceMethods["-@"] = RootScope.CreateMethod(_Float._UnaryMinus, 0);
+            Float.InstanceMethods["to_i"] = RootScope.CreateMethod(_Float.to_i, 0);
+            Float.InstanceMethods["to_f"] = RootScope.CreateMethod(_Float.to_f, 0);
+            Float.InstanceMethods["clamp"] = RootScope.CreateMethod(_Float.clamp, 2);
+            Float.InstanceMethods["round"] = RootScope.CreateMethod(_Float.round, 0..1);
+            Float.InstanceMethods["floor"] = RootScope.CreateMethod(_Float.floor, 0);
+            Float.InstanceMethods["ceil"] = RootScope.CreateMethod(_Float.ceil, 0);
+            Float.InstanceMethods["truncate"] = RootScope.CreateMethod(_Float.truncate, 0);
+            Float.InstanceMethods["abs"] = RootScope.CreateMethod(_Float.abs, 0);
 
             // Proc
-            Proc = Script.CreateClass("Proc");
-            Proc.InstanceMethods["call"] = Script.CreateMethod(_Proc.call, null);
+            Proc = RootScope.CreateClass("Proc");
+            Proc.InstanceMethods["call"] = RootScope.CreateMethod(_Proc.call, null);
 
             // Range
-            Range = Script.CreateClass("Proc");
-            Range.InstanceMethods["==="] = Script.CreateMethod(_Range._TripleEquals, 1);
-            Range.InstanceMethods["min"] = Script.CreateMethod(_Range.min, 0);
-            Range.InstanceMethods["max"] = Script.CreateMethod(_Range.max, 0);
-            Range.InstanceMethods["each"] = Script.CreateMethod(_Range.each, 0);
-            Range.InstanceMethods["reverse_each"] = Script.CreateMethod(_Range.reverse_each, 0);
-            Range.InstanceMethods["length", "count"] = Script.CreateMethod(_Range.length, 0);
-            Range.InstanceMethods["to_a"] = Script.CreateMethod(_Range.to_a, 0);
+            Range = RootScope.CreateClass("Proc");
+            Range.InstanceMethods["==="] = RootScope.CreateMethod(_Range._TripleEquals, 1);
+            Range.InstanceMethods["min"] = RootScope.CreateMethod(_Range.min, 0);
+            Range.InstanceMethods["max"] = RootScope.CreateMethod(_Range.max, 0);
+            Range.InstanceMethods["each"] = RootScope.CreateMethod(_Range.each, 0);
+            Range.InstanceMethods["reverse_each"] = RootScope.CreateMethod(_Range.reverse_each, 0);
+            Range.InstanceMethods["length", "count"] = RootScope.CreateMethod(_Range.length, 0);
+            Range.InstanceMethods["to_a"] = RootScope.CreateMethod(_Range.to_a, 0);
 
             // Array
-            Array = Script.CreateClass("Array");
-            Array.InstanceMethods["[]"] = Script.CreateMethod(_Array._Indexer, 1);
-            Array.InstanceMethods["[]="] = Script.CreateMethod(_Array._IndexEquals, 2);
-            Array.InstanceMethods["*"] = Script.CreateMethod(_Array._Multiply, 1);
-            Array.InstanceMethods["==", "==="] = Script.CreateMethod(_Array._Equals, 1);
-            Array.InstanceMethods["<<", "push", "append"] = Script.CreateMethod(_Array._Append, 1);
-            Array.InstanceMethods["prepend"] = Script.CreateMethod(_Array.prepend, 1);
-            Array.InstanceMethods["pop"] = Script.CreateMethod(_Array.pop, 0);
-            Array.InstanceMethods["insert"] = Script.CreateMethod(_Array.insert, 1..);
-            Array.InstanceMethods["length"] = Script.CreateMethod(_Array.length, 0);
-            Array.InstanceMethods["count"] = Script.CreateMethod(_Array.count, 0..1);
-            Array.InstanceMethods["first"] = Script.CreateMethod(_Array.first, 0);
-            Array.InstanceMethods["last"] = Script.CreateMethod(_Array.last, 0);
-            Array.InstanceMethods["forty_two"] = Script.CreateMethod(_Array.forty_two, 0);
-            Array.InstanceMethods["sample"] = Script.CreateMethod(_Array.sample, 0);
-            Array.InstanceMethods["shuffle"] = Script.CreateMethod(_Array.shuffle, 0);
-            Array.InstanceMethods["shuffle!"] = Script.CreateMethod(_Array.shuffle1, 0);
-            Array.InstanceMethods["min"] = Script.CreateMethod(_Array.min, 0);
-            Array.InstanceMethods["max"] = Script.CreateMethod(_Array.max, 0);
-            Array.InstanceMethods["sum"] = Script.CreateMethod(_Array.sum, 0);
-            Array.InstanceMethods["each"] = Script.CreateMethod(_Array.each, 0);
-            Array.InstanceMethods["reverse_each"] = Script.CreateMethod(_Array.reverse_each, 0);
-            Array.InstanceMethods["map"] = Script.CreateMethod(_Array.map, 0);
-            Array.InstanceMethods["map!"] = Script.CreateMethod(_Array.map1, 0);
-            Array.InstanceMethods["sort"] = Script.CreateMethod(_Array.sort, 0);
-            Array.InstanceMethods["sort!"] = Script.CreateMethod(_Array.sort1, 0);
-            Array.InstanceMethods["include?", "contain?"] = Script.CreateMethod(_Array.include7, 1);
-            Array.InstanceMethods["delete", "remove"] = Script.CreateMethod(_Array.delete, 1);
-            Array.InstanceMethods["delete_at", "remove_at"] = Script.CreateMethod(_Array.delete_at, 1);
-            Array.InstanceMethods["clear"] = Script.CreateMethod(_Array.clear, 0);
-            Array.InstanceMethods["empty?"] = Script.CreateMethod(_Array.empty7, 0);
-            Array.InstanceMethods["reverse"] = Script.CreateMethod(_Array.reverse, 0);
-            Array.InstanceMethods["reverse!"] = Script.CreateMethod(_Array.reverse1, 0);
-            Array.InstanceMethods["join"] = Script.CreateMethod(_Array.join, 0..1);
+            Array = RootScope.CreateClass("Array");
+            Array.InstanceMethods["[]"] = RootScope.CreateMethod(_Array._Indexer, 1);
+            Array.InstanceMethods["[]="] = RootScope.CreateMethod(_Array._IndexEquals, 2);
+            Array.InstanceMethods["*"] = RootScope.CreateMethod(_Array._Multiply, 1);
+            Array.InstanceMethods["==", "==="] = RootScope.CreateMethod(_Array._Equals, 1);
+            Array.InstanceMethods["<<", "push", "append"] = RootScope.CreateMethod(_Array._Append, 1);
+            Array.InstanceMethods["prepend"] = RootScope.CreateMethod(_Array.prepend, 1);
+            Array.InstanceMethods["pop"] = RootScope.CreateMethod(_Array.pop, 0);
+            Array.InstanceMethods["insert"] = RootScope.CreateMethod(_Array.insert, 1..);
+            Array.InstanceMethods["length"] = RootScope.CreateMethod(_Array.length, 0);
+            Array.InstanceMethods["count"] = RootScope.CreateMethod(_Array.count, 0..1);
+            Array.InstanceMethods["first"] = RootScope.CreateMethod(_Array.first, 0);
+            Array.InstanceMethods["last"] = RootScope.CreateMethod(_Array.last, 0);
+            Array.InstanceMethods["forty_two"] = RootScope.CreateMethod(_Array.forty_two, 0);
+            Array.InstanceMethods["sample"] = RootScope.CreateMethod(_Array.sample, 0);
+            Array.InstanceMethods["shuffle"] = RootScope.CreateMethod(_Array.shuffle, 0);
+            Array.InstanceMethods["shuffle!"] = RootScope.CreateMethod(_Array.shuffle1, 0);
+            Array.InstanceMethods["min"] = RootScope.CreateMethod(_Array.min, 0);
+            Array.InstanceMethods["max"] = RootScope.CreateMethod(_Array.max, 0);
+            Array.InstanceMethods["sum"] = RootScope.CreateMethod(_Array.sum, 0);
+            Array.InstanceMethods["each"] = RootScope.CreateMethod(_Array.each, 0);
+            Array.InstanceMethods["reverse_each"] = RootScope.CreateMethod(_Array.reverse_each, 0);
+            Array.InstanceMethods["map"] = RootScope.CreateMethod(_Array.map, 0);
+            Array.InstanceMethods["map!"] = RootScope.CreateMethod(_Array.map1, 0);
+            Array.InstanceMethods["sort"] = RootScope.CreateMethod(_Array.sort, 0);
+            Array.InstanceMethods["sort!"] = RootScope.CreateMethod(_Array.sort1, 0);
+            Array.InstanceMethods["include?", "contain?"] = RootScope.CreateMethod(_Array.include7, 1);
+            Array.InstanceMethods["delete", "remove"] = RootScope.CreateMethod(_Array.delete, 1);
+            Array.InstanceMethods["delete_at", "remove_at"] = RootScope.CreateMethod(_Array.delete_at, 1);
+            Array.InstanceMethods["clear"] = RootScope.CreateMethod(_Array.clear, 0);
+            Array.InstanceMethods["empty?"] = RootScope.CreateMethod(_Array.empty7, 0);
+            Array.InstanceMethods["reverse"] = RootScope.CreateMethod(_Array.reverse, 0);
+            Array.InstanceMethods["reverse!"] = RootScope.CreateMethod(_Array.reverse1, 0);
+            Array.InstanceMethods["join"] = RootScope.CreateMethod(_Array.join, 0..1);
 
             // Hash
-            Hash = Script.CreateClass("Hash");
-            Hash.InstanceMethods["[]"] = Script.CreateMethod(_Hash._Indexer, 1);
-            Hash.InstanceMethods["[]="] = Script.CreateMethod(_Hash._IndexEquals, 2);
-            Hash.InstanceMethods["==", "==="] = Script.CreateMethod(_Hash._Equals, 1);
-            Hash.InstanceMethods["initialize"] = Script.CreateMethod(_Hash.initialize, 0..1);
-            Hash.InstanceMethods["length"] = Script.CreateMethod(_Hash.length, 0);
-            Hash.InstanceMethods["has_key?"] = Script.CreateMethod(_Hash.has_key7, 1);
-            Hash.InstanceMethods["has_value?"] = Script.CreateMethod(_Hash.has_value7, 1);
-            Hash.InstanceMethods["keys"] = Script.CreateMethod(_Hash.keys, 0);
-            Hash.InstanceMethods["values"] = Script.CreateMethod(_Hash.values, 0);
-            Hash.InstanceMethods["delete", "remove"] = Script.CreateMethod(_Hash.delete, 1);
-            Hash.InstanceMethods["clear"] = Script.CreateMethod(_Hash.clear, 0);
-            Hash.InstanceMethods["each"] = Script.CreateMethod(_Hash.each, 0);
-            Hash.InstanceMethods["invert"] = Script.CreateMethod(_Hash.invert, 0);
-            Hash.InstanceMethods["to_a"] = Script.CreateMethod(_Hash.to_a, 0);
-            Hash.InstanceMethods["to_hash"] = Script.CreateMethod(_Hash.to_hash, 0);
-            Hash.InstanceMethods["empty?"] = Script.CreateMethod(_Hash.empty7, 0);
+            Hash = RootScope.CreateClass("Hash");
+            Hash.InstanceMethods["[]"] = RootScope.CreateMethod(_Hash._Indexer, 1);
+            Hash.InstanceMethods["[]="] = RootScope.CreateMethod(_Hash._IndexEquals, 2);
+            Hash.InstanceMethods["==", "==="] = RootScope.CreateMethod(_Hash._Equals, 1);
+            Hash.InstanceMethods["initialize"] = RootScope.CreateMethod(_Hash.initialize, 0..1);
+            Hash.InstanceMethods["length"] = RootScope.CreateMethod(_Hash.length, 0);
+            Hash.InstanceMethods["has_key?"] = RootScope.CreateMethod(_Hash.has_key7, 1);
+            Hash.InstanceMethods["has_value?"] = RootScope.CreateMethod(_Hash.has_value7, 1);
+            Hash.InstanceMethods["keys"] = RootScope.CreateMethod(_Hash.keys, 0);
+            Hash.InstanceMethods["values"] = RootScope.CreateMethod(_Hash.values, 0);
+            Hash.InstanceMethods["delete", "remove"] = RootScope.CreateMethod(_Hash.delete, 1);
+            Hash.InstanceMethods["clear"] = RootScope.CreateMethod(_Hash.clear, 0);
+            Hash.InstanceMethods["each"] = RootScope.CreateMethod(_Hash.each, 0);
+            Hash.InstanceMethods["invert"] = RootScope.CreateMethod(_Hash.invert, 0);
+            Hash.InstanceMethods["to_a"] = RootScope.CreateMethod(_Hash.to_a, 0);
+            Hash.InstanceMethods["to_hash"] = RootScope.CreateMethod(_Hash.to_hash, 0);
+            Hash.InstanceMethods["empty?"] = RootScope.CreateMethod(_Hash.empty7, 0);
 
             // Random
-            Random = Script.CreateModule("Random");
-            Random.Methods["rand"] = Script.CreateMethod(_Random.rand, 0..1);
-            Random.Methods["srand"] = Script.CreateMethod(_Random.srand, 0..1);
+            Random = RootScope.CreateModule("Random");
+            Random.Methods["rand"] = RootScope.CreateMethod(_Random.rand, 0..1);
+            Random.Methods["srand"] = RootScope.CreateMethod(_Random.srand, 0..1);
 
             // Math
-            Math = Script.CreateModule("Math");
+            Math = RootScope.CreateModule("Math");
             Math.Constants["PI"] = new FloatInstance(Float, System.Math.PI);
             Math.Constants["E"] = new FloatInstance(Float, System.Math.E);
-            Math.Methods["sin"] = Script.CreateMethod(_Math.sin, 1);
-            Math.Methods["cos"] = Script.CreateMethod(_Math.cos, 1);
-            Math.Methods["tan"] = Script.CreateMethod(_Math.tan, 1);
-            Math.Methods["asin"] = Script.CreateMethod(_Math.asin, 1);
-            Math.Methods["acos"] = Script.CreateMethod(_Math.acos, 1);
-            Math.Methods["atan"] = Script.CreateMethod(_Math.atan, 1);
-            Math.Methods["atan2"] = Script.CreateMethod(_Math.atan2, 2);
-            Math.Methods["sinh"] = Script.CreateMethod(_Math.sinh, 1);
-            Math.Methods["cosh"] = Script.CreateMethod(_Math.cosh, 1);
-            Math.Methods["tanh"] = Script.CreateMethod(_Math.tanh, 1);
-            Math.Methods["asinh"] = Script.CreateMethod(_Math.asinh, 1);
-            Math.Methods["acosh"] = Script.CreateMethod(_Math.acosh, 1);
-            Math.Methods["atanh"] = Script.CreateMethod(_Math.atanh, 1);
-            Math.Methods["exp"] = Script.CreateMethod(_Math.exp, 1);
-            Math.Methods["log"] = Script.CreateMethod(_Math.log, 2);
-            Math.Methods["log10"] = Script.CreateMethod(_Math.log10, 1);
-            Math.Methods["log2"] = Script.CreateMethod(_Math.log2, 1);
-            Math.Methods["frexp"] = Script.CreateMethod(_Math.frexp, 1);
-            Math.Methods["ldexp"] = Script.CreateMethod(_Math.ldexp, 2);
-            Math.Methods["sqrt"] = Script.CreateMethod(_Math.sqrt, 1);
-            Math.Methods["cbrt"] = Script.CreateMethod(_Math.cbrt, 1);
-            Math.Methods["hypot"] = Script.CreateMethod(_Math.hypot, 2);
-            Math.Methods["erf"] = Script.CreateMethod(_Math.erf, 1);
-            Math.Methods["erfc"] = Script.CreateMethod(_Math.erfc, 1);
-            Math.Methods["gamma"] = Script.CreateMethod(_Math.gamma, 1);
-            Math.Methods["lgamma"] = Script.CreateMethod(_Math.lgamma, 1);
-            Math.Methods["to_rad"] = Script.CreateMethod(_Math.to_rad, 1);
-            Math.Methods["to_deg"] = Script.CreateMethod(_Math.to_deg, 1);
-            Math.Methods["lerp"] = Script.CreateMethod(_Math.lerp, 3);
-            Math.Methods["abs"] = Script.CreateMethod(_Math.abs, 1);
+            Math.Methods["sin"] = RootScope.CreateMethod(_Math.sin, 1);
+            Math.Methods["cos"] = RootScope.CreateMethod(_Math.cos, 1);
+            Math.Methods["tan"] = RootScope.CreateMethod(_Math.tan, 1);
+            Math.Methods["asin"] = RootScope.CreateMethod(_Math.asin, 1);
+            Math.Methods["acos"] = RootScope.CreateMethod(_Math.acos, 1);
+            Math.Methods["atan"] = RootScope.CreateMethod(_Math.atan, 1);
+            Math.Methods["atan2"] = RootScope.CreateMethod(_Math.atan2, 2);
+            Math.Methods["sinh"] = RootScope.CreateMethod(_Math.sinh, 1);
+            Math.Methods["cosh"] = RootScope.CreateMethod(_Math.cosh, 1);
+            Math.Methods["tanh"] = RootScope.CreateMethod(_Math.tanh, 1);
+            Math.Methods["asinh"] = RootScope.CreateMethod(_Math.asinh, 1);
+            Math.Methods["acosh"] = RootScope.CreateMethod(_Math.acosh, 1);
+            Math.Methods["atanh"] = RootScope.CreateMethod(_Math.atanh, 1);
+            Math.Methods["exp"] = RootScope.CreateMethod(_Math.exp, 1);
+            Math.Methods["log"] = RootScope.CreateMethod(_Math.log, 2);
+            Math.Methods["log10"] = RootScope.CreateMethod(_Math.log10, 1);
+            Math.Methods["log2"] = RootScope.CreateMethod(_Math.log2, 1);
+            Math.Methods["frexp"] = RootScope.CreateMethod(_Math.frexp, 1);
+            Math.Methods["ldexp"] = RootScope.CreateMethod(_Math.ldexp, 2);
+            Math.Methods["sqrt"] = RootScope.CreateMethod(_Math.sqrt, 1);
+            Math.Methods["cbrt"] = RootScope.CreateMethod(_Math.cbrt, 1);
+            Math.Methods["hypot"] = RootScope.CreateMethod(_Math.hypot, 2);
+            Math.Methods["erf"] = RootScope.CreateMethod(_Math.erf, 1);
+            Math.Methods["erfc"] = RootScope.CreateMethod(_Math.erfc, 1);
+            Math.Methods["gamma"] = RootScope.CreateMethod(_Math.gamma, 1);
+            Math.Methods["lgamma"] = RootScope.CreateMethod(_Math.lgamma, 1);
+            Math.Methods["to_rad"] = RootScope.CreateMethod(_Math.to_rad, 1);
+            Math.Methods["to_deg"] = RootScope.CreateMethod(_Math.to_deg, 1);
+            Math.Methods["lerp"] = RootScope.CreateMethod(_Math.lerp, 3);
+            Math.Methods["abs"] = RootScope.CreateMethod(_Math.abs, 1);
 
             // Exception
-            Exception = Script.CreateClass("Exception");
-            Exception.InstanceMethods["initialize"] = Script.CreateMethod(_Exception.initialize, 0..1);
-            Exception.InstanceMethods["message"] = Script.CreateMethod(_Exception.message, 0);
-            Exception.InstanceMethods["backtrace"] = Script.CreateMethod(_Exception.backtrace, 0);
+            Exception = RootScope.CreateClass("Exception");
+            Exception.InstanceMethods["initialize"] = RootScope.CreateMethod(_Exception.initialize, 0..1);
+            Exception.InstanceMethods["message"] = RootScope.CreateMethod(_Exception.message, 0);
+            Exception.InstanceMethods["backtrace"] = RootScope.CreateMethod(_Exception.backtrace, 0);
             // StandardError
-            StandardError = Script.CreateClass("StandardError", InheritsFrom: Exception);
+            StandardError = RootScope.CreateClass("StandardError", InheritsFrom: Exception);
             // RuntimeError
-            RuntimeError = Script.CreateClass("RuntimeError", InheritsFrom: StandardError);
+            RuntimeError = RootScope.CreateClass("RuntimeError", InheritsFrom: StandardError);
 
             // Thread
-            Thread = Script.CreateClass("Thread");
-            Thread.InstanceMethods["initialize"] = Script.CreateMethod(_Thread.initialize, null);
-            Thread.InstanceMethods["join"] = Script.CreateMethod(_Thread.join, 0);
-            Thread.InstanceMethods["stop"] = Script.CreateMethod(_Thread.stop, 0);
+            Thread = RootScope.CreateClass("Thread");
+            Thread.InstanceMethods["initialize"] = RootScope.CreateMethod(_Thread.initialize, null);
+            Thread.InstanceMethods["join"] = RootScope.CreateMethod(_Thread.join, 0);
+            Thread.InstanceMethods["stop"] = RootScope.CreateMethod(_Thread.stop, 0);
 
             // Parallel
-            Parallel = Script.CreateModule("Parallel");
-            Parallel.Methods["each"] = Script.CreateMethod(_Parallel.each, 1);
-            Parallel.Methods["times"] = Script.CreateMethod(_Parallel.times, 1);
-            Parallel.Methods["processor_count"] = Script.CreateMethod(_Parallel.processor_count, 0);
+            Parallel = RootScope.CreateModule("Parallel");
+            Parallel.Methods["each"] = RootScope.CreateMethod(_Parallel.each, 1);
+            Parallel.Methods["times"] = RootScope.CreateMethod(_Parallel.times, 1);
+            Parallel.Methods["processor_count"] = RootScope.CreateMethod(_Parallel.processor_count, 0);
 
             // Time
-            Time = Script.CreateClass("Time");
-            Time.Methods["now"] = Script.CreateMethod(_Time.now, 0);
-            Time.Methods["at"] = Script.CreateMethod(_Time.at, 1);
-            Time.InstanceMethods["initialize"] = Script.CreateMethod(_Time.initialize, 0..7);
-            Time.InstanceMethods["to_i"] = Script.CreateMethod(_Time.to_i, 0);
-            Time.InstanceMethods["to_f"] = Script.CreateMethod(_Time.to_f, 0);
+            Time = RootScope.CreateClass("Time");
+            Time.Methods["now"] = RootScope.CreateMethod(_Time.now, 0);
+            Time.Methods["at"] = RootScope.CreateMethod(_Time.at, 1);
+            Time.InstanceMethods["initialize"] = RootScope.CreateMethod(_Time.initialize, 0..7);
+            Time.InstanceMethods["to_i"] = RootScope.CreateMethod(_Time.to_i, 0);
+            Time.InstanceMethods["to_f"] = RootScope.CreateMethod(_Time.to_f, 0);
 
             // WeakRef
-            WeakRef = Script.CreateClass("WeakRef");
-            WeakRef.InstanceMethods["initialize"] = Script.CreateMethod(_WeakRef.initialize, 1);
-            WeakRef.InstanceMethods["method_missing"] = Script.CreateMethod(_WeakRef.method_missing, null);
-            WeakRef.InstanceMethods["weakref_alive?"] = Script.CreateMethod(_WeakRef.weakref_alive7, 0);
+            WeakRef = RootScope.CreateClass("WeakRef");
+            WeakRef.InstanceMethods["initialize"] = RootScope.CreateMethod(_WeakRef.initialize, 1);
+            WeakRef.InstanceMethods["method_missing"] = RootScope.CreateMethod(_WeakRef.method_missing, null);
+            WeakRef.InstanceMethods["weakref_alive?"] = RootScope.CreateMethod(_WeakRef.weakref_alive7, 0);
 
             // GC
-            GC = Script.CreateModule("GC");
-            GC.Methods["start"] = Script.CreateMethod(_GC.start, 0);
-            GC.Methods["count"] = Script.CreateMethod(_GC.count, 0..1);
+            GC = RootScope.CreateModule("GC");
+            GC.Methods["start"] = RootScope.CreateMethod(_GC.start, 0);
+            GC.Methods["count"] = RootScope.CreateMethod(_GC.count, 0..1);
 
             // Global constants
-            Interpreter.RootScope.Constants["EMBERS_VERSION"] = new StringInstance(String, Info.Version);
-            Interpreter.RootScope.Constants["EMBERS_RELEASE_DATE"] = new StringInstance(String, Info.ReleaseDate);
-            Interpreter.RootScope.Constants["EMBERS_PLATFORM"] = new StringInstance(String, $"{RuntimeInformation.OSArchitecture}-{RuntimeInformation.OSDescription}");
-            Interpreter.RootScope.Constants["EMBERS_COPYRIGHT"] = new StringInstance(String, Info.Copyright);
-            Interpreter.RootScope.Constants["RUBY_COPYRIGHT"] = new StringInstance(String, Info.RubyCopyright);
+            RootScope.Constants["EMBERS_VERSION"] = new StringInstance(String, Info.Version);
+            RootScope.Constants["EMBERS_RELEASE_DATE"] = new StringInstance(String, Info.ReleaseDate);
+            RootScope.Constants["EMBERS_PLATFORM"] = new StringInstance(String, $"{RuntimeInformation.OSArchitecture}-{RuntimeInformation.OSDescription}");
+            RootScope.Constants["EMBERS_COPYRIGHT"] = new StringInstance(String, Info.Copyright);
+            RootScope.Constants["RUBY_COPYRIGHT"] = new StringInstance(String, Info.RubyCopyright);
 
             //
             // UNSAFE APIS
             //
 
             // Global methods
-            Script.CurrentAccessModifier = AccessModifier.Protected;
-            Object.InstanceMethods["system"] = Object.Methods["system"] = Script.CreateMethod(system, 1, IsUnsafe: true);
-            Script.CurrentAccessModifier = AccessModifier.Public;
+            RootScope.CurrentAccessModifier = AccessModifier.Protected;
+            Object.InstanceMethods["system"] = Object.Methods["system"] = RootScope.CreateMethod(system, 1, IsUnsafe: true);
+            RootScope.CurrentAccessModifier = AccessModifier.Public;
 
             // File
-            File = Script.CreateModule("File");
-            File.Methods["read"] = Script.CreateMethod(_File.read, 1, IsUnsafe: true);
-            File.Methods["write"] = Script.CreateMethod(_File.write, 2, IsUnsafe: true);
-            File.Methods["append"] = Script.CreateMethod(_File.append, 2, IsUnsafe: true);
-            File.Methods["delete"] = Script.CreateMethod(_File.delete, 1, IsUnsafe: true);
-            File.Methods["exist?", "exists?"] = Script.CreateMethod(_File.exist7, 1, IsUnsafe: true);
-            File.Methods["absolute_path"] = Script.CreateMethod(_File.absolute_path, 1, IsUnsafe: true);
-            File.Methods["absolute_path?"] = Script.CreateMethod(_File.absolute_path7, 1, IsUnsafe: true);
-            File.Methods["basename"] = Script.CreateMethod(_File.basename, 1, IsUnsafe: true);
-            File.Methods["dirname"] = Script.CreateMethod(_File.dirname, 1, IsUnsafe: true);
+            File = RootScope.CreateModule("File");
+            File.Methods["read"] = RootScope.CreateMethod(_File.read, 1, IsUnsafe: true);
+            File.Methods["write"] = RootScope.CreateMethod(_File.write, 2, IsUnsafe: true);
+            File.Methods["append"] = RootScope.CreateMethod(_File.append, 2, IsUnsafe: true);
+            File.Methods["delete"] = RootScope.CreateMethod(_File.delete, 1, IsUnsafe: true);
+            File.Methods["exist?", "exists?"] = RootScope.CreateMethod(_File.exist7, 1, IsUnsafe: true);
+            File.Methods["absolute_path"] = RootScope.CreateMethod(_File.absolute_path, 1, IsUnsafe: true);
+            File.Methods["absolute_path?"] = RootScope.CreateMethod(_File.absolute_path7, 1, IsUnsafe: true);
+            File.Methods["basename"] = RootScope.CreateMethod(_File.basename, 1, IsUnsafe: true);
+            File.Methods["dirname"] = RootScope.CreateMethod(_File.dirname, 1, IsUnsafe: true);
 
             // Net
-            Net = Script.CreateModule("Net");
+            Net = RootScope.CreateModule("Net");
             // Net::HTTP
-            HTTP = Script.CreateModule("HTTP", Net);
-            HTTP.Methods["get"] = Script.CreateMethod(_Net._HTTP.get, 1, IsUnsafe: true);
+            HTTP = RootScope.CreateModule("HTTP", Net);
+            HTTP.Methods["get"] = RootScope.CreateMethod(_Net._HTTP.get, 1, IsUnsafe: true);
             // Net::HTTP::HTTPResponse
-            HTTPResponse = Script.CreateClass("HTTPResponse", HTTP);
-            HTTPResponse.InstanceMethods["body"] = Script.CreateMethod(_Net._HTTP._HTTPResponse.body, 0, IsUnsafe: true);
-            HTTPResponse.InstanceMethods["code"] = Script.CreateMethod(_Net._HTTP._HTTPResponse.code, 0, IsUnsafe: true);
+            HTTPResponse = RootScope.CreateClass("HTTPResponse", HTTP);
+            HTTPResponse.InstanceMethods["body"] = RootScope.CreateMethod(_Net._HTTP._HTTPResponse.body, 0, IsUnsafe: true);
+            HTTPResponse.InstanceMethods["code"] = RootScope.CreateMethod(_Net._HTTP._HTTPResponse.code, 0, IsUnsafe: true);
         }
 
         // API
@@ -475,7 +473,7 @@ namespace Embers
         }
         static async Task<Instance> p(MethodInput Input) {
             foreach (Instance Message in Input.Arguments) {
-                string Inspect = (await Message.CallInstanceMethod(Input.Script, "inspect")).String;
+                string Inspect = (await Message.CallInstanceMethod(Input.Scope, "inspect")).String;
                 Console.WriteLine(Inspect);
             }
             return Input.Api.Nil;
@@ -514,20 +512,20 @@ namespace Embers
                 if (Argument is ExceptionInstance ExceptionInstance) {
                     // raise Exception.new("message")
                     Exception ExceptionToRaise = Argument.Exception;
-                    Input.Script.ExceptionsTable.TryAdd(ExceptionToRaise, ExceptionInstance);
+                    Input.Interpreter.ExceptionsTable.TryAdd(ExceptionToRaise, ExceptionInstance);
                     throw ExceptionToRaise;
                 }
                 else {
                     // raise "message"
                     Exception NewExceptionToRaise = new RuntimeException(Argument.String);
-                    Input.Script.ExceptionsTable.TryAdd(NewExceptionToRaise, new ExceptionInstance(Input.Api.RuntimeError, Argument.String));
+                    Input.Interpreter.ExceptionsTable.TryAdd(NewExceptionToRaise, new ExceptionInstance(Input.Api.RuntimeError, Argument.String));
                     throw NewExceptionToRaise;
                 }
             }
             else {
                 // raise
                 Exception NewExceptionToRaise = new RuntimeException("");
-                Input.Script.ExceptionsTable.TryAdd(NewExceptionToRaise, new ExceptionInstance(Input.Api.RuntimeError, ""));
+                Input.Interpreter.ExceptionsTable.TryAdd(NewExceptionToRaise, new ExceptionInstance(Input.Api.RuntimeError, ""));
                 throw NewExceptionToRaise;
             }
         }
@@ -539,7 +537,7 @@ namespace Embers
             Method? OnYield = Input.OnYield ?? throw new RuntimeException($"{Input.Location}: No block given for catch");
 
             Instance CatchIdentifier = Input.Arguments[0];
-            Instance Result = await OnYield.Call(Input.Script, null, CatchReturn: false);
+            Instance Result = await OnYield.Call(Input.Scope, null, CatchReturn: false);
             if (Result is ThrowReturnCode ThrowReturnCode) {
                 if (ThrowReturnCode.Identifier.String != CatchIdentifier.String) {
                     // uncaught throw
@@ -555,8 +553,8 @@ namespace Embers
         static async Task<Instance> lambda(MethodInput Input) {
             Method? OnYield = Input.OnYield ?? throw new RuntimeException($"{Input.Location}: No block given for lambda");
 
-            Instance NewProc = new ProcInstance(Input.Api.Proc, Input.Script.CreateMethod(
-                async Input => await OnYield.Call(Input.Script, null, Input.Arguments, Input.OnYield, CatchReturn: false),
+            Instance NewProc = new ProcInstance(Input.Api.Proc, Input.Scope.CreateMethod(
+                async Input => await OnYield.Call(Input.Scope, null, Input.Arguments, Input.OnYield, CatchReturn: false),
                 null
             ));
             return NewProc;
@@ -565,7 +563,7 @@ namespace Embers
             Method? OnYield = Input.OnYield ?? throw new RuntimeException($"{Input.Location}: No block given for loop");
 
             while (true) {
-                Instance Result = await OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                Instance Result = await OnYield.Call(Input.Scope, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                 if (Result is LoopControlReturnCode LoopControlReturnCode) {
                     if (LoopControlReturnCode.Type is Phase2.LoopControlType.Break) {
                         break;
@@ -612,7 +610,7 @@ namespace Embers
             return new StopReturnCode(true, Input.Interpreter);
         }
         static async Task<Instance> eval(MethodInput Input) {
-            Instance Result = await Input.Script.InternalEvaluateAsync(Input.Arguments[0].String);
+            Instance Result = await new Scope(Input.Scope).InternalEvaluateAsync(Input.Arguments[0].String);
             if (Result is LoopControlReturnCode LoopControlReturnCode) {
                 throw new SyntaxErrorException($"{Input.Location}: Can't escape from eval with {LoopControlReturnCode.Type}");
             }
@@ -623,7 +621,7 @@ namespace Embers
         }
         static async Task<Instance> local_variables(MethodInput Input) {
             List<Instance> Variables = new();
-            foreach (KeyValuePair<string, Instance> Variable in Input.Script.GetAllLocalVariables()) {
+            foreach (KeyValuePair<string, Instance> Variable in Input.Scope.GetAllLocalVariables()) {
                 Variables.Add(Input.Api.GetSymbol(Variable.Key));
             }
             return new ArrayInstance(Input.Api.Array, Variables);
@@ -635,8 +633,8 @@ namespace Embers
             }
             return new ArrayInstance(Input.Api.Array, Variables);
         }
-        public static async Task<Instance> block_given7(MethodInput Input) {
-            return Input.Script.CurrentOnYield != null ? Input.Api.True : Input.Api.False;
+        static async Task<Instance> block_given7(MethodInput Input) {
+            return Input.Scope.CurrentOnYield != null ? Input.Api.True : Input.Api.False;
         }
         static class _Object {
             public static async Task<Instance> _Equals(MethodInput Input) {
@@ -652,7 +650,7 @@ namespace Embers
             public static async Task<Instance> _NotEquals(MethodInput Input) {
                 Instance Left = Input.Instance;
                 Instance Right = Input.Arguments[0];
-                return (await Left.CallInstanceMethod(Input.Script, "==", Right)).IsTruthy ? Input.Api.False : Input.Api.True;
+                return (await Left.CallInstanceMethod(Input.Scope, "==", Right)).IsTruthy ? Input.Api.False : Input.Api.True;
             }
             public static async Task<Instance> _Spaceship(MethodInput Input) {
                 return Input.Api.Nil;
@@ -684,8 +682,8 @@ namespace Embers
                 }
                 // Return method if found
                 if (Found) {
-                    if (!Input.Script.AllowUnsafeApi && FindMethod!.Unsafe) {
-                        throw new RuntimeException($"{Input.Location}: The method '{MethodName}' is unavailable since AllowUnsafeApi is disabled for this script.");
+                    if (!Input.Scope.AllowUnsafeApi && FindMethod!.Unsafe) {
+                        throw new RuntimeException($"{Input.Location}: The method '{MethodName}' is unavailable since AllowUnsafeApi is disabled for this scope.");
                     }
                     return new ProcInstance(Input.Api.Proc, FindMethod!);
                 }
@@ -695,7 +693,7 @@ namespace Embers
             }
             public static async Task<Instance> constants(MethodInput Input) {
                 List<Instance> Constants = new();
-                foreach (KeyValuePair<string, Instance> Constant in Input.Script.GetAllLocalConstants()) {
+                foreach (KeyValuePair<string, Instance> Constant in Input.Scope.GetAllLocalConstants()) {
                     Constants.Add(Input.Api.GetSymbol(Constant.Key));
                 }
                 return new ArrayInstance(Input.Api.Array, Constants);
@@ -709,7 +707,7 @@ namespace Embers
             }
             public static async Task<Instance> eql7(MethodInput Input) {
                 Instance Other = Input.Arguments[0];
-                return (await Input.Instance.CallInstanceMethod(Input.Script, "hash")).Integer == (await Other.CallInstanceMethod(Input.Script, "hash")).Integer
+                return (await Input.Instance.CallInstanceMethod(Input.Scope, "hash")).Integer == (await Other.CallInstanceMethod(Input.Scope, "hash")).Integer
                     ? Input.Api.True : Input.Api.False;
             }
             public static async Task<Instance> methods(MethodInput Input) {
@@ -750,7 +748,7 @@ namespace Embers
             public static async Task<Instance> in7(MethodInput Input) {
                 List<Instance> Array = Input.Arguments[0].Array;
                 foreach (Instance Item in Array) {
-                    if ((await Item.CallInstanceMethod(Input.Script, "==", Input.Instance)).IsTruthy) {
+                    if ((await Item.CallInstanceMethod(Input.Scope, "==", Input.Instance)).IsTruthy) {
                         return Input.Api.True;
                     }
                 }
@@ -776,11 +774,11 @@ namespace Embers
             public static async Task<Instance> attr_reader(MethodInput Input) {
                 string VariableName = Input.Arguments[0].String;
                 // Prevent redefining unsafe API methods
-                if (!Input.Script.AllowUnsafeApi && Input.Instance.TryGetInstanceMethod(VariableName, out Method? ExistingMethod) && ExistingMethod!.Unsafe) {
-                    throw new RuntimeException($"{Input.Location}: The instance method '{VariableName}' cannot be redefined since AllowUnsafeApi is disabled for this script.");
+                if (!Input.Scope.AllowUnsafeApi && Input.Instance.TryGetInstanceMethod(VariableName, out Method? ExistingMethod) && ExistingMethod!.Unsafe) {
+                    throw new RuntimeException($"{Input.Location}: The instance method '{VariableName}' cannot be redefined since AllowUnsafeApi is disabled for this scope.");
                 }
                 // Create or overwrite instance method
-                Input.Instance.InstanceMethods[VariableName] = Input.Script.CreateMethod(async Input2 => {
+                Input.Instance.InstanceMethods[VariableName] = Input.Scope.CreateMethod(async Input2 => {
                     Input2.Instance.InstanceVariables.TryGetValue(VariableName, out Instance? Value);
                     return Value ?? Input.Api.Nil;
                 }, 0);
@@ -790,11 +788,11 @@ namespace Embers
             public static async Task<Instance> attr_writer(MethodInput Input) {
                 string VariableName = Input.Arguments[0].String;
                 // Prevent redefining unsafe API methods
-                if (!Input.Script.AllowUnsafeApi && Input.Instance.TryGetInstanceMethod(VariableName, out Method? ExistingMethod) && ExistingMethod!.Unsafe) {
-                    throw new RuntimeException($"{Input.Location}: The instance method '{VariableName}' cannot be redefined since AllowUnsafeApi is disabled for this script.");
+                if (!Input.Scope.AllowUnsafeApi && Input.Instance.TryGetInstanceMethod(VariableName, out Method? ExistingMethod) && ExistingMethod!.Unsafe) {
+                    throw new RuntimeException($"{Input.Location}: The instance method '{VariableName}' cannot be redefined since AllowUnsafeApi is disabled for this scope.");
                 }
                 // Create or overwrite instance method
-                Input.Instance.InstanceMethods[$"{VariableName}="] = Input.Script.CreateMethod(async Input2 => {
+                Input.Instance.InstanceMethods[$"{VariableName}="] = Input.Scope.CreateMethod(async Input2 => {
                     return Input2.Instance.InstanceVariables[VariableName] = Input2.Arguments[0];
                 }, 1);
 
@@ -806,15 +804,15 @@ namespace Embers
                 return Input.Api.Nil;
             }
             public static async Task<Instance> @public(MethodInput Input) {
-                Input.Script.CurrentAccessModifier = AccessModifier.Public;
+                Input.Scope.ParentScope!.CurrentAccessModifier = AccessModifier.Public;
                 return Input.Api.Nil;
             }
             public static async Task<Instance> @private(MethodInput Input) {
-                Input.Script.CurrentAccessModifier = AccessModifier.Private;
+                Input.Scope.ParentScope!.CurrentAccessModifier = AccessModifier.Private;
                 return Input.Api.Nil;
             }
             public static async Task<Instance> @protected(MethodInput Input) {
-                Input.Script.CurrentAccessModifier = AccessModifier.Protected;
+                Input.Scope.ParentScope!.CurrentAccessModifier = AccessModifier.Protected;
                 return Input.Api.Nil;
             }
         }
@@ -1216,11 +1214,11 @@ namespace Embers
                         Instance Result;
                         // x.times do |n|
                         if (TakesArgument) {
-                            Result = await Input.OnYield.Call(Input.Script, null, new IntegerInstance(Input.Api.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            Result = await Input.OnYield.Call(Input.Scope, null, new IntegerInstance(Input.Api.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
                         // x.times do
                         else {
-                            Result = await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            Result = await Input.OnYield.Call(Input.Scope, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
 
                         if (Result is LoopControlReturnCode LoopControlReturnCode) {
@@ -1495,7 +1493,7 @@ namespace Embers
         }
         static class _Proc {
             public static async Task<Instance> call(MethodInput Input) {
-                return await Input.Instance.Proc.Call(Input.Script, null, Input.Arguments, Input.OnYield);
+                return await Input.Instance.Proc.Call(Input.Scope, null, Input.Arguments, Input.OnYield);
             }
         }
         static class _Range {
@@ -1526,11 +1524,11 @@ namespace Embers
                         Instance Result;
                         // x.each do |n|
                         if (TakesArgument) {
-                            Result = await Input.OnYield.Call(Input.Script, null, new IntegerInstance(Input.Api.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            Result = await Input.OnYield.Call(Input.Scope, null, new IntegerInstance(Input.Api.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
                         // x.each do
                         else {
-                            Result = await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            Result = await Input.OnYield.Call(Input.Scope, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
 
                         if (Result is LoopControlReturnCode LoopControlReturnCode) {
@@ -1566,11 +1564,11 @@ namespace Embers
                         Instance Result;
                         // x.reverse_each do |n|
                         if (TakesArgument) {
-                            Result = await Input.OnYield.Call(Input.Script, null, new IntegerInstance(Input.Api.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            Result = await Input.OnYield.Call(Input.Scope, null, new IntegerInstance(Input.Api.Integer, i), BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
                         // x.reverse_each do
                         else {
-                            Result = await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            Result = await Input.OnYield.Call(Input.Scope, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
 
                         if (Result is LoopControlReturnCode LoopControlReturnCode) {
@@ -1619,7 +1617,7 @@ namespace Embers
         static class _Array {
             private static async Task<Instance> _GetIndex(MethodInput Input, int ArrayIndex) {
                 Instance Index = new IntegerInstance(Input.Api.Integer, ArrayIndex);
-                return await Input.Instance.CallInstanceMethod(Input.Script, "[]", new Instances(Index));
+                return await Input.Instance.CallInstanceMethod(Input.Scope, "[]", new Instances(Index));
             }
             private static int _RealisticIndex(MethodInput Input, DynInteger RawIndex) {
                 if (RawIndex < int.MinValue || RawIndex > int.MaxValue) {
@@ -1701,7 +1699,7 @@ namespace Embers
                     if (Count != Right.Array.Count) return Input.Api.False;
 
                     for (int i = 0; i < Left.Array.Count; i++) {
-                        bool ValuesEqual = (await Left.Array[i].CallInstanceMethod(Input.Script, "==", Right.Array[i])).IsTruthy;
+                        bool ValuesEqual = (await Left.Array[i].CallInstanceMethod(Input.Scope, "==", Right.Array[i])).IsTruthy;
                         if (!ValuesEqual) return Input.Api.False;
                     }
                     return Input.Api.True;
@@ -1763,7 +1761,7 @@ namespace Embers
                     // Count how many times the item appears in the array
                     int Count = 0;
                     foreach (Instance Item in Items) {
-                        Instances IsEqual = await Item.CallInstanceMethod(Input.Script, "==", ItemToCount);
+                        Instances IsEqual = await Item.CallInstanceMethod(Input.Scope, "==", ItemToCount);
                         if (IsEqual[0].IsTruthy) {
                             Count++;
                         }
@@ -1813,7 +1811,7 @@ namespace Embers
                     Instance Minimum = Items[0];
                     for (int i = 1; i < Items.Count; i++) {
                         Instance Current = Items[i];
-                        if ((await Current.CallInstanceMethod(Input.Script, "<", Minimum)).IsTruthy) {
+                        if ((await Current.CallInstanceMethod(Input.Scope, "<", Minimum)).IsTruthy) {
                             Minimum = Current;
                         }
                     }
@@ -1829,7 +1827,7 @@ namespace Embers
                     Instance Maximum = Items[0];
                     for (int i = 1; i < Items.Count; i++) {
                         Instance Current = Items[i];
-                        if ((await Current.CallInstanceMethod(Input.Script, ">", Maximum)).IsTruthy) {
+                        if ((await Current.CallInstanceMethod(Input.Scope, ">", Maximum)).IsTruthy) {
                             Maximum = Current;
                         }
                     }
@@ -1862,15 +1860,15 @@ namespace Embers
                         Instance Result;
                         // x.each do |n, i|
                         if (TakesArguments == 2) {
-                            Result = await Input.OnYield.Call(Input.Script, null, new List<Instance>() { Array[i], new IntegerInstance(Input.Api.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            Result = await Input.OnYield.Call(Input.Scope, null, new List<Instance>() { Array[i], new IntegerInstance(Input.Api.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
                         // x.each do |n|
                         else if (TakesArguments == 1) {
-                            Result = await Input.OnYield.Call(Input.Script, null, Array[i], BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            Result = await Input.OnYield.Call(Input.Scope, null, Array[i], BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
                         // x.each do
                         else {
-                            Result = await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            Result = await Input.OnYield.Call(Input.Scope, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
 
                         if (Result is LoopControlReturnCode LoopControlReturnCode) {
@@ -1904,15 +1902,15 @@ namespace Embers
                         Instance Result;
                         // x.reverse_each do |n, i|
                         if (TakesArguments == 2) {
-                            Result = await Input.OnYield.Call(Input.Script, null, new List<Instance>() { Array[i], new IntegerInstance(Input.Api.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            Result = await Input.OnYield.Call(Input.Scope, null, new List<Instance>() { Array[i], new IntegerInstance(Input.Api.Integer, i) }, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
                         // x.reverse_each do |n|
                         else if (TakesArguments == 1) {
-                            Result = await Input.OnYield.Call(Input.Script, null, Array[i], BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            Result = await Input.OnYield.Call(Input.Scope, null, Array[i], BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
                         // x.reverse_each do
                         else {
-                            Result = await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            Result = await Input.OnYield.Call(Input.Scope, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
 
                         if (Result is LoopControlReturnCode LoopControlReturnCode) {
@@ -1943,7 +1941,7 @@ namespace Embers
                     List<Instance> MappedArray = new();
                     for (int i = 0; i < Array.Count; i++) {
                         Instance Item = Array[i];
-                        Instance MappedItem = await Input.OnYield.Call(Input.Script, null, Item, CatchReturn: false);
+                        Instance MappedItem = await Input.OnYield.Call(Input.Scope, null, Item, CatchReturn: false);
                         MappedArray.Add(MappedItem);
                     }
                     if (Exclaim) {
@@ -1964,12 +1962,12 @@ namespace Embers
                 Func<Instance, Instance, Task<bool>> SortBlock;
                 if (Input.OnYield != null) {
                     SortBlock = async (A, B) => {
-                        return (await Input.OnYield.Call(Input.Script, null, new Instances(A, B), CatchReturn: false)).Integer < 0;
+                        return (await Input.OnYield.Call(Input.Scope, null, new Instances(A, B), CatchReturn: false)).Integer < 0;
                     };
                 }
                 else {
                     SortBlock = async (A, B) => {
-                        return (await A.CallInstanceMethod(Input.Script, "<=>", B)).Integer < 0;
+                        return (await A.CallInstanceMethod(Input.Scope, "<=>", B)).Integer < 0;
                     };
                 }
                 // Sort array
@@ -1993,7 +1991,7 @@ namespace Embers
             public static async Task<Instance> include7(MethodInput Input) {
                 Instance ItemToFind = Input.Arguments[0];
                 foreach (Instance Item in Input.Instance.Array) {
-                    if ((await Item.CallInstanceMethod(Input.Script, "==", ItemToFind)).IsTruthy) {
+                    if ((await Item.CallInstanceMethod(Input.Scope, "==", ItemToFind)).IsTruthy) {
                         return Input.Api.True;
                     }
                 }
@@ -2005,7 +2003,7 @@ namespace Embers
                 Instance LastDeletedItem = Input.Api.Nil;
                 for (int i = 0; i < Array.Count; i++) {
                     Instance Item = Array[i];
-                    if ((await Item.CallInstanceMethod(Input.Script, "==", DeleteItem)).IsTruthy) {
+                    if ((await Item.CallInstanceMethod(Input.Scope, "==", DeleteItem)).IsTruthy) {
                         Array.RemoveAt(i);
                         LastDeletedItem = Item;
                     }
@@ -2063,7 +2061,7 @@ namespace Embers
                 Instance Key = Input.Arguments[0];
 
                 // Return value at hash index or default value
-                Instance? Value = await Hash.Lookup(Input.Script, Key);
+                Instance? Value = await Hash.Lookup(Input.Scope, Key);
                 if (Value != null) {
                     return Value;
                 }
@@ -2078,7 +2076,7 @@ namespace Embers
                 Instance Value = Input.Arguments[1];
 
                 // Store value
-                await Hash.Store(Input.Script, Key, Value);
+                await Hash.Store(Input.Scope, Key, Value);
                 return Value;
             }
             public static async Task<Instance> _Equals(MethodInput Input) {
@@ -2087,9 +2085,9 @@ namespace Embers
                 if (Right is HashInstance) {
                     foreach (KeyValuePair<Instance, Instance> LeftKeyValue in Left.Hash.KeyValues) {
                         foreach (KeyValuePair<Instance, Instance> RightKeyValue in Right.Hash.KeyValues) {
-                            bool KeysEqual = (await LeftKeyValue.Key.CallInstanceMethod(Input.Script, "==", RightKeyValue.Key)).IsTruthy;
+                            bool KeysEqual = (await LeftKeyValue.Key.CallInstanceMethod(Input.Scope, "==", RightKeyValue.Key)).IsTruthy;
                             if (!KeysEqual) return Input.Api.False;
-                            bool ValuesEqual = (await LeftKeyValue.Value.CallInstanceMethod(Input.Script, "==", RightKeyValue.Value)).IsTruthy;
+                            bool ValuesEqual = (await LeftKeyValue.Value.CallInstanceMethod(Input.Scope, "==", RightKeyValue.Value)).IsTruthy;
                             if (!ValuesEqual) return Input.Api.False;
                         }
                     }
@@ -2111,12 +2109,12 @@ namespace Embers
             }
             public static async Task<Instance> has_key7(MethodInput Input) {
                 Instance ItemToFind = Input.Arguments[0];
-                Instance? Found = await Input.Instance.Hash.Lookup(Input.Script, ItemToFind);
+                Instance? Found = await Input.Instance.Hash.Lookup(Input.Scope, ItemToFind);
                 return Found != null ? Input.Api.True : Input.Api.False;
             }
             public static async Task<Instance> has_value7(MethodInput Input) {
                 Instance ItemToFind = Input.Arguments[0];
-                Instance? Found = await Input.Instance.Hash.ReverseLookup(Input.Script, ItemToFind);
+                Instance? Found = await Input.Instance.Hash.ReverseLookup(Input.Scope, ItemToFind);
                 return Found != null ? Input.Api.True : Input.Api.False;
             }
             public static async Task<Instance> keys(MethodInput Input) {
@@ -2128,7 +2126,7 @@ namespace Embers
             public static async Task<Instance> delete(MethodInput Input) {
                 HashDictionary Hash = Input.Instance.Hash;
                 Instance Key = Input.Arguments[0];
-                return await Hash.Remove(Input.Script, Key) ?? Input.Api.Nil;
+                return await Hash.Remove(Input.Scope, Key) ?? Input.Api.Nil;
             }
             public static async Task<Instance> clear(MethodInput Input) {
                 Input.Instance.Hash.Clear();
@@ -2144,15 +2142,15 @@ namespace Embers
                         Instance Result;
                         // x.each do |key, value|
                         if (TakesArguments == 2) {
-                            Result = await Input.OnYield.Call(Input.Script, null, new List<Instance>() {Match.Key, Match.Value}, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            Result = await Input.OnYield.Call(Input.Scope, null, new List<Instance>() {Match.Key, Match.Value}, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
                         // x.each do |key|
                         else if (TakesArguments == 1) {
-                            Result = await Input.OnYield.Call(Input.Script, null, Match.Key, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            Result = await Input.OnYield.Call(Input.Scope, null, Match.Key, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
                         // x.each do
                         else {
-                            Result = await Input.OnYield.Call(Input.Script, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
+                            Result = await Input.OnYield.Call(Input.Scope, null, BreakHandleType: BreakHandleType.Rethrow, CatchReturn: false);
                         }
 
                         if (Result is LoopControlReturnCode LoopControlReturnCode) {
@@ -2180,7 +2178,7 @@ namespace Embers
                 HashInstance Hash = (HashInstance)Input.Instance;
                 HashDictionary Inverted = new();
                 foreach (KeyValuePair<Instance, Instance> Match in Hash.Hash.KeyValues) {
-                    await Inverted.Store(Input.Script, Match.Value, Match.Key);
+                    await Inverted.Store(Input.Scope, Match.Value, Match.Key);
                 }
                 return new HashInstance(Input.Api.Hash, Inverted, Hash.DefaultValue);
             }
@@ -2479,7 +2477,7 @@ namespace Embers
                         Instance Current = Array[i];
                         int CurrentIndex = i;
 
-                        ScriptThread Thread = new(Input.Script) {
+                        ScopeThread Thread = new(Input.Scope) {
                             Method = Input.OnYield
                         };
                         Methods[i] = async () => {
@@ -2513,7 +2511,7 @@ namespace Embers
                     for (DynInteger i = Times.Min!.Value; i <= Times.Max!.Value; i++) {
                         DynInteger CurrentIndex = i;
 
-                        ScriptThread Thread = new(Input.Script) {
+                        ScopeThread Thread = new(Input.Scope) {
                             Method = Input.OnYield
                         };
                         Methods[Counter] = async () => {
@@ -2590,7 +2588,7 @@ namespace Embers
                 string MethodName = Input.Arguments[0].String;
                 Instances Arguments = Input.Arguments.MultiInstance.GetIndexRange(1);
                 if (WeakRef.WeakRef.TryGetTarget(out Instance? Target)) {
-                    return await Target.CallInstanceMethod(Input.Script, MethodName, Arguments, Input.OnYield);
+                    return await Target.CallInstanceMethod(Input.Scope, MethodName, Arguments, Input.OnYield);
                 }
                 else {
                     throw new RuntimeException($"{Input.Location}: Cannot call method on WeakRef because it is dead");
@@ -2649,305 +2647,6 @@ namespace Embers
             }
             public static async Task<Instance> name(MethodInput Input) {
                 return new StringInstance(Input.Api.String, Input.Instance.Module!.Name);
-            }
-        }
-
-        //
-        // INSTANCES
-        //
-
-        public class NilInstance : Instance {
-            public override string Inspect() {
-                return "nil";
-            }
-            public override string LightInspect() {
-                return "";
-            }
-            public NilInstance(Class fromClass) : base(fromClass) { }
-        }
-        public class TrueInstance : Instance {
-            public override object? Object { get { return true; } }
-            public override bool Boolean { get { return true; } }
-            public override string Inspect() {
-                return "true";
-            }
-            public TrueInstance(Class fromClass) : base(fromClass) { }
-        }
-        public class FalseInstance : Instance {
-            public override object? Object { get { return false; } }
-            public override bool Boolean { get { return false; } }
-            public override string Inspect() {
-                return "false";
-            }
-            public FalseInstance(Class fromClass) : base(fromClass) { }
-        }
-        public class StringInstance : Instance {
-            string Value;
-            public override object? Object { get { return Value; } }
-            public override string String { get { return Value; } }
-            public override string Inspect() {
-                return '"' + Value.Replace("\n", "\\n").Replace("\r", "\\r") + '"';
-            }
-            public override string LightInspect() {
-                return Value;
-            }
-            public StringInstance(Class fromClass, string value) : base(fromClass) {
-                Value = value;
-            }
-            public void SetValue(string value) {
-                Value = value;
-            }
-        }
-        public class SymbolInstance : Instance {
-            readonly string Value;
-            readonly bool IsStringSymbol;
-            public override object? Object { get { return Value; } }
-            public override string String { get { return Value; } }
-            public override string Inspect() {
-                if (IsStringSymbol) {
-                    return ":\"" + Value.Replace("\n", "\\n").Replace("\r", "\\r") + "\"";
-                }
-                else {
-                    return ":" + Value;
-                }
-            }
-            public override string LightInspect() {
-                return Value;
-            }
-            public SymbolInstance(Class fromClass, string value) : base(fromClass) {
-                Value = value;
-                IsStringSymbol = Value.Any("(){}[]<>=+-*/%.,;@#&|~^$".Contains) || Value.Any(char.IsWhiteSpace) || (Value.Length != 0 && Value[0].IsAsciiDigit()) || Value[..^1].Any("?!".Contains);
-            }
-            ~SymbolInstance() {
-                Module!.Interpreter.Symbols.Dict.Remove(Value);
-            }
-        }
-        public class IntegerInstance : Instance {
-            readonly DynInteger Value;
-            public override object? Object { get { return Value; } }
-            public override DynInteger Integer { get { return Value; } }
-            public override DynFloat Float { get { return Value; } }
-            public override string Inspect() {
-                return Value.ToString();
-            }
-            public IntegerInstance(Class fromClass, DynInteger value) : base(fromClass) {
-                Value = value;
-            }
-        }
-        public class FloatInstance : Instance {
-            readonly DynFloat Value;
-            public override object? Object { get { return Value; } }
-            public override DynFloat Float { get { return Value; } }
-            public override DynInteger Integer { get { return (DynInteger)Value; } }
-            public override string Inspect() {
-                if (Value.IsDouble) {
-                    if (double.IsPositiveInfinity(Value.Double))
-                        return "Infinity";
-                    else if (double.IsNegativeInfinity(Value.Double))
-                        return "-Infinity";
-                }
-
-                string FloatString = Value.ToString();
-                if (!FloatString.Contains('.'))
-                    FloatString += ".0";
-                return FloatString;
-            }
-            public FloatInstance(Class fromClass, DynFloat value) : base(fromClass) {
-                Value = value;
-            }
-        }
-        public class ProcInstance : Instance {
-            Method Value;
-            public override object? Object { get { return Value; } }
-            public override Method Proc { get { return Value; } }
-            public ProcInstance(Class fromClass, Method value) : base(fromClass) {
-                Value = value;
-            }
-            public void SetValue(Method value) {
-                Value = value;
-            }
-        }
-        public class ThreadInstance : Instance {
-            public readonly ScriptThread ScriptThread;
-            public override object? Object { get { return ScriptThread; } }
-            public override ScriptThread Thread { get { return ScriptThread; } }
-            public ThreadInstance(Class fromClass, Script fromScript) : base(fromClass) {
-                ScriptThread = new(fromScript);
-            }
-            public void SetMethod(Method method) {
-                Thread.Method = method;
-            }
-        }
-        public class RangeInstance : Instance {
-            public IntegerInstance? Min;
-            public IntegerInstance? Max;
-            public Instance AppliedMin;
-            public Instance AppliedMax;
-            public bool IncludesMax;
-            public override object? Object { get { return ToIntegerRange; } }
-            public override IntegerRange Range { get { return ToIntegerRange; } }
-            public override string Inspect() {
-                return $"{(Min != null ? Min.Inspect() : "")}{(IncludesMax ? ".." : "...")}{(Max != null ? Max.Inspect() : "")}";
-            }
-            public RangeInstance(Class fromClass, IntegerInstance? min, IntegerInstance? max, bool includesMax) : base(fromClass) {
-                Min = min;
-                Max = max;
-                IncludesMax = includesMax;
-                (AppliedMin, AppliedMax) = Setup();
-                Setup();
-            }
-            public void SetValue(IntegerInstance min, IntegerInstance max, bool includesMax) {
-                Min = min;
-                Max = max;
-                IncludesMax = includesMax;
-                Setup();
-            }
-            (Instance, Instance) Setup() {
-                if (Min == null) {
-                    AppliedMin = Max!.Module!.Interpreter.Api.Nil;
-                    AppliedMax = IncludesMax ? Max : new IntegerInstance(Max.Module!.Interpreter.Api.Integer, Max.Integer - 1);
-                }
-                else if (Max == null) {
-                    AppliedMin = Min;
-                    AppliedMax = Min!.Module!.Interpreter.Api.Nil;
-                }
-                else {
-                    AppliedMin = Min;
-                    AppliedMax = IncludesMax ? Max : new IntegerInstance(Max.Module!.Interpreter.Api.Integer, Max.Integer - 1);
-                }
-                return (AppliedMin, AppliedMax);
-            }
-            IntegerRange ToIntegerRange => new(AppliedMin is IntegerInstance ? (long)AppliedMin.Integer : null, AppliedMax is IntegerInstance ? (long)AppliedMax.Integer : null);
-        }
-        public class ArrayInstance : Instance {
-            List<Instance> Value;
-            public override object? Object { get { return Value; } }
-            public override List<Instance> Array { get { return Value; } }
-            public override string Inspect() {
-                return $"[{Value.InspectInstances()}]";
-            }
-            public override string LightInspect() {
-                return Value.LightInspectInstances("\n");
-            }
-            public ArrayInstance(Class fromClass, List<Instance> value) : base(fromClass) {
-                Value = value;
-            }
-            public void SetValue(List<Instance> value) {
-                Value = value;
-            }
-            public override int GetHashCode() {
-                unchecked {
-                    int CurrentHash = 19;
-                    foreach (Instance Item in Value) {
-                        CurrentHash = CurrentHash * 31 + Item.GetHashCode();
-                    }
-                    return CurrentHash;
-                }
-            }
-        }
-        public class HashInstance : Instance {
-            HashDictionary Value;
-            public Instance DefaultValue;
-            public override object? Object { get { return Value; } }
-            public override HashDictionary Hash { get { return Value; } }
-            public override string Inspect() {
-                return $"{{{Value.InspectHash()}}}";
-            }
-            public HashInstance(Class fromClass, HashDictionary value, Instance defaultValue) : base(fromClass) {
-                Value = value;
-                DefaultValue = defaultValue;
-            }
-            public void SetValue(HashDictionary value, Instance defaultValue) {
-                Value = value;
-                DefaultValue = defaultValue;
-            }
-            public void SetValue(HashDictionary value) {
-                Value = value;
-            }
-            public override int GetHashCode() {
-                unchecked {
-                    int CurrentHash = 0;
-                    foreach (KeyValuePair<Instance, Instance> Item in Value.KeyValues) {
-                        CurrentHash ^= Item.Key.GetHashCode() ^ Item.Value.GetHashCode();
-                    }
-                    return CurrentHash;
-                }
-            }
-        }
-        public class HashArgumentsInstance : Instance {
-            public readonly HashInstance Value;
-            public override string Inspect() {
-                return $"Hash arguments instance: {{{Value.Inspect()}}}";
-            }
-            public HashArgumentsInstance(HashInstance value, Interpreter interpreter) : base(interpreter) {
-                Value = value;
-            }
-        }
-        public class ExceptionInstance : Instance {
-            Exception Value;
-            public override object? Object { get { return Value; } }
-            public override Exception Exception { get { return Value; } }
-            public ExceptionInstance(Class fromClass, string message) : base(fromClass) {
-                Value = new Exception(message);
-            }
-            public ExceptionInstance(Class fromClass, Exception exception) : base(fromClass) {
-                Value = exception;
-            }
-            public void SetValue(string message) {
-                Value = new Exception(message);
-            }
-            public void SetValue(Exception exception) {
-                Value = exception;
-            }
-        }
-        public class TimeInstance : Instance {
-            DateTimeOffset Value;
-            public override object? Object { get { return Value; } }
-            public override DateTimeOffset Time { get { return Value; } }
-            public override string Inspect() {
-                return Value.ToString(System.Globalization.CultureInfo.GetCultureInfo("ja-JP")); // yyyy/mm/dd format
-            }
-            public TimeInstance(Class fromClass, DateTimeOffset value) : base(fromClass) {
-                Value = value;
-            }
-            public void SetValue(DateTimeOffset value) {
-                Value = value;
-            }
-        }
-        public class WeakRefInstance : Instance {
-            WeakReference<Instance> Value;
-            public override object? Object { get { return Value; } }
-            public override WeakReference<Instance> WeakRef { get { return Value; } }
-            public WeakRefInstance(Class fromClass, WeakReference<Instance> value) : base(fromClass) {
-                Value = value;
-            }
-            public void SetValue(WeakReference<Instance> value) {
-                Value = value;
-            }
-        }
-        public class HttpResponseInstance : Instance {
-            HttpResponseMessage Value;
-            public override object? Object { get { return Value; } }
-            public override HttpResponseMessage HttpResponse { get { return Value; } }
-            public HttpResponseInstance(Class fromClass, HttpResponseMessage value) : base(fromClass) {
-                Value = value;
-            }
-            public void SetValue(HttpResponseMessage value) {
-                Value = value;
-            }
-        }
-        public class ModuleReference : Instance {
-            public override object? Object { get { return Module!; } }
-            public override string Inspect() {
-                return Module!.Name;
-            }
-            public override string LightInspect() {
-                return Module!.Name;
-            }
-            public ModuleReference(Module module) : base(module) {
-                // Copy changes to the parent module
-                InstanceMethods = module.InstanceMethods;
-                InstanceVariables = module.InstanceVariables;
             }
         }
     }

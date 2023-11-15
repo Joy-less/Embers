@@ -6,9 +6,6 @@ using System.Text;
 using System.Numerics;
 using System.Threading.Tasks;
 using static Embers.Phase2;
-using static Embers.Script;
-using static Embers.SpecialTypes;
-using static Embers.Api;
 #if !NET6_0_OR_GREATER
     using System.Threading.Tasks;
     using System.Diagnostics;
@@ -154,6 +151,7 @@ namespace Embers
         }
         public static void ReplaceContentsWith<T>(this Stack<T> Stack, T[] With) {
             Stack.Clear();
+            Stack.EnsureCapacity(With.Length);
             for (int i = With.Length - 1; i >= 0; i--) {
                 Stack.Push(With[i]);
             }
@@ -221,6 +219,9 @@ namespace Embers
         public static bool IsAsciiLetterUpper(this char Chara) {
             return Chara >= 'A' && Chara <= 'Z';
         }
+        public static bool IsConstantIdentifier(this string String) {
+            return String.Length != 0 && String[0].IsAsciiLetterUpper();
+        }
         public static bool IsSmall(this long Long) {
             return long.MinValue / 2 < Long && Long < long.MaxValue / 2;
         }
@@ -260,11 +261,11 @@ namespace Embers
         public static double ToUnixTimeSecondsDouble(this DateTimeOffset DateTimeOffset) {
             return DateTimeOffset.ToUnixTimeSeconds() + (DateTimeOffset.Ticks % TimeSpan.TicksPerSecond) / (double)TimeSpan.TicksPerSecond;
         }
-        public static T First<T>(this ICollection Collection) {
-            foreach (object Item in Collection) {
-                if (Item is T ItemAsT) return ItemAsT;
+        public static TItem First<TStack, TItem>(this Stack<TStack> Stack) where TItem : TStack {
+            foreach (TStack Item in Stack) {
+                if (Item is TItem ItemAsT) return ItemAsT;
             }
-            throw new InternalErrorException($"Item which is a {typeof(T).GetType().Name} not found in collection");
+            throw new InternalErrorException("Item not found in stack");
         }
         public static async Task QuickSort(this List<Instance> Items, Func<Instance, Instance, Task<bool>> SortBlock) {
             async Task QuickSort(List<Instance> Items, int Low, int High) {
