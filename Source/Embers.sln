@@ -5,7 +5,9 @@ VisualStudioVersion = 17.7.34009.444
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Embers", "Embers\Embers.csproj", "{5DABC494-340B-4868-8B00-A44384A3BB5B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Embers Tests", "Embers Tests\Embers Tests.csproj", "{3DB0E067-5814-483D-96F2-420E3D9ADF21}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Embers Tests", "Embers Tests\Embers Tests.csproj", "{3DB0E067-5814-483D-96F2-420E3D9ADF21}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Program", "Program\Program.csproj", "{7C82E690-A710-44FC-8822-36EAD1F1E7C0}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,10 @@ Global
 		{3DB0E067-5814-483D-96F2-420E3D9ADF21}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3DB0E067-5814-483D-96F2-420E3D9ADF21}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3DB0E067-5814-483D-96F2-420E3D9ADF21}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7C82E690-A710-44FC-8822-36EAD1F1E7C0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7C82E690-A710-44FC-8822-36EAD1F1E7C0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7C82E690-A710-44FC-8822-36EAD1F1E7C0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7C82E690-A710-44FC-8822-36EAD1F1E7C0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

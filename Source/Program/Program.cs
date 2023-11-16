@@ -1,24 +1,9 @@
-﻿using System;
-using System.Diagnostics;
+﻿using System.Diagnostics;
+using Embers;
 
-namespace Embers
+namespace Program
 {
-    internal class Program
-    {
-        static string ToSnakeCase(string String) {
-            if (String.Length == 0) return String;
-            else if (String.Length == 1) return String.ToLower();
-            else {
-                string SnakeString = "";
-                foreach (char Chara in String) {
-                    SnakeString += char.IsUpper(Chara)
-                        ? "_" + char.ToLower(Chara)
-                        : Chara;
-                }
-                return SnakeString.TrimStart('_');
-            }
-        }
-
+    internal class Program {
         static void Main() {
             // Test
             {
