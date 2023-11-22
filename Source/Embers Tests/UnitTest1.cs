@@ -426,6 +426,15 @@ namespace Embers_Tests
                 end
                 return 6
             ", new DynInteger(6));
+
+            // Precision
+            AssertEqual(@"
+                a = (10 ** 26 + 1) == (10 ** 26 + 1)
+                b = (10 ** 26.0 + 1) == (10 ** 26.0 + 1)
+                c = (10.0 ** 26 + 1) == (10.0 ** 26 + 1)
+                d = (Float::INFINITY - Float::INFINITY).to_s
+                return a, b, c, d
+            ", new object?[] {true, true, true, "NaN"});
         }
 
 

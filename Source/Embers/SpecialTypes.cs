@@ -110,120 +110,58 @@ namespace Embers
             Long = default;
             IsLong = false;
         }
-        public static DynInteger operator +(DynInteger Left, DynInteger Right) {
+        private static DynInteger Compute(DynInteger Left, DynInteger Right, Func<long, long, long> LongCalculation, Func<BigInteger, BigInteger, BigInteger> BigCalculation) {
             if (Left.IsLong && Right.IsLong) {
-                long SmallResult = Left.Long + Right.Long;
+                long SmallResult = LongCalculation(Left.Long, Right.Long);
                 if (SmallResult.IsSmall()) return SmallResult;
             }
 
             BigInteger BigLeft = Left.IsLong ? Left.Long : Left.BigInteger;
             BigInteger BigRight = Right.IsLong ? Right.Long : Right.BigInteger;
 
-            BigInteger Result = BigLeft + BigRight;
+            BigInteger Result = BigCalculation(BigLeft, BigRight);
             if (Result.IsSmall()) return (long)Result;
             else return Result;
         }
-        public static DynInteger operator -(DynInteger Left, DynInteger Right) {
+        private static bool Compare(DynInteger Left, DynInteger Right, Func<long, long, bool> LongComparison, Func<BigInteger, BigInteger, bool> BigComparison) {
             if (Left.IsLong && Right.IsLong) {
-                long SmallResult = Left.Long - Right.Long;
-                if (SmallResult.IsSmall()) return SmallResult;
-            }
-
-            BigInteger BigLeft = Left.IsLong ? Left.Long : Left.BigInteger;
-            BigInteger BigRight = Right.IsLong ? Right.Long : Right.BigInteger;
-
-            BigInteger Result = BigLeft - BigRight;
-            if (Result.IsSmall()) return (long)Result;
-            else return Result;
-        }
-        public static DynInteger operator *(DynInteger Left, DynInteger Right) {
-            if (Left.IsLong && Right.IsLong) {
-                long SmallResult = Left.Long * Right.Long;
-                if (SmallResult.IsSmall()) return SmallResult;
-            }
-
-            BigInteger BigLeft = Left.IsLong ? Left.Long : Left.BigInteger;
-            BigInteger BigRight = Right.IsLong ? Right.Long : Right.BigInteger;
-
-            BigInteger Result = BigLeft * BigRight;
-            if (Result.IsSmall()) return (long)Result;
-            else return Result;
-        }
-        public static DynInteger operator /(DynInteger Left, DynInteger Right) {
-            if (Left.IsLong && Right.IsLong) {
-                long SmallResult = Left.Long / Right.Long;
-                if (SmallResult.IsSmall()) return SmallResult;
-            }
-
-            BigInteger BigLeft = Left.IsLong ? Left.Long : Left.BigInteger;
-            BigInteger BigRight = Right.IsLong ? Right.Long : Right.BigInteger;
-
-            BigInteger Result = BigLeft / BigRight;
-            if (Result.IsSmall()) return (long)Result;
-            else return Result;
-        }
-        public static DynInteger operator %(DynInteger Left, DynInteger Right) {
-            if (Left.IsLong && Right.IsLong) {
-                long SmallResult = Left.Long % Right.Long;
-                if (SmallResult.IsSmall()) return SmallResult;
-            }
-
-            BigInteger BigLeft = Left.IsLong ? Left.Long : Left.BigInteger;
-            BigInteger BigRight = Right.IsLong ? Right.Long : Right.BigInteger;
-
-            BigInteger Result = BigLeft % BigRight;
-            if (Result.IsSmall()) return (long)Result;
-            else return Result;
-        }
-        public static bool operator <(DynInteger Left, DynInteger Right) {
-            if (Left.IsLong && Right.IsLong) {
-                return Left.Long < Right.Long;
+                return LongComparison(Left.Long, Right.Long);
             }
             BigInteger BigLeft = Left.IsLong ? Left.Long : Left.BigInteger;
             BigInteger BigRight = Right.IsLong ? Right.Long : Right.BigInteger;
-            return BigLeft < BigRight;
+            return BigComparison(BigLeft, BigRight);
         }
-        public static bool operator >(DynInteger Left, DynInteger Right) {
-            if (Left.IsLong && Right.IsLong) {
-                return Left.Long > Right.Long;
-            }
-            BigInteger BigLeft = Left.IsLong ? Left.Long : Left.BigInteger;
-            BigInteger BigRight = Right.IsLong ? Right.Long : Right.BigInteger;
-            return BigLeft > BigRight;
-        }
-        public static bool operator <=(DynInteger Left, DynInteger Right) {
-            return Left == Right || Left < Right;
-        }
-        public static bool operator >=(DynInteger Left, DynInteger Right) {
-            return Left == Right || Left > Right;
-        }
+        public static DynInteger operator +(DynInteger Left, DynInteger Right)
+            => Compute(Left, Right, (L, R) => L + R, (L, R) => L + R);
+        public static DynInteger operator -(DynInteger Left, DynInteger Right)
+            => Compute(Left, Right, (L, R) => L - R, (L, R) => L - R);
+        public static DynInteger operator *(DynInteger Left, DynInteger Right)
+            => Compute(Left, Right, (L, R) => L * R, (L, R) => L * R);
+        public static DynInteger operator /(DynInteger Left, DynInteger Right)
+            => Compute(Left, Right, (L, R) => L / R, (L, R) => L / R);
+        public static DynInteger operator %(DynInteger Left, DynInteger Right)
+            => Compute(Left, Right, (L, R) => L % R, (L, R) => L % R);
+        public static bool operator <(DynInteger Left, DynInteger Right)
+            => Compare(Left, Right, (L, R) => L < R, (L, R) => L < R);
+        public static bool operator >(DynInteger Left, DynInteger Right)
+            => Compare(Left, Right, (L, R) => L > R, (L, R) => L > R);
+        public static bool operator <=(DynInteger Left, DynInteger Right)
+            => Compare(Left, Right, (L, R) => L <= R, (L, R) => L <= R);
+        public static bool operator >=(DynInteger Left, DynInteger Right)
+            => Compare(Left, Right, (L, R) => L >= R, (L, R) => L >= R);
         public static bool operator ==(DynInteger? Left, DynInteger? Right) {
-            if (Left is null || Right is null) return Left is null && Right is null;
-            if (Left.Value.IsLong && Right.Value.IsLong) {
-                return Left.Value.Long == Right.Value.Long;
-            }
-            BigInteger BigLeft = Left.Value.IsLong ? Left.Value.Long : Left.Value.BigInteger;
-            BigInteger BigRight = Right.Value.IsLong ? Right.Value.Long : Right.Value.BigInteger;
-            return BigLeft == BigRight;
+            if (Left is null) return Right is null;
+            if (Right is null) return Left is null;
+            return Compare(Left.Value, Right.Value, (L, R) => L == R, (L, R) => L == R);
         }
-        public static bool operator !=(DynInteger? Left, DynInteger? Right) {
-            return !(Left == Right);
-        }
+        public static bool operator !=(DynInteger? Left, DynInteger? Right) => !(Left == Right);
         public static DynInteger operator -(DynInteger Value) => Value * -1;
         public static DynInteger operator ++(DynInteger Value) => Value + 1;
         public static DynInteger operator --(DynInteger Value) => Value - 1;
-        public static implicit operator DynInteger(long Value) {
-            return new DynInteger(Value);
-        }
-        public static implicit operator DynInteger(BigInteger Value) {
-            return new DynInteger(Value);
-        }
-        public static explicit operator long(DynInteger Value) {
-            return Value.IsLong ? Value.Long : (long)Value.BigInteger;
-        }
-        public static explicit operator BigInteger(DynInteger Value) {
-            return Value.IsLong ? Value.Long : Value.BigInteger;
-        }
+        public static implicit operator DynInteger(long Value) => new(Value);
+        public static implicit operator DynInteger(BigInteger Value) => new(Value);
+        public static explicit operator long(DynInteger Value) => Value.IsLong ? Value.Long : (long)Value.BigInteger;
+        public static explicit operator BigInteger(DynInteger Value) => Value.IsLong ? Value.Long : Value.BigInteger;
         public override string ToString() {
             return IsLong ? Long.ToString() : BigInteger.ToString();
         }
@@ -259,146 +197,65 @@ namespace Embers
             Double = Integer.IsLong ? Integer.Long : default;
             IsDouble = Integer.IsLong;
         }
-        public static DynFloat operator +(DynFloat Left, DynFloat Right) {
-            if (Left.IsDouble && Right.IsDouble || double.IsInfinity(Left.Double) || double.IsInfinity(Right.Double)) {
-                double SmallResult = Left.Double + Right.Double;
+        private static DynFloat Compute(DynFloat Left, DynFloat Right, Func<double, double, double> DoubleCalculation, Func<BigFloat, BigFloat, BigFloat> BigCalculation) {
+            if (Left.IsDouble && Right.IsDouble || Left.IsDouble && double.IsInfinity(Left.Double) || Right.IsDouble && double.IsInfinity(Right.Double)) {
+                double SmallResult = DoubleCalculation(Left.Double, Right.Double);
                 if (SmallResult.IsSmall()) return SmallResult;
             }
 
             BigFloat BigLeft = Left.IsDouble ? Left.Double : Left.BigFloat;
             BigFloat BigRight = Right.IsDouble ? Right.Double : Right.BigFloat;
 
-            BigFloat Result = BigLeft + BigRight;
+            BigFloat Result = BigCalculation(BigLeft, BigRight);
             if (Result.IsSmall()) return (double)Result;
             else return Result;
         }
-        public static DynFloat operator -(DynFloat Left, DynFloat Right) {
-            if (Left.IsDouble && Right.IsDouble || double.IsInfinity(Left.Double) || double.IsInfinity(Right.Double)) {
-                double SmallResult = Left.Double - Right.Double;
-                if (SmallResult.IsSmall()) return SmallResult;
-            }
-
-            BigFloat BigLeft = Left.IsDouble ? Left.Double : Left.BigFloat;
-            BigFloat BigRight = Right.IsDouble ? Right.Double : Right.BigFloat;
-
-            BigFloat Result = BigLeft - BigRight;
-            if (Result.IsSmall()) return (double)Result;
-            else return Result;
-        }
-        public static DynFloat operator *(DynFloat Left, DynFloat Right) {
-            if (Left.IsDouble && Right.IsDouble || double.IsInfinity(Left.Double) || double.IsInfinity(Right.Double)) {
-                double SmallResult = Left.Double * Right.Double;
-                if (SmallResult.IsSmall()) return SmallResult;
-            }
-
-            BigFloat BigLeft = Left.IsDouble ? Left.Double : Left.BigFloat;
-            BigFloat BigRight = Right.IsDouble ? Right.Double : Right.BigFloat;
-
-            BigFloat Result = BigLeft * BigRight;
-            if (Result.IsSmall()) return (double)Result;
-            else return Result;
-        }
-        public static DynFloat operator /(DynFloat Left, DynFloat Right) {
-            if (Left.IsDouble && Right.IsDouble || double.IsInfinity(Left.Double) || double.IsInfinity(Right.Double)) {
-                double SmallResult = Left.Double / Right.Double;
-                if (SmallResult.IsSmall()) return SmallResult;
-            }
-
-            BigFloat BigLeft = Left.IsDouble ? Left.Double : Left.BigFloat;
-            BigFloat BigRight = Right.IsDouble ? Right.Double : Right.BigFloat;
-
-            BigFloat Result = BigLeft / BigRight;
-            if (Result.IsSmall()) return (double)Result;
-            else return Result;
-        }
-        public static DynFloat operator %(DynFloat Left, DynFloat Right) {
-            if (Left.IsDouble && Right.IsDouble || double.IsInfinity(Left.Double) || double.IsInfinity(Right.Double)) {
-                double SmallResult = Left.Double % Right.Double;
-                if (SmallResult.IsSmall()) return SmallResult;
-            }
-
-            BigFloat BigLeft = Left.IsDouble ? Left.Double : Left.BigFloat;
-            BigFloat BigRight = Right.IsDouble ? Right.Double : Right.BigFloat;
-
-            BigFloat Result = BigLeft % BigRight;
-            if (Result.IsSmall()) return (double)Result;
-            else return Result;
-        }
-        public static bool operator <(DynFloat Left, DynFloat Right) {
+        private static bool Compare(DynFloat Left, DynFloat Right, Func<double, double, bool> DoubleComparison, Func<BigFloat, BigFloat, bool> BigComparison) {
             if (Left.IsDouble && Right.IsDouble) {
-                return Left.Double < Right.Double;
+                return DoubleComparison(Left.Double, Right.Double);
             }
             BigFloat BigLeft = Left.IsDouble ? Left.Double : Left.BigFloat;
             BigFloat BigRight = Right.IsDouble ? Right.Double : Right.BigFloat;
-            return BigLeft < BigRight;
+            return BigComparison(BigLeft, BigRight);
         }
-        public static bool operator >(DynFloat Left, DynFloat Right) {
-            if (Left.IsDouble && Right.IsDouble) {
-                return Left.Double > Right.Double;
-            }
-            BigFloat BigLeft = Left.IsDouble ? Left.Double : Left.BigFloat;
-            BigFloat BigRight = Right.IsDouble ? Right.Double : Right.BigFloat;
-            return BigLeft > BigRight;
-        }
-        public static bool operator <=(DynFloat Left, DynFloat Right) {
-            return Left == Right || Left < Right;
-        }
-        public static bool operator >=(DynFloat Left, DynFloat Right) {
-            return Left == Right || Left > Right;
-        }
+        public static DynFloat operator +(DynFloat Left, DynFloat Right)
+            => Compute(Left, Right, (L, R) => L + R, (L, R) => L + R);
+        public static DynFloat operator -(DynFloat Left, DynFloat Right)
+            => Compute(Left, Right, (L, R) => L - R, (L, R) => L - R);
+        public static DynFloat operator *(DynFloat Left, DynFloat Right)
+            => Compute(Left, Right, (L, R) => L * R, (L, R) => L * R);
+        public static DynFloat operator /(DynFloat Left, DynFloat Right)
+            => Compute(Left, Right, (L, R) => L / R, (L, R) => L / R);
+        public static DynFloat operator %(DynFloat Left, DynFloat Right)
+            => Compute(Left, Right, (L, R) => L % R, (L, R) => L % R);
+        public static bool operator <(DynFloat Left, DynFloat Right)
+            => Compare(Left, Right, (L, R) => L < R, (L, R) => L < R);
+        public static bool operator >(DynFloat Left, DynFloat Right)
+            => Compare(Left, Right, (L, R) => L > R, (L, R) => L > R);
+        public static bool operator <=(DynFloat Left, DynFloat Right)
+            => Compare(Left, Right, (L, R) => L <= R, (L, R) => L <= R);
+        public static bool operator >=(DynFloat Left, DynFloat Right)
+            => Compare(Left, Right, (L, R) => L >= R, (L, R) => L >= R);
         public static bool operator ==(DynFloat? Left, DynFloat? Right) {
-            if (Left is null || Right is null) return Left is null && Right is null;
-            if (Left.Value.IsDouble && Right.Value.IsDouble) {
-                return Left.Value.Double == Right.Value.Double;
-            }
-            BigFloat BigLeft = Left.Value.IsDouble ? Left.Value.Double : Left.Value.BigFloat;
-            BigFloat BigRight = Right.Value.IsDouble ? Right.Value.Double : Right.Value.BigFloat;
-            return BigLeft == BigRight;
+            if (Left is null) return Right is null;
+            if (Right is null) return Left is null;
+            return Compare(Left.Value, Right.Value, (L, R) => L == R, (L, R) => L == R);
         }
-        public static bool operator !=(DynFloat? Left, DynFloat? Right) {
-            return !(Left == Right);
-        }
+        public static bool operator !=(DynFloat? Left, DynFloat? Right) => !(Left == Right);
         public static DynFloat operator -(DynFloat Value) => Value * -1;
         public static DynFloat operator ++(DynFloat Value) => Value + 1;
         public static DynFloat operator --(DynFloat Value) => Value - 1;
-        public static DynFloat operator +(DynInteger Left, DynFloat Right) {
-            return (DynFloat)Left + Right;
-        }
-        public static DynFloat operator -(DynInteger Left, DynFloat Right) {
-            return (DynFloat)Left - Right;
-        }
-        public static DynFloat operator *(DynInteger Left, DynFloat Right) {
-            return (DynFloat)Left * Right;
-        }
-        public static DynFloat operator /(DynInteger Left, DynFloat Right) {
-            return (DynFloat)Left / Right;
-        }
-        public static DynFloat operator %(DynInteger Left, DynFloat Right) {
-            return (DynFloat)Left % Right;
-        }
-        public static implicit operator DynFloat(double Value) {
-            return new DynFloat(Value);
-        }
-        public static implicit operator DynFloat(DynInteger Value) {
-            return new DynFloat(Value);
-        }
-        public static implicit operator DynFloat(BigFloat Value) {
-            return new DynFloat(Value);
-        }
-        public static explicit operator double(DynFloat Value) {
-            return Value.IsDouble ? Value.Double : (double)Value.BigFloat;
-        }
-        public static explicit operator BigFloat(DynFloat Value) {
-            return Value.IsDouble ? Value.Double : Value.BigFloat;
-        }
-        public static explicit operator DynInteger(DynFloat Value) {
-            if (Value.IsDouble) {
-                return new DynInteger((long)Value.Double);
-            }
-            else {
-                return new DynInteger((BigInteger)Value.BigFloat);
-            }
-        }
+        public static DynFloat operator +(DynInteger Left, DynFloat Right) => (DynFloat)Left + Right;
+        public static DynFloat operator -(DynInteger Left, DynFloat Right) => (DynFloat)Left - Right;
+        public static DynFloat operator *(DynInteger Left, DynFloat Right) => (DynFloat)Left * Right;
+        public static DynFloat operator /(DynInteger Left, DynFloat Right) => (DynFloat)Left / Right;
+        public static DynFloat operator %(DynInteger Left, DynFloat Right) => (DynFloat)Left % Right;
+        public static implicit operator DynFloat(double Value) => new(Value);
+        public static implicit operator DynFloat(DynInteger Value) => new(Value);
+        public static implicit operator DynFloat(BigFloat Value) => new(Value);
+        public static explicit operator double(DynFloat Value) => Value.IsDouble ? Value.Double : (double)Value.BigFloat;
+        public static explicit operator BigFloat(DynFloat Value) => Value.IsDouble ? Value.Double : Value.BigFloat;
+        public static explicit operator DynInteger(DynFloat Value) => Value.IsDouble ? Value.Double.IsSmall() ? new((long)Value.Double) : new((BigInteger)Value.Double) : new((BigInteger)Value.BigFloat);
         public override string ToString() {
             return IsDouble ? Double.ToString() : BigFloat.ToString();
         }

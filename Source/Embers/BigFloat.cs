@@ -352,7 +352,7 @@ namespace Embers
             return new BigFloat(left).Divide(right);
         }
         public static BigFloat Pow(BigFloat value, int exponent) {
-            return (new BigFloat(value)).Pow(exponent);
+            return new BigFloat(value).Pow(exponent);
         }
         public static BigFloat Remainder(BigFloat left, BigFloat right) {
             return new BigFloat(left).Remainder(right);

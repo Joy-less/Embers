@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics;
 using System.Net.Http;
+using System.Numerics;
 using static Embers.Scope;
 
 #nullable enable
@@ -241,6 +242,8 @@ namespace Embers
             // Float
             Float = RootScope.CreateClass("Float");
             Float.Constants["INFINITY"] = new FloatInstance(Float, double.PositiveInfinity);
+            Float.Constants["NAN"] = new FloatInstance(Float, double.NaN);
+            Float.Constants["EPSILON"] = new FloatInstance(Float, double.Epsilon);
             Float.InstanceMethods["+"] = RootScope.CreateMethod(_Float._Add, 1);
             Float.InstanceMethods["-"] = RootScope.CreateMethod(_Float._Subtract, 1);
             Float.InstanceMethods["*"] = RootScope.CreateMethod(_Float._Multiply, 1);
@@ -1190,8 +1193,14 @@ namespace Embers
                 return _GetResult(Input, Input.Instance.Integer % Right.Float, Right is IntegerInstance);
             }
             public static async Task<Instance> _Exponentiate(MethodInput Input) {
+                DynInteger Left = Input.Instance.Integer;
                 Instance Right = Input.Arguments[0];
-                return _GetResult(Input, System.Math.Pow((long)Input.Instance.Integer, (double)Right.Float), Right is IntegerInstance);
+                if (Right is FloatInstance) {
+                    return _GetResult(Input, System.Math.Pow((double)Left, (double)Right.Float), false);
+                }
+                else {
+                    return _GetResult(Input, (DynInteger)BigInteger.Pow((BigInteger)Left, (int)Right.Integer), true);
+                }
             }
             public static async Task<Instance> _UnaryPlus(MethodInput Input) {
                 return Input.Instance;
@@ -1290,8 +1299,14 @@ namespace Embers
                 return new FloatInstance(Input.Api.Float, Input.Instance.Float % Right.Float);
             }
             public static async Task<Instance> _Exponentiate(MethodInput Input) {
+                DynFloat Left = Input.Instance.Float;
                 Instance Right = Input.Arguments[0];
-                return new FloatInstance(Input.Api.Float, System.Math.Pow((double)Input.Instance.Float, (double)Right.Float));
+                if (Right is FloatInstance) {
+                    return new FloatInstance(Input.Api.Float, System.Math.Pow((double)Left, (double)Right.Float));
+                }
+                else {
+                    return new FloatInstance(Input.Api.Float, (DynFloat)BigFloat.Pow((BigFloat)Left, (int)Right.Integer));
+                }
             }
             public static async Task<Instance> _Equals(MethodInput Input) {
                 Instance Left = Input.Instance;

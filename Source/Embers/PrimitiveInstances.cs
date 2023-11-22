@@ -292,6 +292,8 @@ namespace Embers
                     return "Infinity";
                 else if (double.IsNegativeInfinity(Value.Double))
                     return "-Infinity";
+                else if (double.IsNaN(Value.Double))
+                    return "NaN";
             }
 
             string FloatString = Value.ToString();

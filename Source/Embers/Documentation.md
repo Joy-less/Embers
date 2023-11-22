@@ -216,7 +216,13 @@ integer.abs
 ```
 ```
 Float::INFINITY
-	A constant representing positive infinity.
+	A float that is positive infinity.
+	
+Float::NAN
+	A float that is Not a Number.
+
+Float::EPSILON
+	The smallest float greater than zero.
 
 float.to_i
 	Returns the float as a truncated integer.
@@ -382,10 +388,10 @@ hash.empty?
 ```
 ```
 Math::PI
-	A constant containing 17 digits of pi.
+	A float containing 17 digits of pi.
 
 Math::E
-	A constant containing 17 digits of e.
+	A float containing 17 digits of e.
 
 Math.sqrt(number)
 	Returns the square root of the number.
