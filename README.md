@@ -6,6 +6,9 @@ An embeddable Ruby interpreter written entirely in C#.
 
 Its minimalistic design is intended for use in game engines, game mods, and C# applications.
 
+> [!NOTE]
+> A remake of Embers is in progress. Embers 3 will feature a full Ruby/C# adapter, better performance and cleaner source code.
+
 ## Embers vs IronRuby vs Ruby
 ### Embers
 - Embeddable
