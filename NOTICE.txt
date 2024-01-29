@@ -1,0 +1,18 @@
+Embers
+by Joyless
+https://github.com/Joy-less/Embers
+
+Ruby
+by Yukihiro Matsumoto
+https://ruby-lang.org
+
+EfficientInvoker (MIT)
+by Tom DuPont
+https://github.com/tdupont750/tact.net/blob/9d73a912dfd64bbd7fa88d3d1460c23c848af61a/framework/src/Tact/Reflection/EfficientInvoker.cs
+FastDelegate is influenced by "EfficientInvoker". It casts delegate arguments to their compiled types,
+which is faster than Delegate.DynamicInvoke and Delegate.Method.Invoke.
+
+Numbers (Public Domain)
+by Peter O
+https://github.com/peteroupc/Numbers
+EInteger and EDecimal are used from the library.

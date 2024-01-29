@@ -1,5 +1,0 @@
-The images in this folder are not under the same license as the rest of the repository.
-
-They are free to use under the CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0) license.
-
--Yours truly
