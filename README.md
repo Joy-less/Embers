@@ -4,7 +4,7 @@
 
 An embeddable Ruby interpreter written entirely in C#.
 
-Its minimalistic design is intended for use in game engines, game mods, and C# applications.
+Its powerful, lightweight design is intended for use in game engines, game mods, and C# applications.
 
 ## Features
 
@@ -25,7 +25,7 @@ Scope Scope = new();
 Scope.Evaluate("puts 'Ruby!'"); // Ruby!
 ```
 
-### Interop
+### Adapter
 
 Embers has an adapter which converts between .NET objects and Ruby instances. If an object is not built-in, its methods, fields and properties will be adapted. Methods such as `SetVariable` implicitly use the adapter for you.
 
@@ -57,10 +57,10 @@ Scope Scope = new(new AxisOptions() { Sandbox = true });
 Scope.Evaluate("File.write('test.txt', 'text')"); // undefined method 'write' for File:Module
 ```
 
-## Game engine support
+### Game engine support
 Embers is fully compatible with Godot, Unity, and other C# game engines.
 
-Here's an example script interacting with Godot:
+Here's a counter example in Godot:
 ```cs
 public partial class CounterScript : Node {
     [Export] RichTextLabel CounterLabel;
