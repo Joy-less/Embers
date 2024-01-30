@@ -165,52 +165,6 @@ namespace Embers {
             => $"{Target} = {Value}";
         public override Instance Interpret(Context Context) => Interpreter.InterpretAssignment(Context, this);
     }
-    /*public class ConstantAssignmentExpression : Expression {
-        public readonly ReferenceExpression? Parent;
-        public readonly string Name;
-        public readonly Expression Value;
-        public ConstantAssignmentExpression(ReferenceExpression? parent, string name, Expression value) : base(value.Location) {
-            Parent = parent;
-            Name = name;
-            Value = value;
-        }
-        public override string ToString()
-            => $"{(Parent is null ? Name : $"{Parent}::{Name}")} = {Value}";
-        public override Instance Interpret(Context Context) => Interpreter.InterpretConstantAssignment(Context, this);
-    }
-    public class GlobalAssignmentExpression : Expression {
-        public readonly string Name;
-        public readonly Expression Value;
-        public GlobalAssignmentExpression(CodeLocation location, string name, Expression value) : base(location) {
-            Name = name;
-            Value = value;
-        }
-        public override string ToString()
-            => $"{Name} = {Value}";
-        public override Instance Interpret(Context Context) => Interpreter.InterpretGlobalAssignment(Context, this);
-    }
-    public class ClassVariableAssignmentExpression : Expression {
-        public readonly string Name;
-        public readonly Expression Value;
-        public ClassVariableAssignmentExpression(CodeLocation location, string name, Expression value) : base(location) {
-            Name = name;
-            Value = value;
-        }
-        public override string ToString()
-            => $"{Name} = {Value}";
-        public override Instance Interpret(Context Context) => Interpreter.InterpretClassVariableAssignment(Context, this);
-    }
-    public class InstanceVariableAssignmentExpression : Expression {
-        public readonly string Name;
-        public readonly Expression Value;
-        public InstanceVariableAssignmentExpression(CodeLocation location, string name, Expression value) : base(location) {
-            Name = name;
-            Value = value;
-        }
-        public override string ToString()
-            => $"{Name} = {Value}";
-        public override Instance Interpret(Context Context) => Interpreter.InterpretInstanceVariableAssignment(Context, this);
-    }*/
     public class MultiAssignmentExpression : Expression {
         public readonly AssignmentExpression[] Assignments;
         public MultiAssignmentExpression(CodeLocation location, AssignmentExpression[] assignments) : base(location) {

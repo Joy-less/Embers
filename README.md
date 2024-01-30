@@ -73,8 +73,8 @@ public partial class CounterScript : Node {
         Scope.Evaluate(@"
 @counter = 0
 def _process
-	@counter += 1
-	@counter_label.text = @counter.to_s
+  @counter += 1
+  @counter_label.text = @counter.to_s
 end
         ");
     }
@@ -84,7 +84,7 @@ end
 }
 ```
 
-Note: Methods such as `puts` reference the `Console`, which is hidden in Godot and Unity by default, so you may need to make some changes:
+Note that methods such as `puts` reference `Console`, which is hidden in Godot and Unity by default. They can be changed or overridden:
 ```cs
 // In StandardLibrary.cs
 Console.WriteLine(Message.ToS()); // -> Godot.GD.Print(Message.ToS());
