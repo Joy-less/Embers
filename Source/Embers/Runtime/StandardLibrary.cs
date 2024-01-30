@@ -1469,12 +1469,12 @@ namespace Embers {
             }
             public static object? each(Context Context, [Block] Proc? Block) {
                 return Block is not null
-                    ? Loop.Each(Context, Context.Instance.CastHash, (Entry, Index) => Block.Call(Entry.Key, Entry.Value))
+                    ? Loop.Each(Context.Instance.CastHash, (Entry, Index) => Block.Call(Entry.Key, Entry.Value))
                     : new Enumerator(Context, Context.Instance.CastHash);
             }
             public static object? reverse_each(Context Context, [Block] Proc? Block) {
                 return Block is not null
-                    ? Loop.Each(Context, Context.Instance.CastHash.Reverse(), (Entry, Index) => Block.Call(Entry.Key, Entry.Value))
+                    ? Loop.Each(Context.Instance.CastHash.Reverse(), (Entry, Index) => Block.Call(Entry.Key, Entry.Value))
                     : new Enumerator(Context, Context.Instance.CastHash.Reverse());
             }
             public static Hash invert(Context Context) {

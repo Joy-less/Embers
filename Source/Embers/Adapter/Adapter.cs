@@ -5,6 +5,7 @@ using System.Linq;
 using System.Numerics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.Serialization;
 using PeterO.Numbers;
 
 namespace Embers {
@@ -179,7 +180,7 @@ namespace Embers {
 
             // Unbound generic type
             if (Type.IsGenericTypeDefinition) {
-                // Warn as they are not supported (e.g. List<>)
+                // Warn that they're not supported (e.g. List<>)
                 Parent.Axis.Warn(new CodeLocation(Parent.Axis), $"unbound generic types should not be used ({Type.Name[0..Type.Name.IndexOf('`')]}<>)");
             }
 
@@ -188,59 +189,45 @@ namespace Embers {
                 ? new Class(Parent, null, Type.Name.ToPascalCase())
                 : new Module(Parent, Type.Name.ToPascalCase());
             
-            // Check if method is not currently supported
-            static bool IsMethodDisallowed(MethodInfo MethodInfo) {
-                // Disallow methods with by-ref or pointer arguments
-                if (MethodInfo.GetParameters().Any(Parameter => Parameter.ParameterType.IsByRef || Parameter.ParameterType.IsPointer)) {
-                    return true;
-                }
-                // Disallow methods with a by-ref or pointer return value
-                if (MethodInfo.ReturnType.IsByRef || MethodInfo.ReturnType.IsPointer) {
-                    return true;
-                }
-                // Disallow methods with generic arguments
-                if (MethodInfo.ContainsGenericParameters) {
-                    return true;
-                }
-                // Otherwise, the method is allowed
-                return false;
-            }
             // Adapt unbound methods
-            void AdaptUnboundMethod(MethodInfo MethodInfo, string MethodName) {
-                if (IsMethodDisallowed(MethodInfo)) return;
-
+            void AdaptUnboundMethod(MethodInfo MethodInfo, string MethodName, bool Static) {
                 // Get parameter types
                 Type[] ParameterTypes = MethodInfo.GetParameters().Select(Param => Param.ParameterType).ToArray();
 
-                // Class method
-                if (MethodInfo.IsStatic) {
-                    // Create delegate without target
-                    Delegate Delegate = MethodInfo.CreateDelegate(MethodInfo.GetDelegateType());
-                    // Add class method
-                    Module.SetClassMethod(MethodName, Delegate);
-                }
-                // Instance method
-                else if (Module is Class ModuleAsClass) {
-                    // Bind method to instance at runtime
-                    // NOTE: This creates a new method to bind the instance every time the method is called. I can't think of a better way without caching.
-                    object? CallInstanceMethod(Context Context, params Instance[] Arguments) {
-                        // Create delegate bound to instance
-                        Delegate BoundDelegate = MethodInfo.CreateDelegate(MethodInfo.GetDelegateType(), Context.Instance.Value);
-                        // Create method from bound delegate
-                        Method BoundMethod = new(Context.Location, MethodInfo.Name, BoundDelegate, Context.Locals.AccessModifier);
-                        // Call bound method
-                        return BoundMethod.Call(Context, Arguments);
+                // Try to adapt the method
+                try {
+                    // Class method
+                    if (Static) {
+                        // Create delegate without target
+                        Delegate Delegate = MethodBinder.CreateDelegate(null, MethodInfo);
+                        // Add class method
+                        Module.SetClassMethod(MethodName, Delegate);
                     }
-                    // Add instance method
-                    ModuleAsClass.SetInstanceMethod(MethodName, CallInstanceMethod);
+                    // Instance method
+                    else if (Module is Class ModuleAsClass) {
+                        // Bind method to instance at runtime
+                        // Note: This creates a new method to bind the instance every time the method is called. I can't think of a better way without caching.
+                        object? CallInstanceMethod(Context Context, params Instance[] Arguments) {
+                            // Create delegate bound to instance
+                            Delegate BoundDelegate = MethodBinder.CreateDelegate(Context.Instance.Value, MethodInfo);
+                            // Create method from bound delegate
+                            Method BoundMethod = new(Context.Location, MethodInfo.Name, BoundDelegate, Context.Locals.AccessModifier);
+                            // Call bound method
+                            return BoundMethod.Call(Context, Arguments);
+                        }
+                        // Add instance method
+                        ModuleAsClass.SetInstanceMethod(MethodName, CallInstanceMethod);
+                    }
+                }
+                // Cannot adapt (probably has ref or pointer arguments)
+                catch (Exception) {
+                    // Pass
                 }
             }
-            // Adapt methods
-            void AdaptMethod(Delegate Delegate, string MethodName) {
-                if (IsMethodDisallowed(Delegate.Method)) return;
-
+            // Adapt bound methods
+            void AdaptBoundMethod(Delegate Delegate, string MethodName, bool Static) {
                 // Class method
-                if (Delegate.Method.IsStatic) {
+                if (Static) {
                     Module.SetClassMethod(MethodName, Delegate);
                 }
                 // Instance method
@@ -250,8 +237,36 @@ namespace Embers {
             }
 
             // Copy methods
-            foreach (MethodInfo MethodInfo in Type.GetMethods(SearchFlags)) {
-                AdaptUnboundMethod(MethodInfo, MethodInfo.Name.ToSnakeCase());
+            foreach (IGrouping<string, MethodInfo> OverloadInfos in Type.GetMethods(SearchFlags).GroupBy(Overload => Overload.Name)) {
+                // Get overloads
+                MethodInfo[] AllOverloads = OverloadInfos.ToArray();
+                MethodInfo[] StaticOverloads = AllOverloads.Where(Overload => Overload.IsStatic).ToArray();
+                MethodInfo[] InstanceOverloads = AllOverloads.Where(Overload => !Overload.IsStatic).ToArray();
+
+                // Adapt overloads
+                void AdaptOverloads(MethodInfo[] Overloads, bool Static) {
+                    // Get first overload
+                    if (Overloads.Length == 0) return;
+                    MethodInfo Overload = Overloads.First();
+
+                    // Single overload
+                    if (Overloads.Length == 1) {
+                        // Adapt method directly
+                        AdaptUnboundMethod(Overload, Overload.Name.ToSnakeCase(), Overload.IsStatic);
+                    }
+                    // Multiple overloads
+                    else {
+                        // Late overload selector
+                        object? Invoke(Context Context, [Splat] Instance[] Arguments) {
+                            // Invoke best overload
+                            return MethodBinder.InvokeBestOverload(Overloads, Context.Instance.Value, Arguments);
+                        }
+                        // Adapt overload selector
+                        AdaptBoundMethod(Invoke, Overload.Name.ToSnakeCase(), Overload.IsStatic);
+                    }
+                }
+                AdaptOverloads(StaticOverloads, true);
+                AdaptOverloads(InstanceOverloads, false);
             }
 
             // Copy properties
@@ -267,22 +282,22 @@ namespace Embers {
                 if (IndexParameters.Length != 0) {
                     // Get
                     if (Get is not null) {
-                        AdaptUnboundMethod(Get, "[]");
+                        AdaptUnboundMethod(Get, "[]", Get.IsStatic);
                     }
                     // Set
                     if (Set is not null) {
-                        AdaptUnboundMethod(Set, "[]=");
+                        AdaptUnboundMethod(Set, "[]=", Set.IsStatic);
                     }
                 }
                 // Property
                 else {
                     // Get
                     if (Get is not null) {
-                        AdaptUnboundMethod(Get, PropertyInfo.Name.ToSnakeCase());
+                        AdaptUnboundMethod(Get, PropertyInfo.Name.ToSnakeCase(), Get.IsStatic);
                     }
                     // Set
                     if (Set is not null) {
-                        AdaptUnboundMethod(Set, PropertyInfo.Name.ToSnakeCase() + "=");
+                        AdaptUnboundMethod(Set, PropertyInfo.Name.ToSnakeCase() + "=", Set.IsStatic);
                     }
                 }
             }
@@ -292,11 +307,15 @@ namespace Embers {
                 // Get field name
                 string FieldName = FieldInfo.Name.ToSnakeCase();
                 // Mimic property get
-                Delegate Getter = (Context Context) => FieldInfo.GetValue(Context.Instance.Value);
-                AdaptMethod(Getter, FieldName);
+                Delegate Getter = (Context Context) => {
+                    return FieldInfo.GetValue(Context.Instance.Value);
+                };
+                AdaptBoundMethod(Getter, FieldName, FieldInfo.IsStatic);
                 // Mimic property set
-                Delegate Setter = (Context Context, Instance Value) => FieldInfo.SetValue(Context.Instance.Value, GetObject(Value, FieldInfo.FieldType));
-                AdaptMethod(Getter, FieldName + "=");
+                Delegate Setter = (Context Context, Instance Value) => {
+                    FieldInfo.SetValue(Context.Instance.Value, GetObject(Value, FieldInfo.FieldType));
+                };
+                AdaptBoundMethod(Setter, FieldName + "=", FieldInfo.IsStatic);
             }
 
             // Class
@@ -305,11 +324,11 @@ namespace Embers {
                 ConstructorInfo[] Constructors = Type.GetConstructors(SearchFlags);
                 if (Constructors.Length != 0) {
                     // new
-                    Instance New(params object[] Arguments) {
-                        // Get best constructor
-                        ConstructorInfo? Constructor = Type.GetConstructor(Type.GetTypeArray(Arguments));
-                        // Invoke best constructor
-                        object NewObject = (Constructor ?? Constructors[0]).Invoke(Arguments);
+                    Instance New([Splat] Instance[] Arguments) {
+                        // Create object
+                        object NewObject = FormatterServices.GetUninitializedObject(Type);
+                        // Invoke best constructor overload
+                        MethodBinder.InvokeBestOverload(Constructors, NewObject, Arguments);
                         // Return instance of class
                         return new Instance(Class, NewObject);
                     }

@@ -11,7 +11,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Embers.IronRubyBenchmark", 
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Embers.Testing", "Embers.Testing\Embers.Testing.csproj", "{8668EF3E-66C5-4A7D-A3A8-C4D37295995C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Embers.UnitTests", "EmbersUnitTests\Embers.UnitTests.csproj", "{3C877E7D-29C2-43B1-B662-349D24F42763}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Embers.UnitTests", "Embers.UnitTests\Embers.UnitTests.csproj", "{3C877E7D-29C2-43B1-B662-349D24F42763}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

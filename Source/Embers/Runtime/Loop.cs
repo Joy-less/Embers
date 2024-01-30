@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace Embers {
     internal static class Loop {
-        public static Instance? Each(Context Context, IEnumerable Enumerable, Func<object?, long, Instance> CallBlock) {
+        public static Instance? Each(IEnumerable Enumerable, Func<object?, long, Instance> CallBlock) {
             Retry:
             long Index = 0;
             foreach (object? Item in Enumerable) {
@@ -38,11 +38,11 @@ namespace Embers {
             }
             return null;
         }
-        public static Instance? Each<T>(Context Context, IEnumerable<T> Enumerable, Func<T, long, Instance> CallBlock) {
-            return Each(Context, (IEnumerable)Enumerable, (Item, Index) => CallBlock((T)Item!, Index));
+        public static Instance? Each<T>(IEnumerable<T> Enumerable, Func<T, long, Instance> CallBlock) {
+            return Each((IEnumerable)Enumerable, (Item, Index) => CallBlock((T)Item!, Index));
         }
         public static Instance? Each(Context Context, IEnumerable Enumerable, Proc Block, bool PassIndex = true) {
-            return Each(Context, Enumerable, (Item, Index) =>
+            return Each(Enumerable, (Item, Index) =>
                 Block.ArgumentCount switch {
                     >= 2 when PassIndex => Block.Call(Adapter.GetInstance(Context, Item), new Instance(Context.Axis.Integer, Index)),
                     >= 1 => Block.Call(Adapter.GetInstance(Context, Item)),

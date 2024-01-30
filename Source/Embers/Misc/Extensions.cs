@@ -63,25 +63,6 @@ namespace Embers {
         public static async Task<Instance> InterpretAsync(this Expression[] Expressions, Context Context)
             => await Task.Run(() => Expressions.Interpret(Context));
 
-        [Obsolete("Due to a C# bug, this doesn't work with local functions.")]
-        public static bool IsParams(this ParameterInfo Parameter) {
-            return Parameter.GetCustomAttribute<ParamArrayAttribute>() is not null;
-        }
-        public static bool IsParams(this ParameterInfo Parameter, Delegate Delegate) {
-            return Delegate.GetType().GetMethod(nameof(Action.Invoke))!.GetParameters()[Parameter.Position].GetCustomAttribute<ParamArrayAttribute>() is not null;
-        }
-        /// <summary>Note: throws an error if the method has generic arguments.</summary>
-        public static Type GetDelegateType(this MethodInfo MethodInfo) {
-            IEnumerable<Type> ParameterTypes = MethodInfo.GetParameters().Select(Param => Param.ParameterType);
-            Type ReturnType = MethodInfo.ReturnType;
-            return ReturnType == typeof(void)
-                ? System.Linq.Expressions.Expression.GetActionType(ParameterTypes.ToArray())
-                : System.Linq.Expressions.Expression.GetFuncType(ParameterTypes.Append(ReturnType).ToArray());
-        }
-        public static bool HasConstructor(this Type Type) {
-            return Type.GetConstructors(Adapter.SearchFlags).Length != 0;
-        }
-
         public static string ToSnakeCase(this string PascalCase) {
             // Create snake case builder
             StringBuilder SnakeCase = new(PascalCase.Length);

@@ -50,7 +50,7 @@ Expressions.Interpret(new Context(Scope.Location, Scope)); // pre-parsed!
 
 ### Sandboxing
 
-You can see which methods can still be accessed in [`StandardLibrary.cs`](Source/Embers/StandardLibrary.cs).
+You can see which methods can still be accessed in [`StandardLibrary.cs`](Source/Embers/Runtime/StandardLibrary.cs).
 
 ```cs
 Scope Scope = new(new AxisOptions() { Sandbox = true });
