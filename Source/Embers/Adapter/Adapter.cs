@@ -335,7 +335,7 @@ namespace Embers {
                     Class.SetClassMethod("new", New);
                 }
 
-                // Copy Array indexers
+                // Copy System.Array indexers
                 if (Type.IsArray) {
                     if (Class.GetInstanceMethod("get_value") is Method Getter) {
                         Class.SetInstanceMethod("[]", Getter);

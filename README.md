@@ -58,9 +58,33 @@ Scope.Evaluate("File.write('test.txt', 'text')"); // undefined method 'write' fo
 ```
 
 ## Game engine support
-Embers is fully compatible with Godot, Unity, and other C# game engines. However, certain methods such as `puts` reference the `Console`, which is hidden in Godot and Unity by default, so you will need to make some changes.
+Embers is fully compatible with Godot, Unity, and other C# game engines.
 
-For example:
+Here's an example script interacting with Godot:
+```cs
+public partial class CounterScript : Node {
+    [Export] RichTextLabel CounterLabel;
+
+    Scope Scope;
+
+    public override void _Ready() {
+        Scope = new Scope();
+        Scope.Axis.Object.SetInstanceVariable("@counter_label", CounterLabel);
+        Scope.Evaluate(@"
+@counter = 0
+def _process
+	@counter += 1
+	@counter_label.text = @counter.to_s
+end
+        ");
+    }
+    public override void _Process(double Delta) {
+        Scope.Axis.Main.CallMethod("_process");
+    }
+}
+```
+
+Note: Methods such as `puts` reference the `Console`, which is hidden in Godot and Unity by default, so you may need to make some changes:
 ```cs
 // In StandardLibrary.cs
 Console.WriteLine(Message.ToS()); // -> Godot.GD.Print(Message.ToS());
