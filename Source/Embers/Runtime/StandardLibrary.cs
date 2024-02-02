@@ -504,7 +504,7 @@ namespace Embers {
                 return Context.Scope.Evaluate(Code);
             }
             public static Instance raise(Context Context, Instance? Argument = null) {
-                if (Argument?.Value is null) {
+                if (Argument is null) {
                     throw new Exception();
                 }
                 else if (Argument.Value is string Message) {
@@ -514,7 +514,7 @@ namespace Embers {
                     throw Exception;
                 }
                 else {
-                    throw new RuntimeError($"{Context.Location}: expected nil, string, or exception for raise");
+                    throw new RuntimeError($"{Context.Location}: expected string or exception for raise");
                 }
             }
             public static Instance @throw(Context Context, Instance Identifier, Instance? Argument = null) {
@@ -1206,7 +1206,7 @@ namespace Embers {
                 return Context.Instance.CastArray.Count;
             }
             public static int count(Context Context, Instance? ItemToCount = null) {
-                if (ItemToCount?.Value is null) {
+                if (ItemToCount is null) {
                     return Context.Instance.CastArray.Count;
                 }
                 else {

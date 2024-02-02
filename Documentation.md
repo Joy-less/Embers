@@ -1,6 +1,4 @@
-# API Documentation
-
-## Normal methods
+# Standard Library Documentation
 
 ```
 puts(*lines)

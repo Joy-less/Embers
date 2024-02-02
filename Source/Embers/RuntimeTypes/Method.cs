@@ -83,7 +83,7 @@ namespace Embers {
             }
 
             // Get pass arguments
-            Instance[] PassArguments = GetPassArguments(Context, GivenArguments);
+            Instance?[] PassArguments = GetPassArguments(Context, GivenArguments);
 
             // Call method
             Instance ReturnValue;
@@ -111,7 +111,7 @@ namespace Embers {
                 Context CallContext = new(Context.Locals, Context.Location, CallScope, Context.Module, Context.Instance, Context.Block, this);
                 // Assign local variables from arguments
                 for (int i = 0; i < Arguments.Length; i++) {
-                    CallScope.SetVariable(Arguments[i].Name, PassArguments[i]);
+                    CallScope.SetVariable(Arguments[i].Name, PassArguments[i]!);
                 }
                 // Interpret method expressions
                 ReturnValue = CallExpressions!.Interpret(CallContext);
@@ -196,9 +196,9 @@ namespace Embers {
             }
             ArgumentsRange = new IntRange(MinArguments, MaxArguments);
         }
-        private Instance[] GetPassArguments(Context Context, Instance[] GivenArguments) {
+        private Instance?[] GetPassArguments(Context Context, Instance[] GivenArguments) {
             // Create array of arguments to pass
-            Instance[] PassArguments = new Instance[Arguments.Length];
+            Instance?[] PassArguments = new Instance[Arguments.Length];
 
             // Validate arguments count
             if (MethodType is not MethodType.Block) {
@@ -232,15 +232,22 @@ namespace Embers {
                         // Next
                         GiveIndex++;
                     }
-                    // Pass default value
+                    // Pass default Ruby expression
                     else if (Argument.DefaultValue is not null) {
                         PassArguments[TakeIndex] = Argument.DefaultValue.Interpret(Context);
                     }
+                    // Pass default .NET value
                     else if (Argument.AdaptedParameter is not null && Argument.AdaptedParameter.HasDefaultValue) {
-                        PassArguments[TakeIndex] = Adapter.GetInstance(Context, Argument.AdaptedParameter.DefaultValue);
+                        // If the default .NET value is not null
+                        //  ? Adapt and pass the .NET value, which will be un-adapted
+                        //  : Pass null rather than a nil instance
+                        PassArguments[TakeIndex] = Argument.AdaptedParameter.DefaultValue is not null
+                            ? Adapter.GetInstance(Context, Argument.AdaptedParameter.DefaultValue)
+                            : null;
                     }
-                    // Pass nil (blocks only)
+                    // Pass nil
                     else {
+                        // Must be a block, because it hasn't thrown an error (not enough arguments).
                         PassArguments[TakeIndex] = Axis.Nil;
                     }
                 }
@@ -250,12 +257,8 @@ namespace Embers {
                     int LeftoverArguments = Arguments.Length - TakeIndex;
                     int LeftoverGivenArguments = GivenArguments.Length - GiveIndex;
                     int SplatCount = LeftoverGivenArguments - LeftoverArguments + 1;
-                    if (TakesDoubleSplat) {
-                        SplatCount--;
-                    }
-                    if (TakesBlock) {
-                        SplatCount++;
-                    }
+                    if (TakesDoubleSplat) SplatCount--;
+                    if (TakesBlock) SplatCount++;
                     // Create splat array
                     Array SplatArray = new(Context.Location, SplatCount);
                     // Fill splat array

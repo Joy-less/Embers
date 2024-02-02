@@ -114,7 +114,7 @@ namespace Embers {
             };
         }
         /// <summary>Get the value of an instance, converting to the target type where possible.</summary>
-        public static object? GetObject(Instance Instance, Type TargetType) {
+        public static object? GetObject(Instance? Instance, Type TargetType) {
             object? GetPrimitive() {
                 return Type.GetTypeCode(TargetType) switch {
                     // Integer
@@ -169,6 +169,7 @@ namespace Embers {
                 // Other
                 return Instance.Value;
             }
+            if (Instance is null) return null;
             return GetPrimitive() ?? GetOther();
         }
         /// <summary>Get a module from a .NET type. The module will be a class if the type has a constructor.</summary>
