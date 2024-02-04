@@ -331,10 +331,10 @@ integer.times {|n|}
 	Repeats the given block from 0 to the integer, otherwise returns an enumerator.
 
 integer.upto(limit) {|n|}
-	Repeats the given block from the integer to the limit, otherwise returns an enumerator.
+	Repeats the given block from the integer up to the limit, otherwise returns an enumerator.
 
 integer.downto(limit) {|n|}
-	Repeats the given block from the limit to the integer, otherwise returns an enumerator.
+	Repeats the given block from the integer down to the limit, otherwise returns an enumerator.
 ```
 ```
 Float::INFINITY
@@ -493,16 +493,16 @@ hash.[]=(key, value)
 	Sets the value at the given key.
 
 hash.==(other)
-	Returns true if the other object is a hash with equal entries.
+	Returns true if the other object is a hash with equivalent entries.
 
 hash.to_s
-	Returns a string containing each item.inspect of the hash in curly brackets.
+	Returns a string containing each entry.inspect of the hash in curly brackets.
 
 hash.to_a
 	Returns an array containing each [key, value] in the hash.
 
 hash.inspect
-	Returns a string containing each item.inspect of the hash in curly brackets.
+	Returns a string containing each entry.inspect of the hash in curly brackets.
 
 hash.length | hash.count
 	Returns the number of entries in the hash.
@@ -520,7 +520,7 @@ hash.values
 	Returns an array of values in the hash.
 
 hash.delete(key) | hash.remove(key)
-	Removes the entry pair from the hash if found and returns the value or nil.
+	Removes the entry from the hash if found and returns the value, otherwise nil.
 
 hash.clear
 	Removes every entry from the hash.
@@ -535,7 +535,7 @@ hash.invert
 	Returns a hash which contains the keys and values swapped.
 
 hash.empty?
-	Returns true if the hash contains no key-value pairs.
+	Returns true if the hash contains no entries.
 ```
 ```
 Time.new | Time.new([year = 0], [month = 0], [day = 0], [hour = 0], [minute = 0], [second = 0], [utc_offset = +0])
@@ -599,7 +599,7 @@ exception.to_s
 	Returns "exception".
 
 exception.inspect
-	Returns the exception's type and message.
+	Returns a string containing the exception's type and message.
 
 exception.message
 	Returns the exception's message.
@@ -624,7 +624,7 @@ weakref.method_missing(method_name, *arguments) {}
 	Calls the method on the object if it's still alive, otherwise throws an error.
 ```
 ```
-Thread.new(*args) {}
+Thread.new(*args) {|*args|}
 	Runs the given block asynchronously and returns the thread.
 
 thread.stop
@@ -662,7 +662,7 @@ Math.abs(number)
 	Returns the positive value of the number.
 
 Math.sin, Math.cos, Math.tan, Math.asin, Math.acos, Math.atan, Math.atan2, Math.sinh, Math.cosh, Math.tanh, Math.asinh, Math.acosh,
-Math.atanh, Math.exp, Math.log, Math.log10, Math.log2, Math.frexp, Math.ldexp, Math.hypot
+Math.atanh, Math.exp, Math.log, Math.log10, Math.log2, Math.hypot
 	Methods for nerds.
 ```
 ```
@@ -670,7 +670,7 @@ GC.start([max_generation = nil])
 	Initiates garbage collection for all generations up to the given generation, otherwise for all generations.
 
 GC.count([generation = nil])
-	Returns the number of times garbage has been collected for the given generation, or all generations combined.
+	Returns the number of times garbage has been collected for the given generation, otherwise for all generations combined.
 ```
 ```
 File.read(file_path)
