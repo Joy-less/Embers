@@ -7,29 +7,24 @@ namespace Embers {
         private readonly IEnumerator<Instance> Inner;
         private Instance? CurrentPeek;
 
+        public Enumerator(IEnumerator<Instance> inner) {
+            Inner = inner;
+        }
         public Enumerator(IEnumerable<Instance> inner) {
             Inner = inner.GetEnumerator();
-        }
-        public Enumerator(Context context, IEnumerable inner) {
-            IEnumerator<Instance> CreateEnumerator() {
-                foreach (object Item in inner) {
-                    yield return Adapter.GetInstance(context, Item);
-                }
-            }
-            Inner = CreateEnumerator();
-        }
-        public Enumerator(IEnumerator<Instance> inner) {
-            IEnumerator<Instance> CreateEnumerator() {
-                while (inner.MoveNext()) {
-                    yield return inner.Current;
-                }
-            }
-            Inner = CreateEnumerator();
         }
         public Enumerator(Context context, IEnumerator inner) {
             IEnumerator<Instance> CreateEnumerator() {
                 while (inner.MoveNext()) {
                     yield return Adapter.GetInstance(context, inner.Current);
+                }
+            }
+            Inner = CreateEnumerator();
+        }
+        public Enumerator(Context context, IEnumerable inner) {
+            IEnumerator<Instance> CreateEnumerator() {
+                foreach (object Item in inner) {
+                    yield return Adapter.GetInstance(context, Item);
                 }
             }
             Inner = CreateEnumerator();
