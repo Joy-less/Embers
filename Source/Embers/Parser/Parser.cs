@@ -166,30 +166,32 @@ namespace Embers {
             // Create block expression
             return new TemporaryBlockExpression(Location, Objects, Arguments, HighPrecedence);
         }
-        static List<Branch> ParseBranches(List<RubyObject?> Objects, params string[] BranchOrder) {
+        static Branch[] ParseBranches(List<RubyObject?> Objects, params string[] BranchOrder) {
             // Find start of branches
             int StartIndex = Objects.FindIndex(Object => Object is Token Token && Token.Type is TokenType.Identifier && BranchOrder.Contains(Token.Value));
 
             // No branches
-            if (StartIndex < 0) {
-                return new List<Branch>();
+            if (StartIndex == -1) {
+                return System.Array.Empty<Branch>();
             }
 
             // Ensure branches are in correct order
-            int CurrentOrderIndex = 0;
-            foreach (RubyObject? Object in Objects) {
-                // Identifier
-                if (Object is Token Token && Token.Type is TokenType.Identifier) {
-                    // Check against each branch type
-                    for (int i2 = 0; i2 < BranchOrder.Length; i2++) {
-                        // Compare branch types
-                        if (BranchOrder[i2] == Token.Value) {
-                            // Throw error if branch matches passed branch type
-                            if (i2 < CurrentOrderIndex) {
-                                throw new SyntaxError($"{Token.Location}: invalid {Token.Value} (incorrect order)");
+            if (BranchOrder.Length >= 2) {
+                int Index = 0;
+                foreach (RubyObject? Object in Objects) {
+                    // Identifier
+                    if (Object is Token Token && Token.Type is TokenType.Identifier) {
+                        // Check against each branch type
+                        for (int i = 0; i < BranchOrder.Length; i++) {
+                            // Compare branch types
+                            if (BranchOrder[i] == Token.Value) {
+                                // Throw error if branch matches passed branch type
+                                if (i < Index) {
+                                    throw new SyntaxError($"{Token.Location}: invalid {Token.Value} (incorrect order)");
+                                }
+                                // Move forward
+                                Index = i;
                             }
-                            // Move forward
-                            CurrentOrderIndex = i2;
                         }
                     }
                 }
@@ -197,8 +199,7 @@ namespace Embers {
 
             // Parse branches
             List<Branch> Branches = new();
-            for (int i = 0; i < BranchOrder.Length; i++) {
-                string Branch = BranchOrder[i];
+            foreach (string Branch in BranchOrder) {
                 while (true) {
                     // Find branch index
                     int BranchIndex = Objects.FindIndex(StartIndex, Object => Object is Token Token && Token.AsIdentifier == Branch);
@@ -211,23 +212,19 @@ namespace Embers {
                     int EndBranchIndex = Objects.FindIndex(BranchIndex + 1,
                         Object => Object is Token Token && Token.Type is TokenType.Identifier && BranchOrder.Contains(Token.Value)
                     );
+                    if (EndBranchIndex == -1) {
+                        EndBranchIndex = Objects.Count;
+                    }
 
                     // Take branch objects
-                    List<RubyObject?> BranchObjects;
-                    if (EndBranchIndex != -1) {
-                        BranchObjects = Objects.GetIndexRange(BranchIndex + 1, EndBranchIndex - 1);
-                        Objects.RemoveIndexRange(BranchIndex, EndBranchIndex);
-                    }
-                    else {
-                        BranchObjects = Objects.GetIndexRange(BranchIndex + 1);
-                        Objects.RemoveIndexRange(BranchIndex);
-                    }
+                    List<RubyObject?> BranchObjects = Objects.GetIndexRange(BranchIndex + 1, EndBranchIndex - 1);
+                    Objects.RemoveIndexRange(BranchIndex, EndBranchIndex - 1);
                     
                     // Add branch
                     Branches.Add(new Branch(BranchToken.Location, Branch, BranchObjects));
                 }
             }
-            return Branches;
+            return Branches.ToArray();
         }
         sealed class Branch {
             public readonly CodeLocation Location;
@@ -241,7 +238,7 @@ namespace Embers {
         }
         static BeginExpression ParseBeginBlock(CodeLocation Location, List<RubyObject?> Objects) {
             // Branches
-            List<Branch> Branches = ParseBranches(Objects, "rescue", "else", "ensure");
+            Branch[] Branches = ParseBranches(Objects, "rescue", "else", "ensure");
 
             // Parse begin expressions
             Expression[] BeginExpressions = ParseNullSeparatedExpressions(Location, Objects);
@@ -354,9 +351,9 @@ namespace Embers {
             else {
                 EndArgumentsIndex = Objects.FindIndex(EndPathIndex, Object => Object is null);
                 if (EndArgumentsIndex == -1) {
-                    EndArgumentsIndex = Objects.Count - 1;
+                    EndArgumentsIndex = Objects.Count;
                 }
-                ArgumentObjects = Objects.GetIndexRange(EndPathIndex, EndArgumentsIndex);
+                ArgumentObjects = Objects.GetIndexRange(EndPathIndex, EndArgumentsIndex - 1);
             }
             // Parse arguments
             Argument[] Arguments = ParseDefArguments(ArgumentObjects);
@@ -428,7 +425,7 @@ namespace Embers {
         }
         static IfExpression ParseIfBlock(CodeLocation Location, List<RubyObject?> Objects, bool Negate = false) {
             // Branches
-            List<Branch> Branches = ParseBranches(Objects, "elsif", "else");
+            Branch[] Branches = ParseBranches(Objects, "elsif", "else");
 
             // Parse condition
             Expression ParseCondition(CodeLocation BranchLocation, List<RubyObject?> BranchObjects, out int EndConditionIndex) {
@@ -458,9 +455,7 @@ namespace Embers {
 
             // Parse branches
             IfExpression? LastBranch = null;
-            for (int i = Branches.Count - 1; i >= 0; i--) {
-                Branch Branch = Branches[i];
-
+            foreach (Branch Branch in Branches.Reverse()) {
                 // Elsif
                 if (Branch.Name is "elsif") {
                     // Get end of condition
@@ -474,6 +469,7 @@ namespace Embers {
                 }
                 // Else
                 else if (Branch.Name is "else") {
+                    // Ensure else is last branch
                     if (LastBranch is not null) {
                         throw new SyntaxError($"{Branch.Location}: else must be the last branch");
                     }
@@ -504,41 +500,41 @@ namespace Embers {
         }
         static CaseExpression ParseCaseBlock(CodeLocation Location, List<RubyObject?> Objects) {
             // Get branches
-            List<List<RubyObject?>> BranchObjects = Objects.Split(Object => Object is Token Token && Token.AsIdentifier is "when");
+            Branch[] Branches = ParseBranches(Objects, "when", "else");
 
             // Parse subject
-            Expression Subject = ParseExpression(Location, BranchObjects.FirstOrDefault()
-                ?? throw new SyntaxError($"{Location}: expected case subject, got nothing"));
+            Expression Subject = ParseExpression(Location, Objects);
 
-            // Find else branch
-            List<RubyObject?>? ElseBranchObjects = null;
-            if (BranchObjects.Count != 0) {
-                List<RubyObject?> LastBranch = BranchObjects[^1];
-                // Find else index
-                int ElseIndex = LastBranch.FindIndex(Object => Object is Token Token && Token.AsIdentifier is "else");
-                // Take else branch objects
-                if (ElseIndex != -1) {
-                    ElseBranchObjects = LastBranch.GetIndexRange(ElseIndex + 1);
-                    LastBranch.RemoveIndexRange(ElseIndex);
+            // Parse branches
+            List<WhenExpression> WhenBranches = new();
+            Expression[]? ElseBranch = null;
+            foreach (Branch Branch in Branches) {
+                // When
+                if (Branch.Name is "when") {
+                    // Get end of condition
+                    int EndConditionIndex = Branch.Objects.FindIndex(Object => Object is null);
+                    if (EndConditionIndex == -1) {
+                        EndConditionIndex = Branch.Objects.Count;
+                    }
+                    // Get conditions
+                    Expression[] Conditions = ParseCommaSeparatedExpressions(Branch.Location, Branch.Objects.GetIndexRange(0, EndConditionIndex - 1));
+                    // Parse expressions
+                    Expression[] Expressions = ParseNullSeparatedExpressions(Branch.Location, Branch.Objects.GetIndexRange(EndConditionIndex + 1));
+                    // Add when expression
+                    WhenBranches.Add(new WhenExpression(Branch.Location, Conditions, Expressions));
+                }
+                // Else
+                else if (Branch.Name is "else") {
+                    // Ensure else is last branch
+                    if (ElseBranch is not null) {
+                        throw new SyntaxError($"{Branch.Location}: else must be the last branch");
+                    }
+                    // Parse expressions
+                    Expression[] Expressions = ParseNullSeparatedExpressions(Branch.Location, Branch.Objects);
+                    // Add else expression
+                    ElseBranch = Expressions;
                 }
             }
-
-            // Parse when branches
-            List<WhenExpression> WhenBranches = new(BranchObjects.Count - 1);
-            for (int i = 1; i < BranchObjects.Count; i++) {
-                List<RubyObject?> Branch = BranchObjects[i];
-                // Get end of match
-                int EndMatchIndex = Branch.FindIndex(Object => Object is null);
-                // Parse match
-                Expression Match = ParseExpression(Location, Branch.GetIndexRange(0, EndMatchIndex - 1));
-                // Parse expressions
-                Expression[] Expressions = ParseNullSeparatedExpressions(Location, Branch.GetIndexRange(EndMatchIndex + 1));
-                // Add when branch
-                WhenBranches.Add(new WhenExpression(Location, Match, Expressions));
-            }
-
-            // Parse else branch
-            Expression[]? ElseBranch = ElseBranchObjects is not null ? ParseNullSeparatedExpressions(Location, ElseBranchObjects) : null;
 
             // Warn if case expression is empty
             if (WhenBranches.Count == 0) {

@@ -473,12 +473,12 @@ namespace Embers {
         public override Instance Interpret(Context Context) => Interpreter.InterpretCase(Context, this);
     }
     public class WhenExpression : ScopeExpression {
-        public readonly Expression Match;
-        public WhenExpression(CodeLocation location, Expression match, Expression[] expressions) : base(location, expressions) {
-            Match = match;
+        public readonly Expression[] Conditions;
+        public WhenExpression(CodeLocation location, Expression[] conditions, Expression[] expressions) : base(location, expressions) {
+            Conditions = conditions;
         }
         public override string ToString()
-            => $"when {Match}; {Expressions.ObjectsToString("; ")}";
+            => $"when {Conditions}; {Expressions.ObjectsToString("; ")}";
         public override Instance Interpret(Context Context) => Interpreter.InterpretWhen(Context, this);
     }
 

@@ -598,11 +598,14 @@ namespace Embers {
             Instance Subject = Expression.Subject.Interpret(Context);
             // Match when branches
             foreach (WhenExpression WhenExpression in Expression.WhenBranches) {
-                // Interpret match expression
-                Instance Match = WhenExpression.Match.Interpret(Context);
-                // Try match
-                if (Match.CallMethod(new Context(Context.Locals, Expression.Location, Context.Scope, Context.Module, Context.Instance), "===", Subject).Truthy) {
-                    return WhenExpression.Expressions.Interpret(Context);
+                // Match each condition
+                foreach (Expression Condition in WhenExpression.Conditions) {
+                    // Interpret condition
+                    Instance ConditionInstance = Condition.Interpret(Context);
+                    // Try match condition
+                    if (ConditionInstance.CallMethod(new Context(Context.Locals, Expression.Location, Context.Scope, Context.Module, Context.Instance), "===", Subject).Truthy) {
+                        return WhenExpression.Expressions.Interpret(Context);
+                    }
                 }
             }
             // Match else branch

@@ -282,12 +282,12 @@ namespace Embers.UnitTests {
                 case 52
                 when 1..3
                     return 'Between one and three'
-                when 52
-                    return '52!'
+                when 52, 53
+                    return '52 or 53!'
                 else
                     return 'None of the above'
                 end
-            ", "52!");
+            ", "52 or 53!");
             AssertEqual(@"
                 a = case 14
                 when 146
