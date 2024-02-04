@@ -2,6 +2,8 @@
 
 # Embers
 
+[![NuGet](https://img.shields.io/nuget/v/Embers.svg)](https://www.nuget.org/packages/Embers)
+
 An embeddable Ruby interpreter written entirely in C#.
 
 Its powerful, lightweight design is intended for use in game engines, game mods, and C# applications.
