@@ -103,6 +103,10 @@ namespace Embers {
                 Range Range => RangeToInstance(Range.Start.Value * (Range.Start.IsFromEnd ? -1 : 1), Range.End.Value * (Range.End.IsFromEnd ? -1 : 1)),
                 // Enumerator
                 Enumerator Enumerator => new Instance(Axis.Enumerator, Enumerator),
+                IEnumerable<Instance> IEnumerable => new Instance(Axis.Enumerator, new Enumerator(IEnumerable)),
+                IEnumerator<Instance> IEnumerator => new Instance(Axis.Enumerator, new Enumerator(IEnumerator)),
+                IEnumerable IEnumerable => new Instance(Axis.Enumerator, new Enumerator(Context, IEnumerable)),
+                IEnumerator IEnumerator => new Instance(Axis.Enumerator, new Enumerator(Context, IEnumerator)),
                 // Exception
                 Exception Exception => ExceptionToInstance(Exception),
                 // WeakRef

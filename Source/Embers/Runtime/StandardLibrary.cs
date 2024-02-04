@@ -223,6 +223,8 @@ namespace Embers {
             Axis.Integer.SetInstanceMethod("truncate", _Integer.truncate);
             Axis.Integer.SetInstanceMethod("abs", _Integer.abs);
             Axis.Integer.SetInstanceMethod("times", _Integer.times);
+            Axis.Integer.SetInstanceMethod("upto", _Integer.upto);
+            Axis.Integer.SetInstanceMethod("downto", _Integer.downto);
 
             // Float
             // (Instance)
@@ -349,6 +351,10 @@ namespace Embers {
             // Enumerator
             // (Instance)
             Axis.Enumerator.SetInstanceMethod("each", _Enumerator.each);
+            Axis.Enumerator.SetInstanceMethod("step", _Enumerator.step);
+            Axis.Enumerator.SetInstanceMethod("next", _Enumerator.next);
+            Axis.Enumerator.SetInstanceMethod("peek", _Enumerator.peek);
+            Axis.Enumerator.SetInstanceMethod("rewind", _Enumerator.rewind);
 
             // Exception
             // (Class)
@@ -1056,6 +1062,16 @@ namespace Embers {
                     ? Loop.For(Context, 0, Context.Instance.CastInteger, 1, Block)
                     : new Enumerator(Context.Location, 0, Context.Instance.CastInteger, 1);
             }
+            public static object? upto(Context Context, Integer Limit, [Block] Proc? Block) {
+                return Block is not null
+                    ? Loop.For(Context, Context.Instance.CastInteger, Limit, 1, Block)
+                    : new Enumerator(Context.Location, Context.Instance.CastInteger, Limit, 1);
+            }
+            public static object? downto(Context Context, Integer Limit, [Block] Proc? Block) {
+                return Block is not null
+                    ? Loop.For(Context, Limit, Context.Instance.CastInteger, -1, Block)
+                    : new Enumerator(Context.Location, Limit, Context.Instance.CastInteger, -1);
+            }
         }
         public static class _Float {
             public static Float _Add(Context Context, Instance Right) {
@@ -1560,21 +1576,44 @@ namespace Embers {
             }
         }
         public static class _Enumerator {
-            public static Enumerator? each(Context Context, [Block] Proc? Block) {
-                Enumerator Enumerator = Context.Instance.CastEnumerator;
-
+            public static Instance? each(Context Context, [Block] Proc? Block) {
                 // If block given, enumerate block & return nil
                 if (Block is not null) {
-                    while (Enumerator.MoveNext()) {
-                        // Call block with current item
-                        Block.Call(Enumerator.Current);
+                    foreach (Instance Item in Context.Instance.CastEnumerator) {
+                        Block.Call(Item);
                     }
                     return null;
                 }
-                // If no block given, return self
+                // If no block given, return enumerator
                 else {
-                    return Enumerator;
+                    return Context.Instance;
                 }
+            }
+            public static Enumerator? step(Context Context, Integer Step, [Block] Proc? Block) {
+                // Get enumerable
+                IEnumerable<Instance> Enumerable = Context.Instance.CastEnumerator.Where((Item, Index) => Index % Step == 0);
+                // If block given, enumerate block & return nil
+                if (Block is not null) {
+                    foreach (Instance Item in Enumerable) {
+                        Block.Call(Item);
+                    }
+                    return null;
+                }
+                // If no block given, return enumerator
+                else {
+                    return new Enumerator(Enumerable);
+                }
+            }
+            public static Instance? next(Context Context) {
+                Enumerator Enumerator = Context.Instance.CastEnumerator;
+                Enumerator.MoveNext();
+                return Enumerator.Current;
+            }
+            public static Instance? peek(Context Context) {
+                return Context.Instance.CastEnumerator.Peek();
+            }
+            public static void rewind(Context Context) {
+                Context.Instance.CastEnumerator.Rewind();
             }
         }
         public static class _Exception {

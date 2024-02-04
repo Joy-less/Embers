@@ -1573,18 +1573,19 @@ namespace Embers {
 
                 // Method call
                 if (Object is ReferenceExpression Reference && Reference is IdentifierExpression or MethodCallExpression) {
-                    // Get call arguments
-                    if (i + 1 < Objects.Count && Objects[i + 1] is Expression) {
-                        // Take call arguments
-                        Expression[] Arguments = ParseCallArgumentsNoBrackets(Location, Objects, i + 1);
-                        // Get parent
-                        Expression? Parent = null;
-                        if (Object is MethodCallExpression MethodCall) {
-                            Parent = MethodCall.Parent;
-                        }
-                        // Create method call expression
-                        Objects[i] = new MethodCallExpression(Object.Location, Parent, Reference.Name, Arguments);
+                    // Take call arguments
+                    Expression[] Arguments = ParseCallArgumentsNoBrackets(Location, Objects, i + 1);
+                    // Ensure arguments are present
+                    if (Arguments.Length == 0) {
+                        continue;
                     }
+                    // Get parent
+                    Expression? Parent = null;
+                    if (Object is MethodCallExpression MethodCall) {
+                        Parent = MethodCall.Parent;
+                    }
+                    // Create method call expression
+                    Objects[i] = new MethodCallExpression(Object.Location, Parent, Reference.Name, Arguments);
                 }
             }
         }

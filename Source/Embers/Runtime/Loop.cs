@@ -102,7 +102,7 @@ namespace Embers {
             }
             // If no block given, return an enumerator
             else {
-                IEnumerator<Instance> Each() {
+                IEnumerable<Instance> Each() {
                     for (long Index = Start; Index < End; Index += Step) {
                         yield return new Instance(Context.Axis.Integer, (Integer)Index);
                     }
