@@ -1570,22 +1570,22 @@ namespace Embers {
         static void MatchMethodCallsNoBrackets(CodeLocation Location, List<RubyObject?> Objects) {
             for (int i = 0; i < Objects.Count; i++) {
                 RubyObject? Object = Objects[i];
+                RubyObject? NextObject = i + 1 < Objects.Count ? Objects[i + 1] : null;
 
                 // Method call
                 if (Object is ReferenceExpression Reference && Reference is IdentifierExpression or MethodCallExpression) {
-                    // Take call arguments
-                    Expression[] Arguments = ParseCallArgumentsNoBrackets(Location, Objects, i + 1);
-                    // Ensure arguments are present
-                    if (Arguments.Length == 0) {
-                        continue;
+                    // First argument
+                    if (NextObject is Expression and not TemporaryBlockExpression) {
+                        // Take call arguments
+                        Expression[] Arguments = ParseCallArgumentsNoBrackets(Location, Objects, i + 1);
+                        // Get parent
+                        Expression? Parent = null;
+                        if (Object is MethodCallExpression MethodCall) {
+                            Parent = MethodCall.Parent;
+                        }
+                        // Create method call expression
+                        Objects[i] = new MethodCallExpression(Object.Location, Parent, Reference.Name, Arguments);
                     }
-                    // Get parent
-                    Expression? Parent = null;
-                    if (Object is MethodCallExpression MethodCall) {
-                        Parent = MethodCall.Parent;
-                    }
-                    // Create method call expression
-                    Objects[i] = new MethodCallExpression(Object.Location, Parent, Reference.Name, Arguments);
                 }
             }
         }
