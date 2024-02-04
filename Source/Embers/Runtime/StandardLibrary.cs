@@ -354,7 +354,6 @@ namespace Embers {
             Axis.Enumerator.SetInstanceMethod("step", _Enumerator.step);
             Axis.Enumerator.SetInstanceMethod("next", _Enumerator.next);
             Axis.Enumerator.SetInstanceMethod("peek", _Enumerator.peek);
-            Axis.Enumerator.SetInstanceMethod("rewind", _Enumerator.rewind);
 
             // Exception
             // (Class)
@@ -1589,9 +1588,9 @@ namespace Embers {
                     return Context.Instance;
                 }
             }
-            public static Enumerator? step(Context Context, Integer Step, [Block] Proc? Block) {
+            public static Enumerator? step(Context Context, Integer Interval, [Block] Proc? Block) {
                 // Get enumerable
-                IEnumerable<Instance> Enumerable = Context.Instance.CastEnumerator.Where((Item, Index) => Index % Step == 0);
+                IEnumerable<Instance> Enumerable = Context.Instance.CastEnumerator.Where((Item, Index) => Index % Interval == 0);
                 // If block given, enumerate block & return nil
                 if (Block is not null) {
                     foreach (Instance Item in Enumerable) {
@@ -1606,14 +1605,13 @@ namespace Embers {
             }
             public static Instance? next(Context Context) {
                 Enumerator Enumerator = Context.Instance.CastEnumerator;
-                Enumerator.MoveNext();
+                if (!Enumerator.MoveNext()) {
+                    throw new RuntimeError($"{Context.Location}: no more items in the enumerator.");
+                }
                 return Enumerator.Current;
             }
             public static Instance? peek(Context Context) {
                 return Context.Instance.CastEnumerator.Peek();
-            }
-            public static void rewind(Context Context) {
-                Context.Instance.CastEnumerator.Rewind();
             }
         }
         public static class _Exception {

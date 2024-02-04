@@ -328,7 +328,13 @@ integer.abs
 	Returns the positive value of the integer.
 
 integer.times {|n|}
-	Repeats the given block the integer times, otherwise returns an enumerator.
+	Repeats the given block from 0 to the integer, otherwise returns an enumerator.
+
+integer.upto(limit) {|n|}
+	Repeats the given block from the integer to the limit, otherwise returns an enumerator.
+
+integer.downto(limit) {|n|}
+	Repeats the given block from the limit to the integer, otherwise returns an enumerator.
 ```
 ```
 Float::INFINITY
@@ -575,6 +581,15 @@ range.length | range.count
 ```
 enumerator.each {|item|}
 	Repeats the given block for each item in the enumerator, otherwise returns itself.
+
+enumerator.step(interval) {|item|}
+	Repeats the given block for each item in the enumerator, skipping the given number of items after each item, otherwise returns an enumerator.
+
+enumerator.next
+	Moves the enumerator to the next item and returns it.
+
+enumerator.peek
+	Returns the next item in the enumerator.
 ```
 ```
 Exception.new([message = nil])

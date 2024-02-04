@@ -4,49 +4,43 @@ using System.Collections.Generic;
 
 namespace Embers {
     public sealed class Enumerator : IEnumerator<Instance>, IEnumerable<Instance> {
-        private readonly IEnumerable<Instance> Original;
-        private IEnumerator<Instance> Inner;
+        private readonly IEnumerator<Instance> Inner;
         private Instance? CurrentPeek;
 
         public Enumerator(IEnumerable<Instance> inner) {
-            Original = inner;
-            Inner = Original.GetEnumerator();
+            Inner = inner.GetEnumerator();
         }
         public Enumerator(Context context, IEnumerable inner) {
-            IEnumerable<Instance> CreateEnumerator() {
+            IEnumerator<Instance> CreateEnumerator() {
                 foreach (object Item in inner) {
                     yield return Adapter.GetInstance(context, Item);
                 }
             }
-            Original = CreateEnumerator();
-            Inner = Original.GetEnumerator();
+            Inner = CreateEnumerator();
         }
         public Enumerator(IEnumerator<Instance> inner) {
-            IEnumerable<Instance> CreateEnumerator() {
+            IEnumerator<Instance> CreateEnumerator() {
                 while (inner.MoveNext()) {
                     yield return inner.Current;
                 }
             }
-            Original = CreateEnumerator();
-            Inner = Original.GetEnumerator();
+            Inner = CreateEnumerator();
         }
         public Enumerator(Context context, IEnumerator inner) {
-            IEnumerable<Instance> CreateEnumerator() {
+            IEnumerator<Instance> CreateEnumerator() {
                 while (inner.MoveNext()) {
                     yield return Adapter.GetInstance(context, inner.Current);
                 }
             }
-            Original = CreateEnumerator();
-            Inner = Original.GetEnumerator();
+            Inner = CreateEnumerator();
         }
         public Enumerator(CodeLocation location, Integer min, Integer max, Integer step) {
-            IEnumerable<Instance> CreateEnumerator() {
+            IEnumerator<Instance> CreateEnumerator() {
                 for (Integer Index = min; Index < max; Index += step) {
                     yield return new Instance(location.Axis.Integer, Index);
                 }
             }
-            Original = CreateEnumerator();
-            Inner = Original.GetEnumerator();
+            Inner = CreateEnumerator();
         }
         public bool MoveNext() {
             if (CurrentPeek is not null) {
@@ -56,10 +50,6 @@ namespace Embers {
             else {
                 return Inner.MoveNext();
             }
-        }
-        public void Rewind() {
-            Inner = Original.GetEnumerator();
-            CurrentPeek = null;
         }
         public Instance? Peek() {
             if (CurrentPeek is not null) {
@@ -82,7 +72,7 @@ namespace Embers {
             => $"#<Enumerator:0x{GetHashCode():x16}>";
 
         object? IEnumerator.Current => Current;
-        void IEnumerator.Reset() => Rewind();
+        void IEnumerator.Reset() => Inner.Reset();
         IEnumerator<Instance> IEnumerable<Instance>.GetEnumerator() => this;
         IEnumerator IEnumerable.GetEnumerator() => this;
     }
