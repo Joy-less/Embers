@@ -1,4 +1,4 @@
-![Noko](Assets/Noko%20Mini.png)
+![Noko](https://raw.githubusercontent.com/Joy-less/Embers/main/Assets/Noko%20Mini.png)
 
 # Embers
 
@@ -100,4 +100,4 @@ She comes from a society in the Earth's core, 3000km below the surface. She has 
 
 Noko is short for "Nokoribi" meaning "Embers" in Japanese.
 
-![Made with Embers](Assets/Powered%20by%20Embers%20Mini.png)
+![Made with Embers](https://raw.githubusercontent.com/Joy-less/Embers/main/Assets/Powered%20by%20Embers%20Mini.png)
