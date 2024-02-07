@@ -1127,7 +1127,7 @@ namespace Embers {
                         // Identifier + (arguments)
                         if (MethodPath is IdentifierExpression Identifier) {
                             // Insert method call with arguments
-                            Objects.Insert(i, new MethodCallExpression(Identifier.Location, null, Identifier.Name, Arguments));
+                            Objects.Insert(i, new MethodCallExpression(Identifier.Location, null, Identifier.Name, Arguments, arguments_final: true));
                         }
                         // Method call + (arguments)
                         else {
@@ -1136,7 +1136,7 @@ namespace Embers {
                                 throw new SyntaxError($"{BracketsExpression.Location}: unexpected arguments");
                             }
                             // Insert method call with arguments
-                            Objects.Insert(i, new MethodCallExpression(MethodCall.Location, MethodCall.Parent, MethodCall.Name, MethodCall.Arguments, MethodCall.Block));
+                            Objects.Insert(i, new MethodCallExpression(MethodCall.Location, MethodCall.Parent, MethodCall.Name, MethodCall.Arguments, MethodCall.Block, arguments_final: true));
                         }
                     }
                 }
@@ -1162,7 +1162,7 @@ namespace Embers {
                         // Identifier + block
                         if (LastObject is IdentifierExpression LastIdentifier) {
                             // Insert method call with block
-                            Objects.Insert(i, new MethodCallExpression(LastIdentifier.Location, null, LastIdentifier.Name, block: BlockMethod));
+                            Objects.Insert(i, new MethodCallExpression(LastIdentifier.Location, null, LastIdentifier.Name, block: BlockMethod, arguments_final: true));
                         }
                         // Method call + block
                         else {
@@ -1171,7 +1171,7 @@ namespace Embers {
                                 throw new SyntaxError($"{Block.Location}: unexpected block");
                             }
                             // Insert method call with block
-                            Objects.Insert(i, new MethodCallExpression(LastMethodCall.Location, LastMethodCall.Parent, LastMethodCall.Name, LastMethodCall.Arguments, BlockMethod));
+                            Objects.Insert(i, new MethodCallExpression(LastMethodCall.Location, LastMethodCall.Parent, LastMethodCall.Name, LastMethodCall.Arguments, BlockMethod, arguments_final: true));
                         }
                     }
                     // Unexpected block
@@ -1206,7 +1206,7 @@ namespace Embers {
                             else if (NextNextObject is MethodCallExpression ChildMethodCall) {
                                 // Insert method call expression
                                 Objects.Insert(i, new MethodCallExpression(
-                                    Parent.Location, Parent, ChildMethodCall.Name, ChildMethodCall.Arguments, ChildMethodCall.Block, safe_navigation: NextToken.Type is TokenType.SafeDot
+                                    Parent.Location, Parent, ChildMethodCall.Name, ChildMethodCall.Arguments, ChildMethodCall.Block, safe_navigation: NextToken.Type is TokenType.SafeDot, arguments_final: ChildMethodCall.ArgumentsFinal
                                 ));
                             }
                             // Invalid path
@@ -1575,18 +1575,24 @@ namespace Embers {
 
                 // Method call
                 if (Object is ReferenceExpression Reference && Reference is IdentifierExpression or MethodCallExpression) {
-                    // First argument
-                    if (NextObject is Expression and not TemporaryBlockExpression) {
-                        // Take call arguments
-                        Expression[] Arguments = ParseCallArgumentsNoBrackets(Location, Objects, i + 1);
-                        // Get parent
-                        Expression? Parent = null;
-                        if (Object is MethodCallExpression MethodCall) {
-                            Parent = MethodCall.Parent;
-                        }
-                        // Create method call expression
-                        Objects[i] = new MethodCallExpression(Object.Location, Parent, Reference.Name, Arguments);
+                    // No arguments
+                    if (NextObject is (not Expression) or TemporaryBlockExpression) {
+                        continue;
                     }
+                    // Arguments final or already present
+                    if (Reference is MethodCallExpression MethodCallReference && (MethodCallReference.ArgumentsFinal || MethodCallReference.Arguments.Length != 0)) {
+                        continue;
+                    }
+
+                    // Take call arguments
+                    Expression[] Arguments = ParseCallArgumentsNoBrackets(Location, Objects, i + 1);
+                    // Get parent
+                    Expression? Parent = null;
+                    if (Object is MethodCallExpression MethodCall) {
+                        Parent = MethodCall.Parent;
+                    }
+                    // Create method call expression
+                    Objects[i] = new MethodCallExpression(Object.Location, Parent, Reference.Name, Arguments);
                 }
             }
         }
