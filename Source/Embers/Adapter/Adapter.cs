@@ -11,7 +11,6 @@ using PeterO.Numbers;
 namespace Embers {
     public static class Adapter {
         internal const BindingFlags SearchFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.FlattenHierarchy;
-        internal const BindingFlags InstanceSearchFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.FlattenHierarchy;
 
         private static readonly ConditionalWeakTable<Type, Module> AdaptedModules = new();
 
@@ -189,10 +188,10 @@ namespace Embers {
             }
 
             // Create adapted module
-            Module Module = Type.HasConstructor()
-                ? new Class(Parent, null, Type.Name.ToPascalCase())
-                : new Module(Parent, Type.Name.ToPascalCase());
-            
+            Module Module = Type.IsAbstract
+                ? new Module(Parent, Type.Name.ToPascalCase())
+                : new Class(Parent, null, Type.Name.ToPascalCase());
+
             // Adapt unbound methods
             void AdaptUnboundMethod(MethodInfo MethodInfo, string MethodName, bool Static) {
                 // Get parameter types
@@ -325,10 +324,10 @@ namespace Embers {
             // Class
             if (Module is Class Class) {
                 // Copy constructors
-                ConstructorInfo[] Constructors = Type.GetConstructors(InstanceSearchFlags);
-                if (Constructors.Length != 0) {
-                    // new
-                    Instance New([Splat] Instance[] Arguments) {
+                ConstructorInfo[] Constructors = Type.GetConstructors(SearchFlags);
+                // new
+                Instance New([Splat] Instance[] Arguments) {
+                    if (Constructors.Length != 0) {
                         // Create object
                         object NewObject = FormatterServices.GetUninitializedObject(Type);
                         // Invoke best constructor overload
@@ -336,8 +335,12 @@ namespace Embers {
                         // Return instance of class
                         return new Instance(Class, NewObject);
                     }
-                    Class.SetClassMethod("new", New);
+                    else {
+                        // Return instance of class
+                        return new Instance(Class, Activator.CreateInstance(Type)!);
+                    }
                 }
+                Class.SetClassMethod("new", New);
 
                 // Copy System.Array indexers
                 if (Type.IsArray) {

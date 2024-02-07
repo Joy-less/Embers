@@ -82,8 +82,5 @@ namespace Embers {
         public static bool IsParams(this ParameterInfo Parameter) {
             return Parameter.GetCustomAttribute<ParamArrayAttribute>() is not null;
         }
-        public static bool HasConstructor(this Type Type) {
-            return Type.GetConstructors(Adapter.InstanceSearchFlags).Length != 0;
-        }
     }
 }

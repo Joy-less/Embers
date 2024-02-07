@@ -1569,7 +1569,7 @@ namespace Embers {
             }
         }
         static void MatchMethodCallsNoBrackets(CodeLocation Location, List<RubyObject?> Objects) {
-            for (int i = 0; i < Objects.Count; i++) {
+            for (int i = Objects.Count - 1; i >= 0; i--) {
                 RubyObject? Object = Objects[i];
                 RubyObject? NextObject = i + 1 < Objects.Count ? Objects[i + 1] : null;
 

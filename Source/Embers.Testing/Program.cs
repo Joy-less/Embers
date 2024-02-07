@@ -7,19 +7,17 @@
             public static void Bite(int Times) {
                 Console.WriteLine("bitten " + Times.ToString());
             }
-            
         }
         static void Main() {
             const string Code = @"
-class Pizza
-    def f; end
-    def self.equals(a, b)
-        true
-    end
-end
+puts 'I <3 Ruby!'
 
-p Pizza.new.f
-p Pizza.equals 5, 5
+pizza.bite
+pizza.bite 5
+
+p pizza.methods
+
+p pizza.new.class.bite 10
 ";
             Scope Scope = new();
             Scope.SetVariable("pizza", typeof(Pizza));

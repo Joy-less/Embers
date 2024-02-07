@@ -75,7 +75,7 @@ namespace Embers {
         public readonly Expression[] Arguments;
         public readonly Method? Block;
         public readonly bool SafeNavigation;
-        public readonly bool ArgumentsFinal;
+        internal readonly bool ArgumentsFinal;
         public MethodCallExpression(CodeLocation location, Expression? parent, string name, Expression[]? arguments = null, Method? block = null, bool safe_navigation = false, bool arguments_final = false) : base(location, name) {
             Parent = parent;
             Arguments = arguments ?? System.Array.Empty<Expression>();
