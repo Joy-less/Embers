@@ -11,6 +11,7 @@ using PeterO.Numbers;
 namespace Embers {
     public static class Adapter {
         internal const BindingFlags SearchFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+        internal const BindingFlags InstanceSearchFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.FlattenHierarchy;
 
         private static readonly ConditionalWeakTable<Type, Module> AdaptedModules = new();
 
@@ -324,7 +325,7 @@ namespace Embers {
             // Class
             if (Module is Class Class) {
                 // Copy constructors
-                ConstructorInfo[] Constructors = Type.GetConstructors(SearchFlags);
+                ConstructorInfo[] Constructors = Type.GetConstructors(InstanceSearchFlags);
                 if (Constructors.Length != 0) {
                     // new
                     Instance New([Splat] Instance[] Arguments) {
@@ -341,10 +342,10 @@ namespace Embers {
                 // Copy System.Array indexers
                 if (Type.IsArray) {
                     if (Class.GetInstanceMethod("get_value") is Method Getter) {
-                        Class.SetInstanceMethod("[]", Getter);
+                        Class.SetInstanceMethod("[]", Getter.Alias("[]"));
                     }
                     if (Class.GetInstanceMethod("set_value") is Method Setter) {
-                        Class.SetInstanceMethod("[]=", Setter);
+                        Class.SetInstanceMethod("[]=", Setter.Alias("[]="));
                     }
                 }
             }

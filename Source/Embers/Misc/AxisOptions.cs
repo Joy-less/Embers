@@ -28,8 +28,8 @@ namespace Embers {
         /// </summary>
         public bool ThreadSafety = false;
         /// <summary>
-        /// If <see langword="true"/>, remove access to dangerous methods such as <c>File.read</c>.<br/>
-        /// If <see langword="false"/>, allow access.<br/>
+        /// If <see langword="true"/>, don't include dangerous methods such as <c>File.read</c>.<br/>
+        /// If <see langword="false"/>, include them.<br/>
         /// Default: <see langword="false"/>.<br/>
         /// </summary>
         public bool Sandbox = false;

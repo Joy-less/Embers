@@ -126,10 +126,10 @@ namespace Embers {
             }
             return ReturnValue;
         }
-        public Method Alias(string AliasName, AccessModifier? AliasAccessModifier) {
+        public Method Alias(string? AliasName = null, AccessModifier? AliasAccessModifier = null) {
             return MethodType switch {
-                MethodType.Adapted => new Method(Location, AliasName, CallDelegate!.Original, AliasAccessModifier ?? AccessModifier),
-                MethodType.Def => new Method(CallExpressionsScope!, Location, AliasName, Arguments, CallExpressions!, AliasAccessModifier ?? AccessModifier),
+                MethodType.Adapted => new Method(Location, AliasName ?? Name, CallDelegate!.Original, AliasAccessModifier ?? AccessModifier),
+                MethodType.Def => new Method(CallExpressionsScope!, Location, AliasName ?? Name, Arguments, CallExpressions!, AliasAccessModifier ?? AccessModifier),
                 _ => throw new InternalError($"{Location}: cannot alias method of type '{MethodType}'")
             };
         }

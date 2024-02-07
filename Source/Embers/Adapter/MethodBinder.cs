@@ -16,8 +16,8 @@ namespace Embers {
             return Method.CreateDelegate(DelegateType, Target);
         }
         public static object? InvokeBestOverload<TMethod>(TMethod[] Overloads, object? Target, Instance[] Arguments) where TMethod : MethodBase {
-            // TODO:
-            // Take params into account when choosing overload
+            // TODO: Take params into account when choosing overload
+
             object?[] GetPassArguments(TMethod Overload, out bool Valid) {
                 // Get overload parameters
                 ParameterInfo[] Parameters = Overload.GetParameters();
@@ -83,7 +83,7 @@ namespace Embers {
             return Parameter.GetCustomAttribute<ParamArrayAttribute>() is not null;
         }
         public static bool HasConstructor(this Type Type) {
-            return Type.GetConstructors(Adapter.SearchFlags).Length != 0;
+            return Type.GetConstructors(Adapter.InstanceSearchFlags).Length != 0;
         }
     }
 }

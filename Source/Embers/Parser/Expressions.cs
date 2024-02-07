@@ -86,6 +86,13 @@ namespace Embers {
         public override Instance Interpret(Context Context) => Interpreter.InterpretMethodCall(Context, this);
         public override Instance Assign(Context Context, Instance Value) => Interpreter.InterpretMethodCallAssignment(Context, this, Value);
     }
+    public class SelfExpression : ReferenceExpression {
+        public SelfExpression(CodeLocation location) : base(location, "self") { }
+        public override string ToString()
+            => "self";
+        public override Instance Interpret(Context Context) => Interpreter.InterpretSelf(Context, this);
+        public override Instance Assign(Context Context, Instance Value) => throw new RuntimeError($"{Location}: cannot assign to self");
+    }
     public class TokenLiteralExpression : Expression {
         public readonly Token Token;
         public readonly Func<Instance> CreateLiteral;
@@ -129,12 +136,6 @@ namespace Embers {
         public override string ToString()
             => Value;
         public override Instance Interpret(Context Context) => Interpreter.InterpretFormattedString(Context, this);
-    }
-    public class SelfExpression : Expression {
-        public SelfExpression(CodeLocation location) : base(location) { }
-        public override string ToString()
-            => "self";
-        public override Instance Interpret(Context Context) => Interpreter.InterpretSelf(Context, this);
     }
     public class LineExpression : Expression {
         public LineExpression(CodeLocation location) : base(location) { }

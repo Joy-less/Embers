@@ -311,7 +311,7 @@ namespace Embers {
                 ?? throw new RuntimeError($"{Expression.Location}: undefined method '{Expression.Original}' for {CurrentClass.Describe()}");
 
             // Alias original method
-            CurrentClass.SetInstanceMethod(Expression.Alias, OriginalMethod);
+            CurrentClass.SetInstanceMethod(Expression.Alias, OriginalMethod.Alias(Expression.Alias));
 
             // Return nil
             return Context.Axis.Nil;
@@ -490,21 +490,36 @@ namespace Embers {
             return LastInstance;
         }
         public static Instance InterpretDefMethod(Context Context, DefMethodExpression Expression) {
-            // Get method parent
-            Instance Parent = Expression.Parent is not null
-                ? Expression.Parent.Interpret(Context)
-                : Context.Instance;
             // Get method scope
             Scope MethodScope = Context.Instance.SelfOrClass.Scope;
             // Create method
             Method Method = new(MethodScope, Expression.Location, Expression.Name, Expression.Arguments, Expression.Expressions, Context.Locals.AccessModifier);
-            // Define method
-            if (Parent is Module ParentModule) {
-                ParentModule.SetClassMethod(Expression.Name, Method);
+            
+            // Instance method
+            if (Expression.Parent is null) {
+                // Instance method
+                if (Context.Module is Class ParentClass) {
+                    ParentClass.SetInstanceMethod(Expression.Name, Method);
+                }
+                // Error
+                else {
+                    throw new SyntaxError("tried to define instance method in module");
+                }
             }
             else {
-                Parent.Class.SetInstanceMethod(Expression.Name, Method);
+                // Get parent
+                Instance Parent = Expression.Parent.Interpret(Context);
+
+                // Class method
+                if (Parent is Module ParentModule) {
+                    ParentModule.SetClassMethod(Expression.Name, Method);
+                }
+                // Instance method
+                else {
+                    Parent.Class.SetInstanceMethod(Expression.Name, Method);
+                }
             }
+
             // Return nil
             return Context.Axis.Nil;
         }
@@ -586,7 +601,7 @@ namespace Embers {
                 Expression.Location,
                 new Scope(Context.Axis),
                 Module,
-                Module is Class ModuleAsClass ? new Instance(ModuleAsClass) : Module
+                Module
             );
             // Interpret class expressions
             Expression.Expressions.Interpret(ClassContext);

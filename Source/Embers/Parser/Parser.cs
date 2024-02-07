@@ -328,7 +328,7 @@ namespace Embers {
             // Get path objects
             List<RubyObject?> PathObjects = Objects.GetIndexRange(0, EndPathIndex - 1);
             // Parse method path
-            (ReferenceExpression? PathParent, string PathName) = ParseSeparatedPath(Location, PathObjects, ConstantPath: false);
+            (ReferenceExpression? PathParent, string PathName) = ParsePath(Location, PathObjects, ConstantPath: false);
 
             // Parse method= as name
             if (EndPathIndex < Objects.Count && Objects[EndPathIndex] is Token EndPathToken) {
@@ -403,8 +403,8 @@ namespace Embers {
             if (SuperIndex != -1) {
                 // Class
                 if (IsClass) {
-                    Path = ParseSeparatedPath(Location, PathObjects.GetIndexRange(0, SuperIndex - 1), ConstantPath: true);
-                    Super = ParsePath(Location, PathObjects.GetIndexRange(SuperIndex + 1), ConstantPath: true);
+                    Path = ParsePath(Location, PathObjects.GetIndexRange(0, SuperIndex - 1), ConstantPath: true);
+                    Super = ParseCombinedPath(Location, PathObjects.GetIndexRange(SuperIndex + 1), ConstantPath: true);
                 }
                 // Module
                 else {
@@ -413,7 +413,7 @@ namespace Embers {
             }
             // Module
             else {
-                Path = ParseSeparatedPath(Location, PathObjects, ConstantPath: true);
+                Path = ParsePath(Location, PathObjects, ConstantPath: true);
                 Super = null;
             }
 
@@ -639,90 +639,95 @@ namespace Embers {
             return Result;
         }
 
-        static (ReferenceExpression? Parent, string Name) ParseSeparatedPath(CodeLocation Location, List<RubyObject?> PathObjects, bool ConstantPath) {
-            // Parse path parts
-            List<Token> Parts = ParsePathTokens(Location, PathObjects, ConstantPath ? TokenType.DoubleColon : TokenType.Dot);
-            Token Name = Parts[^1];
-
-            // Name
-            if (Parts.Count == 1) {
-                return (null, Name.Value!);
-            }
-            // Parent + name
-            else if (Parts.Count == 2) {
-                Token Parent = Parts[^2];
-                return (new IdentifierExpression(Parent.Location, Parent.Value!), Name.Value!);
-            }
-            // Parent path + name
-            else {
-                Token Parent = Parts[^2];
-                ReferenceExpression ParentPath = new IdentifierExpression(Parent.Location, Parent.Value!);
-                for (int i = Parts.Count - 2; i >= 0; i++) {
-                    ParentPath = ConstantPath
-                        ? new ConstantPathExpression(ParentPath, Parts[i].Value!)
-                        : new MethodCallExpression(ParentPath.Location, ParentPath, Parts[i].Value!);
-                }
-                return (ParentPath, Name.Value!);
-            }
-        }
-        static ReferenceExpression ParsePath(CodeLocation Location, List<RubyObject?> PathObjects, bool ConstantPath) {
-            // Parse path parts
-            (ReferenceExpression? Parent, string Name) = ParseSeparatedPath(Location, PathObjects, ConstantPath);
-            // Combine path parts
-            if (Parent is null) {
-                return new IdentifierExpression(Location, Name);
-            }
-            else {
-                return ConstantPath
-                    ? new ConstantPathExpression(Parent, Name)
-                    : new MethodCallExpression(Parent.Location, Parent, Name);
-            }
-        }
-        static List<Token> ParsePathTokens(CodeLocation Location, List<RubyObject?> PathObjects, TokenType Separator) {
-            List<Token> Parts = new();
-
-            bool ExpectAnotherIdentifier = true;
+        static (ReferenceExpression? Parent, string Name) ParsePath(CodeLocation Location, List<RubyObject?> Objects, bool ConstantPath) {
+            // Get path parts
+            List<string> Parts = new();
             CodeLocation LastLocation = Location;
-            for (int i = 0; i < PathObjects.Count; i++) {
-                RubyObject? Object = PathObjects[i];
-                if (Object is null) continue;
-                LastLocation = Object.Location;
-
+            bool ExpectPart = true;
+            foreach (RubyObject? Object in Objects) {
                 // Token
                 if (Object is Token Token) {
-                    // Separator
-                    if (Token.Type == Separator) {
-                        if (!ExpectAnotherIdentifier) {
-                            ExpectAnotherIdentifier = true;
-                        }
-                        else {
+                    LastLocation = Object.Location;
+
+                    // Path separator
+                    if (ConstantPath ? Token.Type is TokenType.DoubleColon : Token.Type is TokenType.Dot) {
+                        if (ExpectPart) {
                             throw new SyntaxError($"{Token.Location}: unexpected {Token}");
                         }
+                        ExpectPart = true;
                     }
-                    // Identifier or Operator as Identifier
-                    else if (Token.Type is TokenType.Identifier or TokenType.Operator) {
-                        if (ExpectAnotherIdentifier) {
-                            ExpectAnotherIdentifier = false;
-                            Parts.Add(Token);
-                        }
-                        else {
+                    // Path part
+                    else if (Token.Type is TokenType.Identifier) {
+                        if (!ExpectPart) {
                             throw new SyntaxError($"{Token.Location}: unexpected '{Token}'");
                         }
+                        ExpectPart = false;
+                        Parts.Add(Token.Value!);
+                    }
+                    // Operator as path part
+                    else if (Token.Type is TokenType.Operator) {
+                        if (ExpectPart) {
+                            Parts.Add(Token.Value!);
+                        }
+                        else {
+                            Parts[^1] += Token.Value!;
+                        }
+                        ExpectPart = false;
                     }
                     // Unexpected token
                     else {
                         throw new SyntaxError($"{Token.Location}: unexpected '{Token}'");
                     }
                 }
+                // Null
+                else if (Object is null) {
+                    // Pass
+                }
+                // Unexpected object
                 else {
                     throw new SyntaxError($"{Object.Location}: unexpected '{Object}'");
                 }
             }
-            if (ExpectAnotherIdentifier) {
+            // Expected path part
+            if (ExpectPart) {
                 throw new SyntaxError($"{LastLocation}: expected identifier");
             }
 
-            return Parts;
+            // Construct path
+            ReferenceExpression? Parent = null;
+            string Name = Parts.Last();
+            foreach (string Part in Parts.SkipLast(1)) {
+                // First part
+                if (Parent is null) {
+                    if (Part == "self") {
+                        Parent = new SelfExpression(Location);
+                    }
+                    else {
+                        Parent = new IdentifierExpression(Location, Name);
+                    }
+                }
+                // Sub part
+                else {
+                    if (ConstantPath) {
+                        Parent = new ConstantPathExpression(Parent, Name);
+                    }
+                    else {
+                        Parent = new MethodCallExpression(Location, Parent, Name);
+                    }
+                }
+            }
+            return (Parent, Name);
+        }
+        static ReferenceExpression ParseCombinedPath(CodeLocation Location, List<RubyObject?> Objects, bool ConstantPath) {
+            // Parse path parts
+            (ReferenceExpression? Parent, string Name) = ParsePath(Location, Objects, ConstantPath);
+            // Combine path parts
+            return Parent is null
+                ? new IdentifierExpression(Location, Name)
+                : (ConstantPath
+                    ? new ConstantPathExpression(Parent, Name)
+                    : new MethodCallExpression(Parent.Location, Parent, Name)
+            );
         }
         static Argument[] ParseDefArguments(List<RubyObject?> Objects) {
             List<Argument> Arguments = new();
