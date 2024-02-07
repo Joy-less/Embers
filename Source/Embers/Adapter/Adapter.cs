@@ -10,7 +10,7 @@ using PeterO.Numbers;
 
 namespace Embers {
     public static class Adapter {
-        internal const BindingFlags SearchFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+        internal const BindingFlags SearchFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
 
         private static readonly ConditionalWeakTable<Type, Module> AdaptedModules = new();
 
@@ -174,7 +174,7 @@ namespace Embers {
             if (Instance is null) return null;
             return GetPrimitive() ?? GetOther();
         }
-        /// <summary>Get a module from a .NET type. The module will be a class if the type has a constructor.</summary>
+        /// <summary>Get a module from a .NET type. The module will be a class if the type is not abstract/static.</summary>
         public static Module GetModule(Module Parent, Type Type) {
             // Type already adapted
             if (AdaptedModules.TryGetValue(Type, out Module? AdaptedModule)) {
@@ -188,9 +188,21 @@ namespace Embers {
             }
 
             // Create adapted module
-            Module Module = Type.IsAbstract
-                ? new Module(Parent, Type.Name.ToPascalCase())
-                : new Class(Parent, null, Type.Name.ToPascalCase());
+            Module Module;
+            // Module
+            if (Type.IsAbstract) {
+                // Create module
+                Module = new Module(Parent, Type.Name.ToPascalCase());
+            }
+            // Class
+            else {
+                // Adapt superclass
+                Class? Super = Type.BaseType is not null
+                    ? GetModule(Parent, Type.BaseType) as Class
+                    : null;
+                // Create class
+                Module = new Class(Parent, Super, Type.Name.ToPascalCase());
+            }
 
             // Adapt unbound methods
             void AdaptUnboundMethod(MethodInfo MethodInfo, string MethodName, bool Static) {

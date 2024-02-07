@@ -18,6 +18,8 @@ pizza.bite 5
 p pizza.methods
 
 p pizza.new.class.bite 10
+
+p pizza.method :equals
 ";
             Scope Scope = new();
             Scope.SetVariable("pizza", typeof(Pizza));
