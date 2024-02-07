@@ -58,6 +58,7 @@ namespace Embers {
             Axis.Object.SetClassMethod("class", _Object.@class);
             Axis.Object.SetClassMethod("object_id", _Object.object_id);
             Axis.Object.SetClassMethod("method", _Object.method);
+            Axis.Object.SetClassMethod("send", _Object.send);
             Axis.Object.SetClassMethod("is_a?", _Object.is_a7);
             Axis.Object.SetClassMethod("instance_of?", _Object.instance_of7);
             Axis.Object.SetClassMethod("in?", _Object.in7);
@@ -75,6 +76,7 @@ namespace Embers {
             Axis.Object.SetInstanceMethod("class", _Object.@class);
             Axis.Object.SetInstanceMethod("object_id", _Object.object_id);
             Axis.Object.SetInstanceMethod("method", _Object.method);
+            Axis.Object.SetInstanceMethod("send", _Object.send);
             Axis.Object.SetInstanceMethod("is_a?", _Object.is_a7);
             Axis.Object.SetInstanceMethod("instance_of?", _Object.instance_of7);
             Axis.Object.SetInstanceMethod("in?", _Object.in7);
@@ -640,6 +642,12 @@ namespace Embers {
                 Method Method = Context.Instance.GetMethod(MethodName)
                     ?? throw new RuntimeError($"{Context.Location}: undefined method '{MethodName}' for {Context.Instance.Describe()}");
                 return new Proc(Context.Scope, Context.Instance, Method);
+            }
+            public static Instance send(Context Context, string MethodName, [Splat] Instance[] Arguments, [Block] Proc? Block) {
+                return Context.Instance.CallMethod(
+                    new Context(Context.Location, Context.Scope, Context.Module, Context.Instance, Block, Context.Method),
+                    MethodName, Arguments
+                );
             }
             public static long object_id(Context Context) {
                 return Context.Instance.ObjectId;

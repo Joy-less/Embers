@@ -133,21 +133,17 @@ namespace Embers {
                 _ => throw new InternalError($"{Location}: cannot alias method of type '{MethodType}'")
             };
         }
-        public void VerifyAccess(CodeLocation Location, Instance FromInstance, Instance MethodInstance) {
-            // Get from and to
-            Module From = FromInstance.SelfOrClass;
-            Module To = MethodInstance.SelfOrClass;
-
+        public void VerifyAccess(CodeLocation Location, Instance From, Instance To) {
             // Private
             if (AccessModifier is AccessModifier.Private) {
-                if (From != To) {
-                    throw new RuntimeError($"{Location}: tried to call private method '{Name}' of '{MethodInstance.Inspect()}'");
+                if (From.SelfOrClass != To.SelfOrClass) {
+                    throw new RuntimeError($"{Location}: tried to call private method '{Name}' of '{To.Inspect()}'");
                 }
             }
             // Protected
             else if (AccessModifier is AccessModifier.Protected) {
-                if (!From.DerivesFrom(To)) {
-                    throw new RuntimeError($"{Location}: tried to call protected method '{Name}' of '{MethodInstance.Inspect()}'");
+                if (!From.SelfOrClass.DerivesFrom(To.SelfOrClass)) {
+                    throw new RuntimeError($"{Location}: tried to call protected method '{Name}' of '{To.Inspect()}'");
                 }
             }
         }
@@ -326,21 +322,21 @@ namespace Embers {
             // Splat
             if (Parameter.GetCustomAttribute<SplatAttribute>() is not null || IsParams) {
                 if (!Parameter.ParameterType.IsAssignableTo(typeof(IList))) {
-                    throw new InteropError($"{Location}: splat argument must be a list or array (got {Parameter.ParameterType})");
+                    throw new InteropError($"{Location}: splat argument must be a list or array (not {Parameter.ParameterType})");
                 }
                 FindArgumentType = ArgumentType.Splat;
             }
             // Double splat
             if (Parameter.GetCustomAttribute<DoubleSplatAttribute>() is not null) {
                 if (!Parameter.ParameterType.IsAssignableFrom(typeof(Hash))) {
-                    throw new InteropError($"{Location}: double splat argument must be a hash (got {Parameter.ParameterType})");
+                    throw new InteropError($"{Location}: double splat argument must be a hash (not {Parameter.ParameterType})");
                 }
                 FindArgumentType = ArgumentType.DoubleSplat;
             }
             // Block
             if (Parameter.GetCustomAttribute<BlockAttribute>() is not null) {
                 if (!Parameter.ParameterType.IsAssignableFrom(typeof(Proc))) {
-                    throw new InteropError($"{Location}: block argument must be a proc (got {Parameter.ParameterType})");
+                    throw new InteropError($"{Location}: block argument must be a proc (not {Parameter.ParameterType})");
                 }
                 FindArgumentType = ArgumentType.Block;
             }

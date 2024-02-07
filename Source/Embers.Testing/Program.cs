@@ -20,6 +20,7 @@ p pizza.methods
 p pizza.new.class.bite 10
 
 p pizza.method :equals
+p 5.send :puts, 'hi'
 ";
             Scope Scope = new();
             Scope.SetVariable("pizza", typeof(Pizza));

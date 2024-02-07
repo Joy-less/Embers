@@ -118,6 +118,9 @@ object.class
 object.method(method_name)
 	Returns a proc containing the method that can be called with proc.call(*args).
 
+object.send(method_name, *args) {}
+	Calls the given method with the given arguments and block, bypassing access modifiers.
+
 object.object_id
 	Returns an integer that uniquely identifies the object reference.
 
