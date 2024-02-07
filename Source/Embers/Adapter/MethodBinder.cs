@@ -16,16 +16,14 @@ namespace Embers {
             return Method.CreateDelegate(DelegateType, Target);
         }
         public static object? InvokeBestOverload<TMethod>(TMethod[] Overloads, object? Target, Instance[] Arguments) where TMethod : MethodBase {
-            // TODO: Take params into account when choosing overload
-
-            object?[] GetPassArguments(TMethod Overload, out bool Valid) {
+            bool GetPassArguments(TMethod Overload, out object?[] PassArguments) {
                 // Get overload parameters
                 ParameterInfo[] Parameters = Overload.GetParameters();
                 // Create pass arguments array
-                object?[] PassArguments = new object?[Parameters.Length];
+                PassArguments = new object?[Parameters.Length];
                 // Set valid flag
-                Valid = true;
-                // Not valid if more arguments given than taken
+                bool Valid = true;
+                // Not valid if more arguments passed than accepted
                 if (Arguments.Length > Parameters.Length) {
                     Valid = false;
                 }
@@ -54,22 +52,20 @@ namespace Embers {
                         }
                     }
                 }
-                // Return pass arguments
-                return PassArguments;
+                // Return valid
+                return Valid;
             }
 
             // Try match each overload
             foreach (TMethod Overload in Overloads) {
-                object?[] PassArguments = GetPassArguments(Overload, out bool Valid);
-                if (Valid) {
+                if (GetPassArguments(Overload, out object?[] PassArguments)) {
                     return Overload.Invoke(Target, PassArguments);
                 }
             }
 
             // If no overload matched, call first overload anyway
             TMethod FirstOverload = Overloads[0];
-            object?[] FirstPassArguments = GetPassArguments(FirstOverload, out _);
-            _ = Arguments;
+            GetPassArguments(FirstOverload, out object?[] FirstPassArguments);
             return FirstOverload.Invoke(Target, FirstPassArguments);
         }
         public static bool CanAssignNull(this Type Type) {

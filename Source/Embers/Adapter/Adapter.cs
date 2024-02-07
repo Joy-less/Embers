@@ -207,9 +207,8 @@ namespace Embers {
                         Module.SetClassMethod(MethodName, Delegate);
                     }
                     // Instance method
-                    else if (Module is Class ModuleAsClass) {
-                        // Bind method to instance at runtime
-                        // Note: This creates a new method to bind the instance every time the method is called. I can't think of a better way without caching.
+                    else if (Module is Class Class) {
+                        // When called, create a new method to bind to the instance
                         object? CallInstanceMethod(Context Context, params Instance[] Arguments) {
                             // Create delegate bound to instance
                             Delegate BoundDelegate = MethodBinder.CreateDelegate(Context.Instance.Value, MethodInfo);
@@ -219,7 +218,7 @@ namespace Embers {
                             return BoundMethod.Call(Context, Arguments);
                         }
                         // Add instance method
-                        ModuleAsClass.SetInstanceMethod(MethodName, CallInstanceMethod);
+                        Class.SetInstanceMethod(MethodName, CallInstanceMethod);
                     }
                 }
                 // Cannot adapt (probably has ref or pointer arguments)

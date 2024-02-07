@@ -202,14 +202,13 @@ namespace Embers {
 
             // Validate arguments count
             if (MethodType is not MethodType.Block) {
+                string AllowedRange = ArgumentsRange.Min == ArgumentsRange.Max ? $"{ArgumentsRange.Min}" : $"{ArgumentsRange}";
                 // Not enough arguments
                 if (GivenArguments.Length < ArgumentsRange.Min) {
-                    string AllowedRange = $"{(ArgumentsRange.Min == ArgumentsRange.Max ? ArgumentsRange.Min : ArgumentsRange)}";
                     throw new RuntimeError($"{Context.Location}: not enough arguments given for '{Name}' (expected {AllowedRange}, got {GivenArguments.Length})");
                 }
                 // Too many arguments
                 if (GivenArguments.Length > ArgumentsRange.Max) {
-                    string AllowedRange = $"{(ArgumentsRange.Min == ArgumentsRange.Max ? ArgumentsRange.Min : ArgumentsRange)}";
                     throw new RuntimeError($"{Context.Location}: too many arguments given for '{Name}' (expected {AllowedRange}, got {GivenArguments.Length})");
                 }
             }
@@ -333,14 +332,14 @@ namespace Embers {
             }
             // Double splat
             if (Parameter.GetCustomAttribute<DoubleSplatAttribute>() is not null) {
-                if (Parameter.ParameterType != typeof(Hash)) {
+                if (!Parameter.ParameterType.IsAssignableFrom(typeof(Hash))) {
                     throw new InteropError($"{Location}: double splat argument must be a hash (got {Parameter.ParameterType})");
                 }
                 FindArgumentType = ArgumentType.DoubleSplat;
             }
             // Block
             if (Parameter.GetCustomAttribute<BlockAttribute>() is not null) {
-                if (Parameter.ParameterType != typeof(Proc)) {
+                if (!Parameter.ParameterType.IsAssignableFrom(typeof(Proc))) {
                     throw new InteropError($"{Location}: block argument must be a proc (got {Parameter.ParameterType})");
                 }
                 FindArgumentType = ArgumentType.Block;
