@@ -25,15 +25,15 @@ namespace Embers {
         static void ParseGeneralStructure(List<RubyObject?> Objects) {
             // Brackets
             ParseBrackets(Objects, TokenType.OpenBracket, TokenType.CloseBracket, (Location, Objects, StartToken)
-                => new TemporaryBracketsExpression(Location, Objects, StartToken.WhitespaceBefore));
+                => new TempBracketsExpression(Location, Objects, StartToken.WhitespaceBefore));
 
             // Square brackets
             ParseBrackets(Objects, TokenType.OpenSquareBracket, TokenType.CloseSquareBracket, (Location, Objects, StartToken)
-                => new TemporarySquareBracketsExpression(Location, Objects, StartToken.WhitespaceBefore));
+                => new TempSquareBracketsExpression(Location, Objects, StartToken.WhitespaceBefore));
 
             // Curly brackets
             ParseBrackets(Objects, TokenType.OpenCurlyBracket, TokenType.CloseCurlyBracket, (Location, Objects, StartToken)
-                => new TemporaryCurlyBracketsExpression(Location, Objects, StartToken.WhitespaceBefore));
+                => new TempCurlyBracketsExpression(Location, Objects, StartToken.WhitespaceBefore));
 
             // Blocks
             ParseBlocks(Objects);
@@ -118,13 +118,13 @@ namespace Embers {
                                 "unless" => (Location, Objects) => ParseIfBlock(Location, BlockObjects, Negate: true),
                                 "while" => (Location, Objects) => ParseWhileBlock(Location, BlockObjects),
                                 "until" => (Location, Objects) => ParseWhileBlock(Location, BlockObjects, Negate: true),
-                                "do" => (Location, Objects) => ParseBlock(Location, BlockObjects, HighPrecedence: false),
+                                "do" => (Location, Objects) => ParseDoBlock(Location, BlockObjects),
                                 _ => throw new InternalError($"{BlockLocation}: block not handled: '{StartBlock.Token.Value}'")
                             };
 
                             // Insert block expression at start block index
                             i = StartBlock.Index;
-                            Objects.Insert(i, new TemporaryScopeExpression(BlockLocation, BlockObjects, Creator));
+                            Objects.Insert(i, new TempScopeExpression(BlockLocation, BlockObjects, Creator));
                         }
                         else {
                             throw new SyntaxError($"{Token.Location}: unexpected '{Token.Value}'");
@@ -140,31 +140,6 @@ namespace Embers {
             if (StartBlocks.TryPop(out (int Index, Token Token) UnclosedStartBlock)) {
                 throw new SyntaxError($"{UnclosedStartBlock.Token.Location}: unclosed '{UnclosedStartBlock.Token.Value}'");
             }
-        }
-        static TemporaryBlockExpression ParseBlock(CodeLocation Location, List<RubyObject?> Objects, bool HighPrecedence) {
-            // Get arguments
-            Argument[] Arguments = System.Array.Empty<Argument>();
-            // Find start arguments
-            if (Objects.FirstOrDefault() is Token Token) {
-                if (Token.Type is TokenType.Operator && Token.Value is "|") {
-                    // Find end of arguments
-                    int EndArgumentsIndex = Objects.FindIndex(1, Object => Object is Token NextToken && NextToken.Type is TokenType.Operator && NextToken.Value is "|");
-                    if (EndArgumentsIndex != -1) {
-                        // Parse arguments
-                        Arguments = ParseDefArguments(Objects.GetIndexRange(1, EndArgumentsIndex - 1));
-                        // Remove arguments
-                        Objects.RemoveIndexRange(0, EndArgumentsIndex);
-                    }
-                    else {
-                        throw new SyntaxError($"{Token.Location}: unclosed '|'");
-                    }
-                }
-                else if (Token.Type is TokenType.LogicOperator && Token.Value is "||") {
-                    // No arguments
-                }
-            }
-            // Create block expression
-            return new TemporaryBlockExpression(Location, Objects, Arguments, HighPrecedence);
         }
         static Branch[] ParseBranches(List<RubyObject?> Objects, params string[] BranchOrder) {
             // Find start of branches
@@ -343,7 +318,7 @@ namespace Embers {
             List<RubyObject?> ArgumentObjects;
             int EndArgumentsIndex;
             // Get argument objects (in brackets)
-            if (EndPathIndex < Objects.Count && Objects[EndPathIndex] is TemporaryBracketsExpression ArgumentBrackets) {
+            if (EndPathIndex < Objects.Count && Objects[EndPathIndex] is TempBracketsExpression ArgumentBrackets) {
                 EndArgumentsIndex = EndPathIndex;
                 ArgumentObjects = ArgumentBrackets.Objects;
             }
@@ -423,6 +398,52 @@ namespace Embers {
             // Create module expression
             return new DefModuleExpression(Location, Expressions, Path.Name, Super, IsClass);
         }
+        static CaseExpression ParseCaseBlock(CodeLocation Location, List<RubyObject?> Objects) {
+            // Get branches
+            Branch[] Branches = ParseBranches(Objects, "when", "else");
+
+            // Parse subject
+            Expression Subject = ParseExpression(Location, Objects);
+
+            // Parse branches
+            List<WhenExpression> WhenBranches = new();
+            Expression[]? ElseBranch = null;
+            foreach (Branch Branch in Branches) {
+                // When
+                if (Branch.Name is "when") {
+                    // Get end of condition
+                    int EndConditionIndex = Branch.Objects.FindIndex(Object => Object is null);
+                    if (EndConditionIndex == -1) {
+                        EndConditionIndex = Branch.Objects.Count;
+                    }
+                    // Get conditions
+                    Expression[] Conditions = ParseCommaSeparatedExpressions(Branch.Location, Branch.Objects.GetIndexRange(0, EndConditionIndex - 1));
+                    // Parse expressions
+                    Expression[] Expressions = ParseNullSeparatedExpressions(Branch.Location, Branch.Objects.GetIndexRange(EndConditionIndex + 1));
+                    // Add when expression
+                    WhenBranches.Add(new WhenExpression(Branch.Location, Conditions, Expressions));
+                }
+                // Else
+                else if (Branch.Name is "else") {
+                    // Ensure else is last branch
+                    if (ElseBranch is not null) {
+                        throw new SyntaxError($"{Branch.Location}: else must be the last branch");
+                    }
+                    // Parse expressions
+                    Expression[] Expressions = ParseNullSeparatedExpressions(Branch.Location, Branch.Objects);
+                    // Add else expression
+                    ElseBranch = Expressions;
+                }
+            }
+
+            // Warn if case expression is empty
+            if (WhenBranches.Count == 0) {
+                Location.Axis.Warn(Location, "empty case expression");
+            }
+
+            // Create case expression
+            return new CaseExpression(Location, Subject, WhenBranches, ElseBranch);
+        }
         static IfExpression ParseIfBlock(CodeLocation Location, List<RubyObject?> Objects, bool Negate = false) {
             // Branches
             Branch[] Branches = ParseBranches(Objects, "elsif", "else");
@@ -498,62 +519,23 @@ namespace Embers {
             // Create while expression
             return new WhileExpression(Location, Expressions, Condition);
         }
-        static CaseExpression ParseCaseBlock(CodeLocation Location, List<RubyObject?> Objects) {
-            // Get branches
-            Branch[] Branches = ParseBranches(Objects, "when", "else");
-
-            // Parse subject
-            Expression Subject = ParseExpression(Location, Objects);
-
-            // Parse branches
-            List<WhenExpression> WhenBranches = new();
-            Expression[]? ElseBranch = null;
-            foreach (Branch Branch in Branches) {
-                // When
-                if (Branch.Name is "when") {
-                    // Get end of condition
-                    int EndConditionIndex = Branch.Objects.FindIndex(Object => Object is null);
-                    if (EndConditionIndex == -1) {
-                        EndConditionIndex = Branch.Objects.Count;
-                    }
-                    // Get conditions
-                    Expression[] Conditions = ParseCommaSeparatedExpressions(Branch.Location, Branch.Objects.GetIndexRange(0, EndConditionIndex - 1));
-                    // Parse expressions
-                    Expression[] Expressions = ParseNullSeparatedExpressions(Branch.Location, Branch.Objects.GetIndexRange(EndConditionIndex + 1));
-                    // Add when expression
-                    WhenBranches.Add(new WhenExpression(Branch.Location, Conditions, Expressions));
-                }
-                // Else
-                else if (Branch.Name is "else") {
-                    // Ensure else is last branch
-                    if (ElseBranch is not null) {
-                        throw new SyntaxError($"{Branch.Location}: else must be the last branch");
-                    }
-                    // Parse expressions
-                    Expression[] Expressions = ParseNullSeparatedExpressions(Branch.Location, Branch.Objects);
-                    // Add else expression
-                    ElseBranch = Expressions;
-                }
-            }
-
-            // Warn if case expression is empty
-            if (WhenBranches.Count == 0) {
-                Location.Axis.Warn(Location, "empty case expression");
-            }
-
-            // Create case expression
-            return new CaseExpression(Location, Subject, WhenBranches, ElseBranch);
+        static TempDoExpression ParseDoBlock(CodeLocation Location, List<RubyObject?> Objects) {
+            // Create do block expression
+            return new TempDoExpression(Location, Objects);
         }
 
         static Expression ParseExpression(CodeLocation Location, List<RubyObject?> Objects) {
+            // Temporary expressions
+            MatchTemporaryExpressions(Objects);
+
             // Alias
             MatchAlias(Objects);
 
-            // Tokens -> Expressions
-            MatchTokensToExpressions(Objects);
+            // Temp lambda expressions
+            MatchTempLambdaExpressions(Objects);
 
-            // Temporary expressions
-            MatchTemporaryExpressions(Objects);
+            // Token expressions
+            MatchTokenExpressions(Objects);
 
             // String formatting
             MatchStringFormatting(Objects);
@@ -561,23 +543,20 @@ namespace Embers {
             // Conditional modifiers
             MatchConditionalModifiers(Location, Objects);
 
-            // Curly brackets
-            MatchCurlyBrackets(Objects);
+            // Lambda expressions (high precedence)
+            MatchLambdaExpressions(Objects, HighPrecedence: true);
 
             // Method calls (brackets)
             MatchMethodCallsBrackets(Objects);
 
-            // Block expressions (high precedence)
-            MatchBlockExpressions(Objects, HighPrecedence: true);
+            // Blocks (high precedence)
+            MatchBlocks(Objects, HighPrecedence: true);
 
             // Paths
             MatchPaths(Objects);
 
             // Indexers
             MatchIndexers(Location, Objects);
-
-            // Assignment
-            MatchAssignment(Location, Objects);
 
             // Unary
             MatchUnary(Objects);
@@ -603,11 +582,17 @@ namespace Embers {
             // Key-value pairs
             MatchKeyValuePairs(Objects);
 
+            // Lambda expressions (low precedence)
+            MatchLambdaExpressions(Objects, HighPrecedence: false);
+
             // Method calls (no brackets)
             MatchMethodCallsNoBrackets(Location, Objects);
 
-            // Block expressions (low precedence)
-            MatchBlockExpressions(Objects, HighPrecedence: false);
+            // Blocks (low precedence)
+            MatchBlocks(Objects, HighPrecedence: false);
+
+            // Hashes
+            MatchHashes(Objects);
 
             // Control statements
             MatchControlStatements(Location, Objects);
@@ -618,11 +603,14 @@ namespace Embers {
             // Logic (low precedence)
             MatchLogic(Objects, HighPrecedence: false);
 
+            // Assignment
+            MatchAssignment(Location, Objects);
+
             // Extract expression from objects
             Expression? Result = null;
             foreach (RubyObject? Object in Objects) {
                 // Expression
-                if (Object is Expression Expression) {
+                if (Object is Expression Expression && Expression is not TempExpression) {
                     if (Result is not null) {
                         throw new SyntaxError($"{Location}: unexpected expression: '{Expression}'");
                     }
@@ -808,6 +796,23 @@ namespace Embers {
 
             return Arguments.ToArray();
         }
+        static Argument[] ParseBlockArguments(List<RubyObject?> Objects) {
+            // Parse block arguments
+            Argument[] Arguments = System.Array.Empty<Argument>();
+            // Start block arguments
+            if (Objects.FirstOrDefault() is Token FirstToken && FirstToken.Type is TokenType.Operator && FirstToken.Value is "|") {
+                // Find end of arguments
+                int EndArgumentsIndex = Objects.FindIndex(1, Object => Object is Token NextToken && NextToken.Type is TokenType.Operator && NextToken.Value is "|");
+                if (EndArgumentsIndex == -1) {
+                    throw new SyntaxError($"{FirstToken.Location}: unclosed '|'");
+                }
+                // Parse arguments
+                Arguments = ParseDefArguments(Objects.GetIndexRange(1, EndArgumentsIndex - 1));
+                // Remove arguments
+                Objects.RemoveIndexRange(0, EndArgumentsIndex);
+            }
+            return Arguments;
+        }
         static Expression[] ParseCallArgumentsNoBrackets(CodeLocation Location, List<RubyObject?> Objects, int StartIndex) {
             List<Expression> Arguments = new();
             List<RubyObject?> CurrentArgument = new();
@@ -845,7 +850,7 @@ namespace Embers {
                 // Argument
                 else if (Object is Expression Expression) {
                     // Block - end of arguments
-                    if (Expression is TemporaryBlockExpression) {
+                    if (Expression is TempDoExpression or TempCurlyBracketsExpression) {
                         break;
                     }
                     // Reset flag
@@ -884,6 +889,39 @@ namespace Embers {
             return Arguments.ToArray();
         }
         
+        static void MatchTemporaryExpressions(List<RubyObject?> Objects) {
+            for (int i = 0; i < Objects.Count; i++) {
+                RubyObject? LastObject = i - 1 >= 0 ? Objects[i - 1] : null;
+                RubyObject? Object = Objects[i];
+
+                // Scope expression
+                if (Object is TempScopeExpression ScopeExpression) {
+                    // Create scope expression
+                    Objects[i] = ScopeExpression.Create(Object.Location);
+                }
+                // Brackets expression
+                else if (Object is TempBracketsExpression BracketsExpression) {
+                    // Method call brackets
+                    if (LastObject is Token LastToken && LastToken.Type is TokenType.Identifier && !LastToken.WhitespaceAfter && !LastToken.IsKeyword) {
+                        // Parse comma-separated expressions
+                        Expression[] Expressions = ParseCommaSeparatedExpressions(Object.Location, BracketsExpression.Objects);
+                        BracketsExpression.Expressions = Expressions;
+                    }
+                    // Single brackets
+                    else {
+                        // Expand brackets expressions
+                        Objects[i] = ParseExpression(Object.Location, BracketsExpression.Objects);
+                    }
+                }
+                // Square brackets expression
+                else if (Object is TempSquareBracketsExpression SquareBracketsExpression) {
+                    // Parse comma-separated expressions
+                    Expression[] Expressions = ParseCommaSeparatedExpressions(Object.Location, SquareBracketsExpression.Objects);
+                    // Create array expression
+                    Objects[i] = new ArrayExpression(Object.Location, Expressions, SquareBracketsExpression.WhitespaceBefore);
+                }
+            }
+        }
         static void MatchAlias(List<RubyObject?> Objects) {
             for (int i = 0; i < Objects.Count; i++) {
                 RubyObject? Object = Objects[i];
@@ -911,7 +949,27 @@ namespace Embers {
                 }
             }
         }
-        static void MatchTokensToExpressions(List<RubyObject?> Objects) {
+        static void MatchTempLambdaExpressions(List<RubyObject?> Objects) {
+            for (int i = 0; i < Objects.Count; i++) {
+                RubyObject? Object = Objects[i];
+
+                // Lambda
+                if (Object is Token Token && Token.Type is TokenType.Lambda) {
+                    // Find block
+                    int IndexOfBlock = Objects.FindIndex(i + 1, Object => Object is TempCurlyBracketsExpression or TempDoExpression);
+                    if (IndexOfBlock == -1) {
+                        throw new SyntaxError($"{Token.Location}: expected block after '->'");
+                    }
+                    // Parse arguments
+                    Argument[] Arguments = ParseDefArguments(Objects.GetIndexRange(i + 1, IndexOfBlock - 1));
+                    // Remove lambda objects
+                    Objects.RemoveIndexRange(i, IndexOfBlock - 1);
+                    // Insert temp lambda expression
+                    Objects.Insert(i, new TempLambdaExpression(Token.Location, Arguments));
+                }
+            }
+        }
+        static void MatchTokenExpressions(List<RubyObject?> Objects) {
             for (int i = 0; i < Objects.Count; i++) {
                 RubyObject? LastObject = i - 1 >= 0 ? Objects[i - 1] : null;
                 RubyObject? Object = Objects[i];
@@ -944,8 +1002,8 @@ namespace Embers {
                         else if (Token.Value is "block_given?") {
                             Objects[i] = new BlockGivenExpression(Token.Location);
                         }
-                        // Keywords
-                        else if (Token.Value is "if" or "unless" or "while" or "until" or "rescue" or "break" or "next" or "redo" or "retry" or "return" or "yield" or "super" or "defined?" or "alias") {
+                        // Keyword
+                        else if (Token.IsKeyword) {
                             // Pass
                         }
                         // Identifier
@@ -965,39 +1023,6 @@ namespace Embers {
                     else if (Token.Type is TokenType.InstanceVariable) {
                         Objects[i] = new InstanceVariableExpression(Token.Location, Token.Value!);
                     }
-                }
-            }
-        }
-        static void MatchTemporaryExpressions(List<RubyObject?> Objects) {
-            for (int i = 0; i < Objects.Count; i++) {
-                RubyObject? LastObject = i - 1 >= 0 ? Objects[i - 1] : null;
-                RubyObject? Object = Objects[i];
-
-                // Scope expression
-                if (Object is TemporaryScopeExpression ScopeExpression) {
-                    // Create scope expression
-                    Objects[i] = ScopeExpression.Create(Object.Location);
-                }
-                // Brackets expression
-                else if (Object is TemporaryBracketsExpression BracketsExpression) {
-                    // Method call brackets
-                    if (LastObject is ReferenceExpression) {
-                        // Parse comma-separated expressions
-                        Expression[] Expressions = ParseCommaSeparatedExpressions(Object.Location, BracketsExpression.Objects);
-                        BracketsExpression.Expressions = Expressions;
-                    }
-                    // Single brackets
-                    else {
-                        // Expand brackets expressions
-                        Objects[i] = ParseExpression(Object.Location, BracketsExpression.Objects);
-                    }
-                }
-                // Square brackets expression
-                else if (Object is TemporarySquareBracketsExpression SquareBracketsExpression) {
-                    // Parse comma-separated expressions
-                    Expression[] Expressions = ParseCommaSeparatedExpressions(Object.Location, SquareBracketsExpression.Objects);
-                    // Create array expression
-                    Objects[i] = new ArrayExpression(Object.Location, Expressions, SquareBracketsExpression.WhitespaceBefore);
                 }
             }
         }
@@ -1076,40 +1101,6 @@ namespace Embers {
                 }
             }
         }
-        static void MatchCurlyBrackets(List<RubyObject?> Objects) {
-            for (int i = 0; i < Objects.Count; i++) {
-                RubyObject? LastObject = i - 1 >= 0 ? Objects[i - 1] : null;
-                RubyObject? Object = Objects[i];
-
-                // Curly brackets expression
-                if (Object is TemporaryCurlyBracketsExpression CurlyBracketsExpression) {
-                    // Block expression
-                    if (LastObject is ReferenceExpression or TemporaryBracketsExpression) {
-                        // Create block expression
-                        Objects[i] = ParseBlock(Object.Location, CurlyBracketsExpression.Objects, HighPrecedence: true);
-                    }
-                    // Hash expression
-                    else {
-                        // Get expressions in hash
-                        Expression[] Expressions = ParseCommaSeparatedExpressions(CurlyBracketsExpression.Location, CurlyBracketsExpression.Objects);
-                        // Build key-value dictionary
-                        Dictionary<Expression, Expression> HashExpressions = new(Expressions.Length);
-                        foreach (Expression Item in Expressions) {
-                            // Key-value pair
-                            if (Item is KeyValuePairExpression KeyValuePair) {
-                                HashExpressions.Add(KeyValuePair.Key, KeyValuePair.Value);
-                            }
-                            // Invalid
-                            else {
-                                throw new SyntaxError($"{Item.Location}: expected key-value pair, got '{Item}'");
-                            }
-                        }
-                        // Create hash expression
-                        Objects[i] = new HashExpression(CurlyBracketsExpression.Location, HashExpressions);
-                    }
-                }
-            }
-        }
         static void MatchMethodCallsBrackets(List<RubyObject?> Objects) {
             for (int i = 0; i < Objects.Count; i++) {
                 RubyObject? Object = Objects[i];
@@ -1118,7 +1109,7 @@ namespace Embers {
                 // Method call
                 if (Object is ReferenceExpression MethodPath) {
                     // Get arguments in brackets
-                    if (NextObject is TemporaryBracketsExpression BracketsExpression && !BracketsExpression.WhitespaceBefore) {
+                    if (NextObject is TempBracketsExpression BracketsExpression && !BracketsExpression.WhitespaceBefore) {
                         // Remove method path and brackets arguments
                         Objects.RemoveRange(i, 2);
                         // Take arguments
@@ -1142,41 +1133,58 @@ namespace Embers {
                 }
             }
         }
-        static void MatchBlockExpressions(List<RubyObject?> Objects, bool HighPrecedence) {
+        static void MatchLambdaExpressions(List<RubyObject?> Objects, bool HighPrecedence) {
             for (int i = 0; i < Objects.Count; i++) {
-                RubyObject? LastObject = i - 1 >= 0 ? Objects[i - 1] : null;
                 RubyObject? Object = Objects[i];
+                RubyObject? NextObject = i + 1 < Objects.Count ? Objects[i + 1] : null;
 
-                // Block expression
-                if (Object is TemporaryBlockExpression Block && Block.HighPrecedence == HighPrecedence) {
-                    // Method reference
-                    if (LastObject is IdentifierExpression or MethodCallExpression) {
-                        // Move back to method reference
-                        i--;
-                        // Remove reference and block
+                // Lambda
+                if (Object is TempLambdaExpression TempLambdaExpression) {
+                    // Block
+                    if (HighPrecedence ? NextObject is TempCurlyBracketsExpression : NextObject is TempDoExpression) {
+                        // Remove lambda and block
+                        Objects.RemoveRange(i, 2);
+                        // Parse expressions
+                        Expression[] Expressions = ParseNullSeparatedExpressions(NextObject.Location, ((TempExpression)NextObject).Objects);
+                        // Insert lambda expression
+                        Objects.Insert(i, new LambdaExpression(TempLambdaExpression.Location, TempLambdaExpression.Arguments, Expressions));
+                    }
+                }
+            }
+        }
+        static void MatchBlocks(List<RubyObject?> Objects, bool HighPrecedence) {
+            for (int i = 0; i < Objects.Count; i++) {
+                RubyObject? Object = Objects[i];
+                RubyObject? NextObject = i + 1 < Objects.Count ? Objects[i + 1] : null;
+                
+                // Method reference
+                if (Object is IdentifierExpression or MethodCallExpression) {
+                    // Block expression
+                    if (HighPrecedence ? NextObject is TempCurlyBracketsExpression : NextObject is TempDoExpression) {
+                        // Get block
+                        TempExpression Block = (TempExpression)NextObject;
+                        // Remove method reference and block
                         Objects.RemoveRange(i, 2);
 
-                        // Parse block
-                        Method BlockMethod = new(Block.Location, Block.Arguments, ParseNullSeparatedExpressions(Block.Location, Block.Objects));
+                        // Parse block method
+                        Method BlockMethod = new(Block.Location, ParseBlockArguments(Block.Objects), ParseNullSeparatedExpressions(Block.Location, Block.Objects));
 
                         // Identifier + block
-                        if (LastObject is IdentifierExpression LastIdentifier) {
+                        if (Object is IdentifierExpression LastIdentifier) {
                             // Insert method call with block
                             Objects.Insert(i, new MethodCallExpression(LastIdentifier.Location, null, LastIdentifier.Name, block: BlockMethod, arguments_final: true));
                         }
                         // Method call + block
                         else {
-                            MethodCallExpression LastMethodCall = (MethodCallExpression)LastObject;
+                            // Get method call
+                            MethodCallExpression LastMethodCall = (MethodCallExpression)Object;
+                            // Ensure block is not already present
                             if (LastMethodCall.Block is not null) {
                                 throw new SyntaxError($"{Block.Location}: unexpected block");
                             }
                             // Insert method call with block
                             Objects.Insert(i, new MethodCallExpression(LastMethodCall.Location, LastMethodCall.Parent, LastMethodCall.Name, LastMethodCall.Arguments, BlockMethod, arguments_final: true));
                         }
-                    }
-                    // Unexpected block
-                    else {
-                        throw new SyntaxError($"{Block.Location}: unexpected block");
                     }
                 }
             }
@@ -1272,76 +1280,6 @@ namespace Embers {
                         }
                         // Reprocess indexer (a[b][c])
                         i--;
-                    }
-                }
-            }
-        }
-        static void MatchAssignment(CodeLocation Location, List<RubyObject?> Objects) {
-            for (int i = 0; i < Objects.Count; i++) {
-                RubyObject? Object = Objects[i];
-
-                if (Object is Token Token && Token.Type is TokenType.AssignmentOperator) {
-                    // Assignment targets
-                    ReferenceExpression[] Targets = ParseCommaSeparatedExpressions(Location, Objects.GetIndexRange(0, i - 1)).TryCast<ReferenceExpression>()
-                        ?? throw new SyntaxError($"{Location}: expected reference for assignment");
-                    // Assignment values
-                    Expression[] Values = ParseCommaSeparatedExpressions(Location, Objects.GetIndexRange(i + 1));
-                    // Remove assignment objects
-                    Objects.Clear();
-
-                    // Get compound assignment operator
-                    string? CompoundOperator = null;
-                    if (Token.Value is not "=") {
-                        CompoundOperator = Token.Value![..^1];
-                    }
-                    // Create assignment value
-                    Expression CreateValue(Expression Target, Expression Value) {
-                        return CompoundOperator is not null
-                            // Convert (a += b) to (a = a.+(b))
-                            ? new MethodCallExpression(Target.Location, Target, CompoundOperator, new Expression[] { Value })
-                            // Direct value
-                            : Value;
-                    }
-
-                    // Replace identifier targets with constants or locals
-                    for (int i2 = 0; i2 < Targets.Length; i2++) {
-                        if (Targets[i2] is IdentifierExpression Identifier) {
-                            Targets[i2] = Identifier.PossibleConstant
-                                ? new ConstantExpression(Identifier.Location, Identifier.Name)
-                                : new LocalExpression(Identifier.Location, Identifier.Name);
-                        }
-                    }
-
-                    // = b
-                    if (Targets.Length == 0) {
-                        throw new SyntaxError($"{Token.Location}: expected variable before '{Token}'");
-                    }
-                    // a =
-                    else if (Values.Length == 0) {
-                        throw new SyntaxError($"{Token.Location}: expected value after '{Token}'");
-                    }
-                    // a = b
-                    else if (Targets.Length == 1 && Values.Length == 1) {
-                        Objects.Add(new AssignmentExpression(Targets[0], CreateValue(Targets[0], Values[0])));
-                    }
-                    // a, b = c, d
-                    else if (Targets.Length == Values.Length) {
-                        AssignmentExpression[] Assignments = new AssignmentExpression[Targets.Length];
-                        for (int i2 = 0; i2 < Targets.Length; i2++) {
-                            Assignments[i2] = new AssignmentExpression(Targets[i2], CreateValue(Targets[i2], Values[i2]));
-                        }
-                        Objects.Add(new MultiAssignmentExpression(Location, Assignments));
-                    }
-                    // a, b = c
-                    else if (Values.Length == 1) {
-                        if (CompoundOperator is not null) {
-                            throw new SyntaxError($"{Location}: compound operator not valid for array expanding assignment");
-                        }
-                        Objects.Add(new ExpandAssignmentExpression(Location, Targets, Values[0]));
-                    }
-                    // a = b, c
-                    else {
-                        throw new SyntaxError($"{Token.Location}: assignment count mismatch");
                     }
                 }
             }
@@ -1576,7 +1514,7 @@ namespace Embers {
                 // Method call
                 if (Object is ReferenceExpression Reference && Reference is IdentifierExpression or MethodCallExpression) {
                     // No arguments
-                    if (NextObject is (not Expression) or TemporaryBlockExpression) {
+                    if (NextObject is (not Expression) or TempDoExpression or TempCurlyBracketsExpression) {
                         continue;
                     }
                     // Arguments final or already present
@@ -1593,6 +1531,31 @@ namespace Embers {
                     }
                     // Create method call expression
                     Objects[i] = new MethodCallExpression(Object.Location, Parent, Reference.Name, Arguments);
+                }
+            }
+        }
+        static void MatchHashes(List<RubyObject?> Objects) {
+            for (int i = 0; i < Objects.Count; i++) {
+                RubyObject? Object = Objects[i];
+
+                // Curly brackets expression
+                if (Object is TempCurlyBracketsExpression CurlyBracketsExpression) {
+                    // Get expressions in hash
+                    Expression[] Expressions = ParseCommaSeparatedExpressions(CurlyBracketsExpression.Location, CurlyBracketsExpression.Objects);
+                    // Build key-value dictionary
+                    Dictionary<Expression, Expression> HashExpressions = new(Expressions.Length);
+                    foreach (Expression Item in Expressions) {
+                        // Key-value pair
+                        if (Item is KeyValuePairExpression KeyValuePair) {
+                            HashExpressions.Add(KeyValuePair.Key, KeyValuePair.Value);
+                        }
+                        // Invalid
+                        else {
+                            throw new SyntaxError($"{Item.Location}: expected key-value pair, got '{Item}'");
+                        }
+                    }
+                    // Create hash expression
+                    Objects[i] = new HashExpression(CurlyBracketsExpression.Location, HashExpressions);
                 }
             }
         }
@@ -1662,6 +1625,76 @@ namespace Embers {
 
                         // Insert control expression
                         Objects.Insert(i, Creator!(Arguments));
+                    }
+                }
+            }
+        }
+        static void MatchAssignment(CodeLocation Location, List<RubyObject?> Objects) {
+            for (int i = 0; i < Objects.Count; i++) {
+                RubyObject? Object = Objects[i];
+
+                if (Object is Token Token && Token.Type is TokenType.AssignmentOperator) {
+                    // Assignment targets
+                    ReferenceExpression[] Targets = ParseCommaSeparatedExpressions(Location, Objects.GetIndexRange(0, i - 1)).TryCast<ReferenceExpression>()
+                        ?? throw new SyntaxError($"{Location}: expected reference for assignment");
+                    // Assignment values
+                    Expression[] Values = ParseCommaSeparatedExpressions(Location, Objects.GetIndexRange(i + 1));
+                    // Remove assignment objects
+                    Objects.Clear();
+
+                    // Get compound assignment operator
+                    string? CompoundOperator = null;
+                    if (Token.Value is not "=") {
+                        CompoundOperator = Token.Value![..^1];
+                    }
+                    // Create assignment value
+                    Expression CreateValue(Expression Target, Expression Value) {
+                        return CompoundOperator is not null
+                            // Convert (a += b) to (a = a.+(b))
+                            ? new MethodCallExpression(Target.Location, Target, CompoundOperator, new Expression[] { Value })
+                            // Direct value
+                            : Value;
+                    }
+
+                    // Replace identifier targets with constants or locals
+                    for (int i2 = 0; i2 < Targets.Length; i2++) {
+                        if (Targets[i2] is IdentifierExpression Identifier) {
+                            Targets[i2] = Identifier.PossibleConstant
+                                ? new ConstantExpression(Identifier.Location, Identifier.Name)
+                                : new LocalExpression(Identifier.Location, Identifier.Name);
+                        }
+                    }
+
+                    // = b
+                    if (Targets.Length == 0) {
+                        throw new SyntaxError($"{Token.Location}: expected variable before '{Token}'");
+                    }
+                    // a =
+                    else if (Values.Length == 0) {
+                        throw new SyntaxError($"{Token.Location}: expected value after '{Token}'");
+                    }
+                    // a = b
+                    else if (Targets.Length == 1 && Values.Length == 1) {
+                        Objects.Add(new AssignmentExpression(Targets[0], CreateValue(Targets[0], Values[0])));
+                    }
+                    // a, b = c, d
+                    else if (Targets.Length == Values.Length) {
+                        AssignmentExpression[] Assignments = new AssignmentExpression[Targets.Length];
+                        for (int i2 = 0; i2 < Targets.Length; i2++) {
+                            Assignments[i2] = new AssignmentExpression(Targets[i2], CreateValue(Targets[i2], Values[i2]));
+                        }
+                        Objects.Add(new MultiAssignmentExpression(Location, Assignments));
+                    }
+                    // a, b = c
+                    else if (Values.Length == 1) {
+                        if (CompoundOperator is not null) {
+                            throw new SyntaxError($"{Location}: compound operator not valid for array expanding assignment");
+                        }
+                        Objects.Add(new ExpandAssignmentExpression(Location, Targets, Values[0]));
+                    }
+                    // a = b, c
+                    else {
+                        throw new SyntaxError($"{Token.Location}: assignment count mismatch");
                     }
                 }
             }

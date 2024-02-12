@@ -195,7 +195,7 @@ namespace Embers {
                     }
                 }
                 // Arithmetic
-                else if (Chara is '+' or '-' or '/' or '%') {
+                else if (Chara is '+' or '/' or '%') {
                     // Compound assignment
                     if (NextChara is '=') {
                         AddToken(TokenType.AssignmentOperator, $"{Chara}=");
@@ -206,14 +206,25 @@ namespace Embers {
                         AddToken(TokenType.Operator, $"{Chara}");
                     }
                 }
-                else if (Chara is '*') {
-                    // Compound assignment
-                    if (NextChara is '=') {
-                        AddToken(TokenType.AssignmentOperator, "*=");
+                else if (Chara is '-') {
+                    // Lambda
+                    if (NextChara is '>') {
+                        AddToken(TokenType.Lambda);
                         i++;
                     }
+                    // Compound assignment
+                    else if (NextChara is '=') {
+                        AddToken(TokenType.AssignmentOperator, "-=");
+                        i++;
+                    }
+                    // Subtract
+                    else {
+                        AddToken(TokenType.Operator, "-");
+                    }
+                }
+                else if (Chara is '*') {
                     // Exponentiate
-                    else if (NextChara is '*') {
+                    if (NextChara is '*') {
                         // Compound assignment
                         if (NextNextChara is '=') {
                             AddToken(TokenType.AssignmentOperator, "**=");
@@ -224,6 +235,11 @@ namespace Embers {
                             AddToken(TokenType.Operator, "**");
                             i++;
                         }
+                    }
+                    // Compound assignment
+                    else if (NextChara is '=') {
+                        AddToken(TokenType.AssignmentOperator, "*=");
+                        i++;
                     }
                     // Multiply
                     else {

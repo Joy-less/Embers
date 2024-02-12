@@ -22,6 +22,7 @@
         TernaryTruthy,
         TernaryFalsey,
         HashRocket,
+        Lambda,
         SafeDot,
         InclusiveRange,
         ExclusiveRange,
@@ -49,5 +50,9 @@
             => Type is TokenType.NilTrueFalse or TokenType.String or TokenType.Symbol or TokenType.Integer or TokenType.Float;
         public string? AsIdentifier
             => Type is TokenType.Identifier ? Value : null;
+        public bool IsKeyword
+            => Value is "alias" or "and" or "begin" or "break" or "case" or "class" or "def" or "defined?" or "do" or "else" or "elsif" or "end" or "ensure"
+                or "false" or "for" or "if" or "in" or "module" or "next" or "nil" or "not" or "or" or "redo" or "rescue" or "retry" or "return" or "self"
+                or "super" or "then" or "true" or "undef" or "unless" or "until" or "when" or "while" or "yield";
     }
 }

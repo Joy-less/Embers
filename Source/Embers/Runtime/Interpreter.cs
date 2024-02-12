@@ -93,6 +93,12 @@ namespace Embers {
             // Produce string
             return new Instance(Context.Axis.String, FormattedString.ToString());
         }
+        public static Instance InterpretLambda(Context Context, LambdaExpression Expression) {
+            // Create method
+            Method Method = new(Context.Scope, Expression.Location, "lambda", Expression.Arguments, Expression.Expressions, AccessModifier.Public);
+            // Create proc
+            return new Instance(Context.Axis.Proc, new Proc(Context.Scope, Context.Instance, Method));
+        }
         public static Instance InterpretSelf(Context Context, SelfExpression Expression) {
             return Context.Instance;
         }

@@ -21,6 +21,11 @@ p pizza.new.class.bite 10
 
 p pizza.method :equals
 p 5.send :puts, 'hi'
+
+printer = -> a, b {
+    puts ""printing #{a}, #{b}""
+}
+printer.call 1, 2
 ";
             Scope Scope = new();
             Scope.SetVariable("pizza", typeof(Pizza));

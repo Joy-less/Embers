@@ -139,6 +139,17 @@ namespace Embers {
             => Value;
         public override Instance Interpret(Context Context) => Interpreter.InterpretFormattedString(Context, this);
     }
+    public class LambdaExpression : Expression {
+        public readonly Argument[] Arguments;
+        public readonly Expression[] Expressions;
+        public LambdaExpression(CodeLocation location, Argument[] arguments, Expression[] expressions) : base(location) {
+            Arguments = arguments;
+            Expressions = expressions;
+        }
+        public override string ToString()
+            => $"->({Arguments.ObjectsToString()}) {{{Expressions}}}";
+        public override Instance Interpret(Context Context) => Interpreter.InterpretLambda(Context, this);
+    }
     public class LineExpression : Expression {
         public LineExpression(CodeLocation location) : base(location) { }
         public override string ToString()
@@ -487,16 +498,16 @@ namespace Embers {
 
     // Temporary Expressions
     /// <summary>Base class for expressions only used during the parsing stage.</summary>
-    internal abstract class TemporaryExpression : Expression {
+    internal abstract class TempExpression : Expression {
         public readonly List<RubyObject?> Objects;
-        public TemporaryExpression(CodeLocation location, List<RubyObject?> objects) : base(location) {
+        public TempExpression(CodeLocation location, List<RubyObject?> objects) : base(location) {
             Objects = objects;
         }
         public override Instance Interpret(Context Context) => throw new InternalError($"{Location}: {GetType().Name} not removed by parser");
     }
-    internal class TemporaryScopeExpression : TemporaryExpression {
+    internal class TempScopeExpression : TempExpression {
         private readonly Func<CodeLocation, List<RubyObject?>, Expression> Creator;
-        public TemporaryScopeExpression(CodeLocation location, List<RubyObject?> objects, Func<CodeLocation, List<RubyObject?>, Expression> creator) : base(location, objects) {
+        public TempScopeExpression(CodeLocation location, List<RubyObject?> objects, Func<CodeLocation, List<RubyObject?>, Expression> creator) : base(location, objects) {
             Creator = creator;
         }
         public Expression Create(CodeLocation Location) {
@@ -505,35 +516,43 @@ namespace Embers {
         public override string ToString()
             => $"[scope] {Objects.ObjectsToString()} [end]";
     }
-    internal class TemporaryBlockExpression : TemporaryExpression {
-        public readonly bool HighPrecedence;
+    internal class TempLambdaExpression : TempExpression {
         public readonly Argument[] Arguments;
-        public TemporaryBlockExpression(CodeLocation location, List<RubyObject?> objects, Argument[] arguments, bool high_precedence) : base(location, objects) {
-            HighPrecedence = high_precedence;
+        public TempLambdaExpression(CodeLocation location, Argument[] arguments) : base(location, new List<RubyObject?>()) {
             Arguments = arguments;
         }
         public override string ToString()
-            => "block";
+            => $"->({Arguments.ObjectsToString()}) ...";
     }
-    internal abstract class TemporaryBaseBracketsExpression : TemporaryExpression {
-        public Expression[]? Expressions;
+    internal class TempDoExpression : TempExpression {
+        public TempDoExpression(CodeLocation location, List<RubyObject?> objects) : base(location, objects) { }
+        public override string ToString()
+            => $"do {Objects.ObjectsToString()} end";
+    }
+    internal class TempBracketsExpression : TempExpression {
         public readonly bool WhitespaceBefore;
-        public TemporaryBaseBracketsExpression(CodeLocation location, List<RubyObject?> objects, bool whitespace_before) : base(location, objects) {
+        public Expression[]? Expressions;
+        public TempBracketsExpression(CodeLocation location, List<RubyObject?> objects, bool whitespace_before) : base(location, objects) {
             WhitespaceBefore = whitespace_before;
         }
-    }
-    internal class TemporaryBracketsExpression : TemporaryBaseBracketsExpression {
-        public TemporaryBracketsExpression(CodeLocation location, List<RubyObject?> objects, bool whitespace_before) : base(location, objects, whitespace_before) { }
         public override string ToString()
             => $"({(Expressions is not null ? Expressions.ObjectsToString() : Objects.ObjectsToString())})";
     }
-    internal class TemporarySquareBracketsExpression : TemporaryBaseBracketsExpression {
-        public TemporarySquareBracketsExpression(CodeLocation location, List<RubyObject?> objects, bool whitespace_before) : base(location, objects, whitespace_before) { }
+    internal class TempSquareBracketsExpression : TempExpression {
+        public readonly bool WhitespaceBefore;
+        public Expression[]? Expressions;
+        public TempSquareBracketsExpression(CodeLocation location, List<RubyObject?> objects, bool whitespace_before) : base(location, objects) {
+            WhitespaceBefore = whitespace_before;
+        }
         public override string ToString()
             => $"[{(Expressions is not null ? Expressions.ObjectsToString() : Objects.ObjectsToString())}]";
     }
-    internal class TemporaryCurlyBracketsExpression : TemporaryBaseBracketsExpression {
-        public TemporaryCurlyBracketsExpression(CodeLocation location, List<RubyObject?> objects, bool whitespace_before) : base(location, objects, whitespace_before) { }
+    internal class TempCurlyBracketsExpression : TempExpression {
+        public readonly bool WhitespaceBefore;
+        public Expression[]? Expressions;
+        public TempCurlyBracketsExpression(CodeLocation location, List<RubyObject?> objects, bool whitespace_before) : base(location, objects) {
+            WhitespaceBefore = whitespace_before;
+        }
         public override string ToString()
             => $"{{{(Expressions is not null ? Expressions.ObjectsToString() : Objects.ObjectsToString())}}}";
     }

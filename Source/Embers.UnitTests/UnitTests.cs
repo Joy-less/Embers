@@ -439,6 +439,20 @@ namespace Embers.UnitTests {
                 variable = 10
                 my_method
             ");
+
+            // Lambda
+            AssertEqual(@"
+                add = -> a, b {
+                    a + b
+                }
+                add.call 1, 2
+            ", (Integer)3);
+            AssertEqual(@"
+                sub = -> a, b do
+                    a - b
+                end
+                sub.call 1, 2
+            ", (Integer)(-1));
         }
 
         // Helper methods
