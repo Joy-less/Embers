@@ -433,47 +433,48 @@ namespace Embers {
         }
 
         public static class _Global {
+            public static ILogger Logger = new ConsoleLogger();
             public static void puts(params Instance[] Messages) {
                 if (Messages.Length != 0) {
                     foreach (Instance Message in Messages) {
-                        Console.WriteLine(Message.ToS());
+                        Logger.WriteLine(Message.ToS());
                     }
                 }
                 else {
-                    Console.WriteLine();
+                    Logger.WriteLine();
                 }
             }
             public static void print(params Instance[] Messages) {
                 foreach (Instance Message in Messages) {
-                    Console.Write(Message.ToS());
+                    Logger.Write(Message.ToS());
                 }
             }
             public static void p(params Instance[] Messages) {
                 if (Messages.Length != 0) {
                     foreach (Instance Message in Messages) {
-                        Console.WriteLine(Message.Inspect());
+                        Logger.WriteLine(Message.Inspect());
                     }
                 }
                 else {
-                    Console.WriteLine();
+                    Logger.WriteLine();
                 }
             }
             public static void warn(params Instance[] Messages) {
                 if (Messages.Length != 0) {
                     foreach (Instance Message in Messages) {
-                        Console.WriteLine(Message.ToS());
+                        Logger.WriteLine(Message.ToS());
                     }
                 }
                 else {
-                    Console.WriteLine();
+                    Logger.WriteLine();
                 }
             }
             public static string gets() {
-                string? Input = Console.ReadLine();
+                string? Input = Logger.ReadLine();
                 return Input is not null ? Input + "\n" : "";
             }
             public static char getc(bool Print = true) {
-                return Console.ReadKey(!Print).KeyChar;
+                return Logger.ReadKey(!Print);
             }
             public static async Task sleep(double? Duration) {
                 await Task.Delay(Duration is not null
