@@ -86,10 +86,9 @@ end
 }
 ```
 
-Note that methods such as `puts` reference `Console`, which is hidden in Godot and Unity by default. They can be changed or overridden:
+Note that methods such as `puts` use the `Console`, which is hidden in Godot and Unity by default. This can be changed:
 ```cs
-// In StandardLibrary.cs
-Console.WriteLine(Message.ToS()); // -> Godot.GD.Print(Message.ToS());
+Scope.Axis.Globals.Logger = new CustomLogger();
 ```
 
 ## About Noko

@@ -6,15 +6,13 @@ using System.Collections.Concurrent;
 namespace Embers {
     public sealed class Globals {
         public readonly Axis Axis;
-
+        public readonly ConcurrentDictionary<string, Instance> GlobalVariables = new();
         public Random Random;
         public Integer RandomSeed;
-
-        public readonly ConcurrentDictionary<string, Instance> GlobalVariables = new();
+        public Logger Logger = new();
 
         private readonly ConcurrentDictionary<string, Instance> ImmortalSymbols = new();
         private readonly ConcurrentDictionary<string, Instance> MortalSymbols = new();
-
         private long LastObjectId;
 
         internal Globals(Axis axis) {
