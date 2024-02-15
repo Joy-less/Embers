@@ -1,9 +1,11 @@
 ﻿using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Order;
 using IronRuby;
 using Microsoft.Scripting.Hosting;
 
 namespace Embers.IronRubyBenchmark
 {
+    [MemoryDiagnoser, Orderer(SummaryOrderPolicy.FastestToSlowest), RankColumn]
     public class RubyBenchmark
     {
         public ScriptEngine IronRubyEngine;
