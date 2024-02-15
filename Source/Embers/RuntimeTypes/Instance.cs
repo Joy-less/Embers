@@ -33,8 +33,8 @@ namespace Embers {
         public Class CastClass => Cast<Class>();
         public bool CastBoolean => Cast<bool>();
         public string CastString => Cast<string>();
-        public Integer CastInteger => Value is Float Float && Float.IsInteger() ? (Integer)Float : Cast<Integer>();
-        public Float CastFloat => Value as Integer ?? Cast<Float>();
+        public Integer CastInteger => Value is Float Float ? (Integer)Float : Cast<Integer>();
+        public Float CastFloat => Value is Integer Integer ? (Float)Integer : Cast<Float>();
         public Proc CastProc => Cast<Proc>();
         public Array CastArray => Cast<Array>();
         public Hash CastHash => Cast<Hash>();
