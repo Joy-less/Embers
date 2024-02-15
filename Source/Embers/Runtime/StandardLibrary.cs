@@ -434,38 +434,39 @@ namespace Embers {
 
         public static class _Global {
             public static void puts(Context Context, params Instance[] Messages) {
-                if (Messages.Length != 0) {
-                    foreach (Instance Message in Messages) {
-                        Context.Axis.Globals.Logger.WriteLine(Message.ToS());
-                    }
+                var logger = Context.Axis.Globals.Logger;
+                if (Messages.Length == 0) {
+                    logger.WriteLine();
+                    return;
                 }
-                else {
-                    Context.Axis.Globals.Logger.WriteLine();
+                foreach (Instance Message in Messages) {
+                    logger.WriteLine(Message.ToS());
                 }
             }
             public static void print(Context Context, params Instance[] Messages) {
+                var logger = Context.Axis.Globals.Logger;
                 foreach (Instance Message in Messages) {
-                    Context.Axis.Globals.Logger.Write(Message.ToS());
+                    logger.Write(Message.ToS());
                 }
             }
             public static void p(Context Context, params Instance[] Messages) {
-                if (Messages.Length != 0) {
-                    foreach (Instance Message in Messages) {
-                        Context.Axis.Globals.Logger.WriteLine(Message.Inspect());
-                    }
+                var logger = Context.Axis.Globals.Logger;
+                if (Messages.Length == 0) {
+                    logger.WriteLine();
+                    return;
                 }
-                else {
-                    Context.Axis.Globals.Logger.WriteLine();
+                foreach (Instance Message in Messages) {
+                    logger.WriteLine(Message.Inspect());
                 }
             }
             public static void warn(Context Context, params Instance[] Messages) {
-                if (Messages.Length != 0) {
-                    foreach (Instance Message in Messages) {
-                        Context.Axis.Globals.Logger.WriteLine(Message.ToS());
-                    }
+                var logger = Context.Axis.Globals.Logger;
+                if (Messages.Length == 0) {
+                    logger.WriteLine();
+                    return;
                 }
-                else {
-                    Context.Axis.Globals.Logger.WriteLine();
+                foreach (Instance Message in Messages) {
+                    logger.WriteLine(Message.ToS());
                 }
             }
             public static string gets(Context Context) {
