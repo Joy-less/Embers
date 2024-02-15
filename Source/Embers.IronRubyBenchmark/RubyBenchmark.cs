@@ -4,7 +4,7 @@ using IronRuby;
 using Microsoft.Scripting.Hosting;
 
 namespace Embers.IronRubyBenchmark {
-    [MemoryDiagnoser, Orderer(SummaryOrderPolicy.FastestToSlowest), RankColumn]
+    [MemoryDiagnoser]
     public class RubyBenchmark {
         public ScriptEngine IronRubyEngine;
         public ScriptScope IronRubyScope;

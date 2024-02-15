@@ -16,6 +16,20 @@ Its powerful, lightweight design is intended for use in game engines, game mods,
 - Simplified standard library
 - No external dependencies
 
+## Installation via Nuget
+
+For .Net CLI
+
+```
+dotnet add package Embers
+```
+
+For Package Manager Console:
+
+```
+NuGet\Install-Package Embers
+```
+
 ## Usage
 
 ### Basic Example
@@ -23,7 +37,7 @@ Its powerful, lightweight design is intended for use in game engines, game mods,
 ```cs
 using Embers;
 
-Scope Scope = new();
+Scope Scope = new Scope();
 Scope.Evaluate("puts 'Ruby!'"); // Ruby!
 ```
 
@@ -55,7 +69,7 @@ Expressions.Interpret(new Context(Scope.Location, Scope)); // pre-parsed!
 You can see which methods can still be accessed in [`StandardLibrary.cs`](Source/Embers/Runtime/StandardLibrary.cs).
 
 ```cs
-Scope Scope = new(new AxisOptions() { Sandbox = true });
+Scope Scope = new Scope(new AxisOptions() { Sandbox = true });
 Scope.Evaluate("File.write('test.txt', 'text')"); // undefined method 'write' for File:Module
 ```
 
@@ -88,7 +102,7 @@ end
 
 Note that methods such as `puts` use the `Console`, which is hidden in Godot and Unity by default. This can be changed:
 ```cs
-Scope.Axis.Globals.Logger = new CustomLogger();
+Scope Scope = new Scope(new AxisOptions() { Logger = new CustomLogger() });
 ```
 
 ## About Noko

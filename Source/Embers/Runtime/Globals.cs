@@ -9,7 +9,7 @@ namespace Embers {
         public readonly ConcurrentDictionary<string, Instance> GlobalVariables = new();
         public Random Random;
         public Integer RandomSeed;
-        public Logger Logger = new();
+        public Logger Logger;
 
         private readonly ConcurrentDictionary<string, Instance> ImmortalSymbols = new();
         private readonly ConcurrentDictionary<string, Instance> MortalSymbols = new();
@@ -17,7 +17,7 @@ namespace Embers {
 
         internal Globals(Axis axis) {
             Axis = axis;
-
+            Logger = Axis.Options.Logger;
             RandomSeed = new Random().NextInt64();
             Random = new Random(RandomSeed.GetHashCode());
         }

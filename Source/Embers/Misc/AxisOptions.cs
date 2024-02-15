@@ -33,5 +33,10 @@ namespace Embers {
         /// Default: <see langword="false"/>.<br/>
         /// </summary>
         public bool Sandbox = false;
+        /// <summary>
+        /// You can set a custom logger to handle warnings and errors.<br/>
+        /// Default: Console Logger.<br/>
+        /// </summary>
+        public Logger Logger = new ();
     }
 }
