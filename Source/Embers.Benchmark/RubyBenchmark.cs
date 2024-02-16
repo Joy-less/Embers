@@ -4,7 +4,7 @@ using BenchmarkDotNet.Order;
 #nullable disable
 
 namespace Embers.Benchmark {
-    [MemoryDiagnoser, Orderer(SummaryOrderPolicy.FastestToSlowest), RankColumn]
+    [MemoryDiagnoser]
     public class RubyBenchmark {
         public Scope EmbersScope;
 
@@ -20,7 +20,7 @@ namespace Embers.Benchmark {
             }
         }
 
-        [BenchmarkCategory("Embers"), Benchmark(Description = "1,000,000 iterations")]
+        [BenchmarkCategory("Embers"), Benchmark(Description = "1,000,000 iterations pre-parsed")]
         public void Embers_1_000_000_iterations() {
             Expression[] Expressions = EmbersScope.Parse("a = 0; a += 1");
             for (int i = 0; i < 1_000_000; i++) {

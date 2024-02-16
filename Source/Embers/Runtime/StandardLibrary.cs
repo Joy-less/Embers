@@ -434,46 +434,46 @@ namespace Embers {
 
         public static class _Global {
             public static void puts(Context Context, params Instance[] Messages) {
-                if (Messages.Length != 0) {
-                    foreach (Instance Message in Messages) {
-                        Context.Axis.Globals.Logger.WriteLine(Message.ToS());
-                    }
+                if (Messages.Length == 0) {
+                    Context.Axis.Options.Logger.WriteLine();
                 }
                 else {
-                    Context.Axis.Globals.Logger.WriteLine();
+                    foreach (Instance Message in Messages) {
+                        Context.Axis.Options.Logger.WriteLine(Message.ToS());
+                    }
                 }
             }
             public static void print(Context Context, params Instance[] Messages) {
                 foreach (Instance Message in Messages) {
-                    Context.Axis.Globals.Logger.Write(Message.ToS());
+                    Context.Axis.Options.Logger.Write(Message.ToS());
                 }
             }
             public static void p(Context Context, params Instance[] Messages) {
-                if (Messages.Length != 0) {
-                    foreach (Instance Message in Messages) {
-                        Context.Axis.Globals.Logger.WriteLine(Message.Inspect());
-                    }
+                if (Messages.Length == 0) {
+                    Context.Axis.Options.Logger.WriteLine();
                 }
                 else {
-                    Context.Axis.Globals.Logger.WriteLine();
+                    foreach (Instance Message in Messages) {
+                        Context.Axis.Options.Logger.WriteLine(Message.Inspect());
+                    }
                 }
             }
             public static void warn(Context Context, params Instance[] Messages) {
-                if (Messages.Length != 0) {
-                    foreach (Instance Message in Messages) {
-                        Context.Axis.Globals.Logger.WriteLine(Message.ToS());
-                    }
+                if (Messages.Length == 0) {
+                    Context.Axis.Options.Logger.WriteLine();
                 }
                 else {
-                    Context.Axis.Globals.Logger.WriteLine();
+                    foreach (Instance Message in Messages) {
+                        Context.Axis.Options.Logger.WriteLine(Message.ToS());
+                    }
                 }
             }
             public static string gets(Context Context) {
-                string? Input = Context.Axis.Globals.Logger.ReadLine();
+                string? Input = Context.Axis.Options.Logger.ReadLine();
                 return Input is not null ? Input + "\n" : "";
             }
-            public static char getc(Context Context, bool Print = true) {
-                return Context.Axis.Globals.Logger.ReadKey(Print);
+            public static char getc(Context Context, bool Display = true) {
+                return Context.Axis.Options.Logger.ReadKey(Display);
             }
             public static async Task sleep(double? Duration) {
                 await Task.Delay(Duration is not null
