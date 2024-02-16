@@ -70,7 +70,7 @@ public partial class CounterScript : Node {
     Scope Scope;
 
     public override void _Ready() {
-        Scope = new();
+        Scope = new Scope();
         Scope.Axis.Object.SetInstanceVariable("@counter_label", CounterLabel);
         Scope.Evaluate(@"
 @counter = 0
@@ -93,10 +93,10 @@ Scope Scope = new(new AxisOptions() { Logger = new CustomLogger() });
 
 ## About Noko
 
-Noko is Embers' mascot who you can see at the top.
+Noko is Embers' mascot you can see at the top.
 
-She comes from a society in the Earth's core, 3000km below the surface. She has fiery powers but finds the surface a bit cold.
+She comes from a society in the Earth's core, 3000km below the surface. She has fiery powers, but finds the surface a bit cold.
 
-Noko is short for "Nokoribi" meaning "Embers" in Japanese.
+Noko is short for "Nokoribi", meaning "Embers" in Japanese.
 
 ![Made with Embers](https://raw.githubusercontent.com/Joy-less/Embers/main/Assets/Powered%20by%20Embers%20Mini.png)
