@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Collections.Concurrent;
 
 namespace Embers {
@@ -34,9 +35,9 @@ namespace Embers {
         /// </summary>
         public bool Sandbox = false;
         /// <summary>
-        /// You can set a custom logger to handle warnings and errors.<br/>
-        /// Default: Console Logger.<br/>
+        /// The logger used to display messages.<br/>
+        /// Default: <see cref="Console"/> logger.<br/>
         /// </summary>
-        public Logger Logger = new ();
+        public Logger Logger = new();
     }
 }

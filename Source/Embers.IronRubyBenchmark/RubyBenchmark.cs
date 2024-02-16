@@ -1,5 +1,4 @@
 ﻿using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Order;
 using IronRuby;
 using Microsoft.Scripting.Hosting;
 
