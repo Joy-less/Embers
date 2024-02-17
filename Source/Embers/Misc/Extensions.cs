@@ -244,23 +244,5 @@ namespace Embers {
                 .Replace("\\\"", "\"") // double quote
                 .Replace("\\\'", "'"); // single quote
         }
-
-        //
-        // Compatibility
-        //
-#if !NET6_0_OR_GREATER
-        public static long NextInt64(this Random Random) {
-            byte[] Buffer = new byte[8];
-            Random.NextBytes(Buffer);
-            return BitConverter.ToInt64(Buffer);
-        }
-        public static long NextInt64(this Random Random, long IncludingMin, long ExcludingMax) {
-            long Range = ExcludingMax - IncludingMin;
-            if (Range <= 0) {
-                throw new ArgumentException("range must be positive");
-            }
-            return Math.Abs(NextInt64(Random) % Range) + IncludingMin;
-        }
-#endif
     }
 }
