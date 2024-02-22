@@ -540,20 +540,18 @@ namespace Embers {
     }
     internal class TempSquareBracketsExpression : TempExpression {
         public readonly bool WhitespaceBefore;
-        public Expression[]? Expressions;
         public TempSquareBracketsExpression(CodeLocation location, List<RubyObject?> objects, bool whitespace_before) : base(location, objects) {
             WhitespaceBefore = whitespace_before;
         }
         public override string ToString()
-            => $"[{(Expressions is not null ? Expressions.ObjectsToString() : Objects.ObjectsToString())}]";
+            => $"[{Objects.ObjectsToString()}]";
     }
     internal class TempCurlyBracketsExpression : TempExpression {
         public readonly bool WhitespaceBefore;
-        public Expression[]? Expressions;
         public TempCurlyBracketsExpression(CodeLocation location, List<RubyObject?> objects, bool whitespace_before) : base(location, objects) {
             WhitespaceBefore = whitespace_before;
         }
         public override string ToString()
-            => $"{{{(Expressions is not null ? Expressions.ObjectsToString() : Objects.ObjectsToString())}}}";
+            => $"{{{Objects.ObjectsToString()}}}";
     }
 }

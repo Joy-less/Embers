@@ -340,7 +340,7 @@ namespace Embers {
                 Instance New([Splat] Instance[] Arguments) {
                     if (Constructors.Length != 0) {
                         // Create object
-                        object NewObject = FormatterServices.GetUninitializedObject(Type);
+                        object NewObject = RuntimeHelpers.GetUninitializedObject(Type);
                         // Invoke best constructor overload
                         MethodBinder.InvokeBestOverload(Constructors, NewObject, Arguments);
                         // Return instance of class

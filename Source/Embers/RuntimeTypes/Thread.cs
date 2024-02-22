@@ -27,15 +27,14 @@ namespace Embers {
             // Cancel task
             try {
                 CancelTokenSource.Cancel();
-            }
-            catch (ObjectDisposedException) { }
+            } catch (ObjectDisposedException) { }
         }
         public void Wait() {
-            if (!Task.IsCompleted) {
-                Task.Wait();
-            }
+            Task.Wait();
         }
-
+        public async Task WaitAsync() {
+            await Task;
+        }
         public override string ToString()
             => "thread";
 
