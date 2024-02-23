@@ -88,7 +88,7 @@ namespace Embers {
             }
             return TaskResultFunc!(Task);
         }
-        static Func<Task, object?> CompileTaskResultCall(Type TaskType) {
+        private static Func<Task, object?> CompileTaskResultCall(Type TaskType) {
             // Task<T>
             if (TaskType.IsGenericType) {
                 // Take Task
@@ -97,7 +97,7 @@ namespace Embers {
                 LUnaryExpression GenericTaskExp = LExpression.Convert(TaskExp, TaskType);
 
                 // Get Result property
-                LMemberExpression ResultExp = LExpression.PropertyOrField(GenericTaskExp, nameof(Task<object>.Result));
+                LMemberExpression ResultExp = LExpression.Property(GenericTaskExp, nameof(Task<object>.Result));
 
                 // Compile Result call
                 return LExpression.Lambda<Func<Task, object?>>(ResultExp, TaskExp).Compile();

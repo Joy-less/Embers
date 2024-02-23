@@ -94,41 +94,39 @@ namespace Embers {
         public List<string> GetClassVariableNames() {
             return GetMemberNames(Class => Class.ClassVariables);
         }
-
-        protected T? GetMember<T>(Func<Module, IDictionary<string, T>> Members, string MemberName) where T : class {
-            // Search for member in hierarchy
-            Module Current = this;
-            while (true) {
-                // Search current
-                if (Members(Current).TryGetValue(MemberName, out T? Member)) {
-                    return Member;
-                }
-                // Search superclass
-                else if (Current.SuperClass is not null) {
+        public IEnumerable<Module> Hierarchy {
+            get {
+                Module Current = this;
+                while (true) {
+                    yield return Current;
+                    if (Current.SuperClass is null) {
+                        break;
+                    }
                     Current = Current.SuperClass;
-                }
-                // Member not found
-                else {
-                    return null;
                 }
             }
         }
-        protected List<string> GetMemberNames<T>(Func<Module, IDictionary<string, T>> Members) {
-            // Search for member names in hierarchy
-            List<string> MemberNames = new();
-            Module Current = this;
-            while (true) {
-                // Search current
-                MemberNames.AddRange(Members(Current).Keys);
-                // Search superclass
-                if (Current.SuperClass is not null) {
-                    Current = Current.SuperClass;
-                }
-                // Return all member names
-                else {
-                    return MemberNames;
+
+        protected T? GetMember<T>(Func<Module, IDictionary<string, T>> Members, string MemberName) where T : class {
+            // Search for member in hierarchy
+            foreach (Module Module in Hierarchy) {
+                // Search for member in module
+                if (Members(Module).TryGetValue(MemberName, out T? Member)) {
+                    return Member;
                 }
             }
+            // Member not found
+            return null;
+        }
+        protected List<string> GetMemberNames<T>(Func<Module, IDictionary<string, T>> Members) {
+            List<string> MemberNames = new();
+            // Search for member in hierarchy
+            foreach (Module Module in Hierarchy) {
+                // Get member names in module
+                MemberNames.AddRange(Members(Module).Keys);
+            }
+            // Return all member names
+            return MemberNames;
         }
         public override string ToString()
             => Name;

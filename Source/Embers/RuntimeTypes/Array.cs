@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 
 namespace Embers {
-    public sealed class Array : RubyObject, IEnumerable, IEnumerable<Instance> {
+    public sealed class Array : RubyObject, IEnumerable<Instance> {
         public readonly IList<Instance> Inner;
         public readonly Instance DefaultValue;
         

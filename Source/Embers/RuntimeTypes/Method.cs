@@ -26,7 +26,7 @@ namespace Embers {
             MethodType = MethodType.Adapted;
 
             // Create call delegate
-            CallDelegate = new FastDelegate(dot_net_delegate, Axis.Options.EnableCompilation);
+            CallDelegate = new FastDelegate(dot_net_delegate, Axis.Options.EnableOptimisations);
 
             // Disallow generic arguments
             if (dot_net_delegate.Method.ContainsGenericParameters) {

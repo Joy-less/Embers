@@ -5,9 +5,11 @@ using System.Linq;
 namespace Embers {
     internal static class Parser {
         public static Expression[] ParseNullSeparatedExpressions(CodeLocation Location, List<RubyObject?> Objects) {
+            // Parse expressions separated by null
             return ParseExpressions(Location, Objects, Objects => Objects.Split(Object => Object is null, RemoveEmptyEntries: true));
         }
         public static Expression[] ParseCommaSeparatedExpressions(CodeLocation Location, List<RubyObject?> Objects) {
+            // Parse expressions separated by commas
             return ParseExpressions(Location, Objects, Objects => Objects.Split(Object => Object is Token Token && Token.Type is TokenType.Comma));
         }
         static Expression[] ParseExpressions(CodeLocation Location, List<RubyObject?> Objects, Func<List<RubyObject?>, List<List<RubyObject?>>> Split) {
@@ -956,7 +958,7 @@ namespace Embers {
                 // Lambda
                 if (Object is Token Token && Token.Type is TokenType.Lambda) {
                     // Find block
-                    int IndexOfBlock = Objects.FindIndex(i + 1, Object => Object is TempCurlyBracketsExpression or TempDoExpression);
+                    int IndexOfBlock = Objects.FindIndex(i + 1, Object => Object is TempDoExpression or TempCurlyBracketsExpression);
                     if (IndexOfBlock == -1) {
                         throw new SyntaxError($"{Token.Location}: expected block after '->'");
                     }
@@ -1649,19 +1651,28 @@ namespace Embers {
                     }
                     // Create assignment value
                     Expression CreateValue(Expression Target, Expression Value) {
-                        return CompoundOperator is not null
-                            // Convert (a += b) to (a = a.+(b))
-                            ? new MethodCallExpression(Target.Location, Target, CompoundOperator, new Expression[] { Value })
-                            // Direct value
-                            : Value;
+                        // Convert a += b to a = a.+(b)
+                        if (CompoundOperator is not null) {
+                            return new MethodCallExpression(Target.Location, Target, CompoundOperator, new Expression[] { Value });
+                        }
+                        // Direct value
+                        else {
+                            return Value;
+                        }
                     }
 
-                    // Replace identifier targets with constants or locals
+                    // Replace assignment identifiers with locals/constants
                     for (int i2 = 0; i2 < Targets.Length; i2++) {
+                        // Identifier
                         if (Targets[i2] is IdentifierExpression Identifier) {
-                            Targets[i2] = Identifier.PossibleConstant
-                                ? new ConstantExpression(Identifier.Location, Identifier.Name)
-                                : new LocalExpression(Identifier.Location, Identifier.Name);
+                            // Identifier is constant
+                            if (Identifier.PossibleConstant) {
+                                Targets[i2] = new ConstantExpression(Identifier.Location, Identifier.Name);
+                            }
+                            // Identifier is local
+                            else {
+                                Targets[i2] = new LocalExpression(Identifier.Location, Identifier.Name);
+                            }
                         }
                     }
 
