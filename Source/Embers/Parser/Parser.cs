@@ -628,6 +628,14 @@ namespace Embers {
             }
             return Result;
         }
+        static Expression ParseExpression(CodeLocation Location, string Code) {
+            // Get tokens from code
+            List<RubyObject?> Objects = Lexer.Analyse(Location, Code).CastTo<RubyObject?>();
+            // Parse general structure (as ParseExpressions is not run)
+            ParseGeneralStructure(Objects);
+            // Parse expression
+            return ParseExpression(Location, Objects);
+        }
 
         static (ReferenceExpression? Parent, string Name) ParsePath(CodeLocation Location, List<RubyObject?> Objects, bool ConstantPath) {
             // Get path parts
@@ -1066,7 +1074,7 @@ namespace Embers {
                             // Get expression in '#{}'
                             string Expression = String[(StartFormattingIndex + "#{".Length)..EndFormattingIndex];
                             // Add parsed expression
-                            Components.Add(ParseExpression(Token.Location, Lexer.Analyse(Token.Location, Expression).CastTo<RubyObject?>()));
+                            Components.Add(ParseExpression(Token.Location, Expression));
                             // Move on
                             Index = EndFormattingIndex + 1;
                         }
