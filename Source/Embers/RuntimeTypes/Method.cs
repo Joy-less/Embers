@@ -111,7 +111,7 @@ namespace Embers {
                 Context CallContext = new(Context.Locals, Context.Location, CallScope, Context.Module, Context.Instance, Context.Block, this);
                 // Assign local variables from arguments
                 for (int i = 0; i < Arguments.Length; i++) {
-                    CallScope.SetVariable(Arguments[i].Name, PassArguments[i]!);
+                    CallScope.SetVariable(Arguments[i].NameKey, PassArguments[i]!);
                 }
                 // Interpret method expressions
                 ReturnValue = CallExpressions!.Interpret(CallContext);
@@ -304,11 +304,13 @@ namespace Embers {
         public readonly ArgumentType ArgumentType;
         public readonly Expression? DefaultValue;
         public readonly ParameterInfo? AdaptedParameter;
+        internal readonly int NameKey;
 
         internal Argument(CodeLocation location, string name, Expression? default_value = null, ArgumentType argument_type = ArgumentType.Normal) : base(location) {
             Name = name;
             DefaultValue = default_value;
             ArgumentType = argument_type;
+            NameKey = Axis.Globals.GetNameKey(name);
         }
         internal Argument(CodeLocation location, ParameterInfo parameter, bool is_params) : base(location) {
             Name = parameter.Name?.ToSnakeCase() ?? string.Empty;

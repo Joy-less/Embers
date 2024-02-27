@@ -49,20 +49,25 @@ namespace Embers {
         public Module SelfOrClass
             => (this as Module) ?? Class;
 
-        public Method? GetMethod(string MethodName) {
+        public Method? GetMethod(int MethodNameKey) {
             // Class method
             if (this is Module ThisModule) {
-                return ThisModule.GetClassMethod(MethodName);
+                return ThisModule.GetClassMethod(MethodNameKey);
             }
             // Instance method
             else {
-                return Class.GetInstanceMethod(MethodName);
+                return Class.GetInstanceMethod(MethodNameKey);
             }
         }
-        public Instance CallMethod(Context Context, string MethodName, params Instance[] Arguments) {
+        public Method? GetMethod(string MethodName) {
+            return GetMethod(Axis.Globals.GetNameKey(MethodName));
+        }
+        public Instance CallMethod(Context Context, int MethodNameKey, params Instance[] Arguments) {
             // Get method
-            Method? Method = GetMethod(MethodName);
+            Method? Method = GetMethod(MethodNameKey);
             if (Method is null) {
+                // Get method name
+                string MethodName = Axis.Globals.GetName(MethodNameKey);
                 // Otherwise get method_missing
                 Method = GetMethod("method_missing")
                     ?? throw new RuntimeError($"{Context.Location}: undefined method '{MethodName}' for {Describe()}");
@@ -73,6 +78,9 @@ namespace Embers {
             Method.VerifyAccess(Context.Location, Context.Instance, this);
             // Call method
             return Method.Call(new Context(Context.Locals, Context.Location, SelfOrClass.Scope, SelfOrClass, this, Context.Block), Arguments);
+        }
+        public Instance CallMethod(Context Context, string MethodName, params Instance[] Arguments) {
+            return CallMethod(Context, Axis.Globals.GetNameKey(MethodName), Arguments);
         }
         public Instance CallMethod(string MethodName, params Instance[] Arguments)
             => CallMethod(new Context(new CodeLocation(Axis), Class.Scope), MethodName, Arguments);

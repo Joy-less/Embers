@@ -12,7 +12,9 @@ namespace Embers {
 
         private readonly ConcurrentDictionary<string, Instance> ImmortalSymbols = new();
         private readonly ConcurrentDictionary<string, Instance> MortalSymbols = new();
+        private readonly ConcurrentDictionary<string, int> NameKeys = new();
         private long LastObjectId;
+        private int LastIdentifierKey;
 
         internal Globals(Axis axis) {
             Axis = axis;
@@ -38,6 +40,12 @@ namespace Embers {
 
         internal long NewObjectId() {
             return Interlocked.Increment(ref LastObjectId);
+        }
+        internal int GetNameKey(string Name) {
+            return NameKeys.GetOrAdd(Name, Interlocked.Increment(ref LastIdentifierKey));
+        }
+        internal string GetName(int NameKey) {
+            return NameKeys.First(Entry => Entry.Value == NameKey).Key;
         }
     }
 }

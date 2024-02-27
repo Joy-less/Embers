@@ -9,7 +9,7 @@
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Title>Embers</Title>
     <Authors>Joyless</Authors>
-    <Version>3.1.4</Version>
+    <Version>3.2.0</Version>
     <Description>An embeddable Ruby interpreter written entirely in C#.</Description>
     <PackageProjectUrl>https://github.com/Joy-less/Embers</PackageProjectUrl>
     <PackageIcon>Noko Mini.png</PackageIcon>

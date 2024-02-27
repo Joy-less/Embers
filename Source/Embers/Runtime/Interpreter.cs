@@ -10,25 +10,25 @@ namespace Embers {
         public static Instance InterpretIdentifier(Context Context, IdentifierExpression Expression) {
             // Check for constant
             if (Expression.PossibleConstant) {
-                if (Context.Module.GetConstant(Expression.Name) is Instance Value) {
+                if (Context.Module.GetConstant(Expression.NameKey) is Instance Value) {
                     return Value;
                 }
             }
             // Check for variable
             else {
-                if (Context.Scope.GetVariable(Expression.Name) is Instance Value) {
+                if (Context.Scope.GetVariable(Expression.NameKey) is Instance Value) {
                     return Value;
                 }
             }
             // Call method
-            return Context.Instance.CallMethod(new Context(Context.Locals, Expression.Location, Context.Scope, Context.Module, Context.Instance), Expression.Name);
+            return Context.Instance.CallMethod(new Context(Context.Locals, Expression.Location, Context.Scope, Context.Module, Context.Instance), Expression.NameKey);
         }
         public static Instance InterpretLocal(Context Context, LocalExpression Expression) {
-            return Context.Scope.GetVariable(Expression.Name)
+            return Context.Scope.GetVariable(Expression.NameKey)
                 ?? throw new RuntimeError($"{Expression.Location}: undefined local variable '{Expression.Name}' for {Context.Instance.Describe()}");
         }
         public static Instance InterpretConstant(Context Context, ConstantExpression Expression) {
-            return Context.Module.GetConstant(Expression.Name)
+            return Context.Module.GetConstant(Expression.NameKey)
                 ?? throw new RuntimeError($"{Expression.Location}: undefined constant '{Expression.Name}' for {Context.Instance.Describe()}");
         }
         public static Instance InterpretGlobal(Context Context, GlobalExpression Expression) {
@@ -36,11 +36,11 @@ namespace Embers {
                 ?? Context.Axis.Nil;
         }
         public static Instance InterpretClassVariable(Context Context, ClassVariableExpression Expression) {
-            return Context.Module.GetClassVariable(Expression.Name)
+            return Context.Module.GetClassVariable(Expression.NameKey)
                 ?? throw new RuntimeError($"{Expression.Location}: undefined class variable '{Expression.Name}' for {Context.Instance.Describe()}");
         }
         public static Instance InterpretInstanceVariable(Context Context, InstanceVariableExpression Expression) {
-            return (Context.Module as Class)?.GetInstanceVariable(Expression.Name)
+            return (Context.Module as Class)?.GetInstanceVariable(Expression.NameKey)
                 ?? Context.Axis.Nil;
         }
         public static Instance InterpretConstantPath(Context Context, ConstantPathExpression Expression) {
@@ -48,7 +48,7 @@ namespace Embers {
             Instance Parent = Expression.Parent.Interpret(Context);
             // Get constant
             if (Parent is Module Module) {
-                return Module.GetConstant(Expression.Name)
+                return Module.GetConstant(Expression.NameKey)
                     ?? throw new RuntimeError($"{Expression.Location}: undefined constant '{Expression.Name}' for {Module}");
             }
             else {
@@ -56,9 +56,9 @@ namespace Embers {
             }
         }
         public static Instance InterpretMethodCall(Context Context, MethodCallExpression Expression) {
-            // Get method parent
-            Instance MethodParent = Expression.Parent is not null
-                ? Expression.Parent.Interpret(Context)
+            // Get method target
+            Instance MethodTarget = Expression.Target is not null
+                ? Expression.Target.Interpret(Context)
                 : Context.Instance;
 
             // Get given arguments
@@ -73,9 +73,9 @@ namespace Embers {
                 : null;
 
             // Call method
-            return MethodParent.CallMethod(
+            return MethodTarget.CallMethod(
                 new Context(Context.Locals, Expression.Location, Context.Scope, Context.Module, Context.Instance, Block),
-                Expression.Name,
+                Expression.NameKey,
                 Arguments
             );
         }
@@ -113,16 +113,16 @@ namespace Embers {
         }
         public static Instance InterpretLocalAssignment(Context Context, LocalExpression Expression, Instance Value) {
             // a = b
-            return Context.Scope.SetVariable(Expression.Name, Value);
+            return Context.Scope.SetVariable(Expression.NameKey, Value);
         }
         public static Instance InterpretConstantAssignment(Context Context, ConstantExpression Expression, Instance Value) {
             // Warn if constant already defined
-            if (Context.Module.GetConstant(Expression.Name) is not null) {
+            if (Context.Module.GetConstant(Expression.NameKey) is not null) {
                 // Warn about constant reassignment
                 Context.Axis.Warn(Expression.Location, $"constant '{Expression.Name}' has already been assigned");
             }
             // A = b
-            return Context.Module.SetConstant(Expression.Name, Value);
+            return Context.Module.SetConstant(Expression.NameKey, Value);
         }
         public static Instance InterpretGlobalAssignment(Context Context, GlobalExpression Expression, Instance Value) {
             // $a = b
@@ -130,11 +130,11 @@ namespace Embers {
         }
         public static Instance InterpretClassVariableAssignment(Context Context, ClassVariableExpression Expression, Instance Value) {
             // @@a = b
-            return Context.Module.SetClassVariable(Expression.Name, Value);
+            return Context.Module.SetClassVariable(Expression.NameKey, Value);
         }
         public static Instance InterpretInstanceVariableAssignment(Context Context, InstanceVariableExpression Expression, Instance Value) {
             // @a = b
-            return Context.Module.CastClass.SetInstanceVariable(Expression.Name, Value);
+            return Context.Module.CastClass.SetInstanceVariable(Expression.NameKey, Value);
         }
         public static Instance InterpretConstantPathAssignment(Context Context, ConstantPathExpression Expression, Instance Value) {
             // Get constant parent
@@ -142,17 +142,17 @@ namespace Embers {
                 ? Expression.Parent.Interpret(Context) as Module ?? throw new RuntimeError($"{Expression.Location}: constant parent must be a class/module")
                 : Context.Module;
             // Warn if constant already defined
-            if (Parent.GetConstant(Expression.Name) is not null) {
+            if (Parent.GetConstant(Expression.NameKey) is not null) {
                 // Warn about constant reassignment
                 Context.Axis.Warn(Expression.Location, $"constant '{Expression.Name}' has already been assigned");
             }
             // A = b
-            return Parent.SetConstant(Expression.Name, Value);
+            return Parent.SetConstant(Expression.NameKey, Value);
         }
         public static Instance InterpretMethodCallAssignment(Context Context, MethodCallExpression Expression, Instance Value) {
             // Get method parent
-            Instance MethodParent = Expression.Parent is not null
-                ? Expression.Parent.Interpret(Context)
+            Instance MethodParent = Expression.Target is not null
+                ? Expression.Target.Interpret(Context)
                 : Context.Instance;
             // a.b = c
             return MethodParent.CallMethod($"{Expression.Name}=", Value);
@@ -327,30 +327,30 @@ namespace Embers {
             static Instance IdentifierDefined(Context Context, IdentifierExpression Expression) {
                 // Check for constant
                 if (Expression.PossibleConstant) {
-                    if (Context.Module.GetConstant(Expression.Name) is not null) {
+                    if (Context.Module.GetConstant(Expression.NameKey) is not null) {
                         return Context.Axis.Globals.GetImmortalSymbol("constant");
                     }
                 }
                 // Check for variable
                 else {
-                    if (Context.Scope.GetVariable(Expression.Name) is not null) {
+                    if (Context.Scope.GetVariable(Expression.NameKey) is not null) {
                         return Context.Axis.Globals.GetImmortalSymbol("local-variable");
                     }
                 }
                 // Method defined?
-                return Context.Instance.GetMethod(Expression.Name) is not null
+                return Context.Instance.GetMethod(Expression.NameKey) is not null
                     ? Context.Axis.Globals.GetImmortalSymbol("method")
                     : Context.Axis.Nil;
             }
             // Class variable defined?
             static Instance ClassVariableDefined(Context Context, ClassVariableExpression Expression) {
-                return Context.Module.GetClassVariable(Expression.Name) is not null
+                return Context.Module.GetClassVariable(Expression.NameKey) is not null
                     ? Context.Axis.Globals.GetImmortalSymbol("class-variable")
                     : Context.Axis.Nil;
             }
             // Instance variable defined?
             static Instance InstanceVariableDefined(Context Context, InstanceVariableExpression Expression) {
-                return (Context.Module as Class)?.GetInstanceVariable(Expression.Name) is not null
+                return (Context.Module as Class)?.GetInstanceVariable(Expression.NameKey) is not null
                     ? Context.Axis.Globals.GetImmortalSymbol("instance-variable")
                     : Context.Axis.Nil;
             }
@@ -358,14 +358,14 @@ namespace Embers {
             static Instance MethodCallDefined(Context Context, MethodCallExpression Expression) {
                 // Interpret parent
                 Instance Parent = Context.Instance;
-                if (Expression.Parent is not null) {
-                    if (Defined(Context, Expression.Parent).Falsey) {
+                if (Expression.Target is not null) {
+                    if (Defined(Context, Expression.Target).Falsey) {
                         return Context.Axis.Nil;
                     }
-                    Parent = Expression.Parent.Interpret(Context);
+                    Parent = Expression.Target.Interpret(Context);
                 }
                 // Method defined?
-                return Parent.GetMethod(Expression.Name) is not null
+                return Parent.GetMethod(Expression.NameKey) is not null
                     ? Context.Axis.Globals.GetImmortalSymbol("method")
                     : Context.Axis.Nil;
             }
@@ -539,10 +539,7 @@ namespace Embers {
                 : null;
 
             // Call method
-            return Target.CallMethod(
-                new Context(Context.Locals, Expression.Location, Context.Scope, Context.Module, Context.Instance, Block),
-                "each"
-            );
+            return Target.CallMethod(new Context(Context.Locals, Expression.Location, Context.Scope, Context.Module, Context.Instance, Block), "each");
         }
         public static Instance InterpretDefModule(Context Context, DefModuleExpression Expression) {
             Module? Module;

@@ -12,9 +12,11 @@ namespace Embers {
     public abstract class ReferenceExpression : Expression {
         public readonly string Name;
         public readonly bool PossibleConstant;
+        internal readonly int NameKey;
         public ReferenceExpression(CodeLocation location, string name) : base(location) {
             Name = name;
             PossibleConstant = name.IsNamedLikeConstant();
+            NameKey = Axis.Globals.GetNameKey(name);
         }
         public abstract Instance Assign(Context Context, Instance Value);
     }
@@ -71,20 +73,20 @@ namespace Embers {
         public override Instance Assign(Context Context, Instance Value) => Interpreter.InterpretConstantPathAssignment(Context, this, Value);
     }
     public class MethodCallExpression : ReferenceExpression {
-        public readonly Expression? Parent;
+        public readonly Expression? Target;
         public readonly Expression[] Arguments;
         public readonly Method? Block;
         public readonly bool SafeNavigation;
         internal readonly bool ArgumentsFinal;
-        public MethodCallExpression(CodeLocation location, Expression? parent, string name, Expression[]? arguments = null, Method? block = null, bool safe_navigation = false, bool arguments_final = false) : base(location, name) {
-            Parent = parent;
+        public MethodCallExpression(CodeLocation location, Expression? target, string name, Expression[]? arguments = null, Method? block = null, bool safe_navigation = false, bool arguments_final = false) : base(location, name) {
+            Target = target;
             Arguments = arguments ?? System.Array.Empty<Expression>();
             Block = block;
             SafeNavigation = safe_navigation;
             ArgumentsFinal = arguments_final;
         }
         public override string ToString()
-            => $"{(Parent is not null ? $"{Parent}." : "")}{Name}({Arguments.ObjectsToString()}){(Block is not null ? $" {Block}" : "")}";
+            => $"{(Target is not null ? $"{Target}." : "")}{Name}({Arguments.ObjectsToString()}){(Block is not null ? $" {Block}" : "")}";
         public override Instance Interpret(Context Context) => Interpreter.InterpretMethodCall(Context, this);
         public override Instance Assign(Context Context, Instance Value) => Interpreter.InterpretMethodCallAssignment(Context, this, Value);
     }
@@ -104,13 +106,13 @@ namespace Embers {
 
             // Integer
             if (Token.Type is TokenType.Integer) {
-                Integer Integer = Integer.Parse(Value);
-                CreateLiteral = () => new Instance(Axis.Integer, Integer);
+                Instance Instance = new(Axis.Integer, Integer.Parse(Value));
+                CreateLiteral = () => Instance;
             }
             // Float
             else if (Token.Type is TokenType.Float) {
-                Float Float = Float.Parse(Value);
-                CreateLiteral = () => new Instance(Axis.Float, Float);
+                Instance Instance = new(Axis.Float, Float.Parse(Value));
+                CreateLiteral = () => Instance;
             }
             // Other
             else {

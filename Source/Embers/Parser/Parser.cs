@@ -1137,7 +1137,7 @@ namespace Embers {
                                 throw new SyntaxError($"{BracketsExpression.Location}: unexpected arguments");
                             }
                             // Insert method call with arguments
-                            Objects.Insert(i, new MethodCallExpression(MethodCall.Location, MethodCall.Parent, MethodCall.Name, MethodCall.Arguments, MethodCall.Block, arguments_final: true));
+                            Objects.Insert(i, new MethodCallExpression(MethodCall.Location, MethodCall.Target, MethodCall.Name, MethodCall.Arguments, MethodCall.Block, arguments_final: true));
                         }
                     }
                 }
@@ -1193,7 +1193,7 @@ namespace Embers {
                                 throw new SyntaxError($"{Block.Location}: unexpected block");
                             }
                             // Insert method call with block
-                            Objects.Insert(i, new MethodCallExpression(LastMethodCall.Location, LastMethodCall.Parent, LastMethodCall.Name, LastMethodCall.Arguments, BlockMethod, arguments_final: true));
+                            Objects.Insert(i, new MethodCallExpression(LastMethodCall.Location, LastMethodCall.Target, LastMethodCall.Name, LastMethodCall.Arguments, BlockMethod, arguments_final: true));
                         }
                     }
                 }
@@ -1537,7 +1537,7 @@ namespace Embers {
                     // Get parent
                     Expression? Parent = null;
                     if (Object is MethodCallExpression MethodCall) {
-                        Parent = MethodCall.Parent;
+                        Parent = MethodCall.Target;
                     }
                     // Create method call expression
                     Objects[i] = new MethodCallExpression(Object.Location, Parent, Reference.Name, Arguments);
