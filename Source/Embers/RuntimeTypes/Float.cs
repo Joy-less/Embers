@@ -13,37 +13,37 @@ namespace Embers {
             Value = from_edecimal;
         }
 
-        // Casts to Integer
-        public static implicit operator Float(int FromInt32)
-            => new(FromInt32);
-        public static implicit operator Float(uint FromUInt32)
-            => new(FromUInt32);
-        public static implicit operator Float(long FromInt64)
-            => new(FromInt64);
-        public static implicit operator Float(ulong FromUInt64)
-            => new(FromUInt64);
-        public static implicit operator Float(short FromInt16)
-            => new(FromInt16);
-        public static implicit operator Float(ushort FromUInt16)
-            => new(FromUInt16);
+        // Casts to Float
         public static implicit operator Float(byte FromByte)
             => new(FromByte);
         public static implicit operator Float(sbyte FromSByte)
             => new(FromSByte);
+        public static implicit operator Float(short FromShort)
+            => new(FromShort);
+        public static implicit operator Float(ushort FromUShort)
+            => new(FromUShort);
+        public static implicit operator Float(int FromInt)
+            => new(FromInt);
+        public static implicit operator Float(uint FromUInt)
+            => new(FromUInt);
+        public static implicit operator Float(long FromLong)
+            => new(FromLong);
+        public static implicit operator Float(ulong FromULong)
+            => new(FromULong);
+#if NET7_0_OR_GREATER
+        public static implicit operator Float(Int128 FromInt128)
+            => new(EInteger.FromString(FromInt128.ToString()));
+        public static implicit operator Float(UInt128 FromUInt128)
+            => new(EInteger.FromString(FromUInt128.ToString()));
+#endif
+        public static implicit operator Float(Half FromHalf)
+            => new(EInteger.FromString(FromHalf.ToString()));
         public static implicit operator Float(float FromFloat)
             => new(EDecimal.FromString(FromFloat.ToString()));
         public static implicit operator Float(double FromDouble)
             => new(EDecimal.FromString(FromDouble.ToString()));
         public static implicit operator Float(decimal FromDecimal)
             => new(FromDecimal);
-#if NET7_0_OR_GREATER
-        public static implicit operator Float(Int128 FromInt128)
-            => new(EInteger.FromString(FromInt128.ToString()));
-        public static implicit operator Float(UInt128 FromUInt128)
-            => new(EInteger.FromString(FromUInt128.ToString()));
-        public static implicit operator Float(Half FromHalf)
-            => new(EInteger.FromString(FromHalf.ToString()));
-#endif
         public static implicit operator Float(EInteger FromEInteger)
             => new(FromEInteger);
         public static implicit operator Float(EDecimal FromEDecimal)
@@ -57,7 +57,15 @@ namespace Embers {
         public static implicit operator Float(Integer FromInteger)
             => new((EInteger)FromInteger);
 
-        // Casts from Integer
+        // Casts from Float
+        public static explicit operator byte(Float FromFloat)
+            => FromFloat.Value.ToByteChecked();
+        public static explicit operator sbyte(Float FromFloat)
+            => FromFloat.Value.ToSByteChecked();
+        public static explicit operator short(Float FromFloat)
+            => FromFloat.Value.ToInt16Checked();
+        public static explicit operator ushort(Float FromFloat)
+            => FromFloat.Value.ToUInt16Checked();
         public static explicit operator int(Float FromFloat)
             => FromFloat.Value.ToInt32Checked();
         public static explicit operator uint(Float FromFloat)
@@ -66,28 +74,20 @@ namespace Embers {
             => FromFloat.Value.ToInt64Checked();
         public static explicit operator ulong(Float FromFloat)
             => FromFloat.Value.ToUInt64Checked();
-        public static explicit operator short(Float FromFloat)
-            => FromFloat.Value.ToInt16Checked();
-        public static explicit operator ushort(Float FromFloat)
-            => FromFloat.Value.ToUInt16Checked();
-        public static explicit operator byte(Float FromFloat)
-            => FromFloat.Value.ToByteChecked();
-        public static explicit operator sbyte(Float FromFloat)
-            => FromFloat.Value.ToSByteChecked();
+#if NET7_0_OR_GREATER
+        public static explicit operator Int128(Float FromFloat)
+            => Int128.Parse(FromFloat.Value.ToString());
+        public static explicit operator UInt128(Float FromFloat)
+            => UInt128.Parse(FromFloat.Value.ToString());
+#endif
+        public static explicit operator Half(Float FromFloat)
+            => (Half)(float)FromFloat.Value;
         public static explicit operator float(Float FromFloat)
             => FromFloat.Value.ToSingle();
         public static explicit operator double(Float FromFloat)
             => FromFloat.Value.ToDouble();
         public static explicit operator decimal(Float FromFloat)
             => FromFloat.Value.ToDecimal();
-#if NET7_0_OR_GREATER
-        public static explicit operator Int128(Float FromFloat)
-            => Int128.Parse(FromFloat.Value.ToString());
-        public static explicit operator UInt128(Float FromFloat)
-            => UInt128.Parse(FromFloat.Value.ToString());
-        public static explicit operator Half(Float FromFloat)
-            => (Half)FromFloat.Value.ToSingle();
-#endif
         public static explicit operator BigInteger(Float FromFloat)
             => BigInteger.Parse(FromFloat.Value.ToString());
         public static implicit operator EDecimal(Float FromFloat)

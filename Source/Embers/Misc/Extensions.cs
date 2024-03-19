@@ -202,7 +202,7 @@ namespace Embers {
         public static void Sort<T>(this IList<T> list, Comparison<T> comparison) {
             ArrayList.Adapter((IList)list).Sort(new ComparisonComparer<T>(comparison));
         }
-        public class ComparisonComparer<T> : IComparer<T>, IComparer {
+        private sealed class ComparisonComparer<T> : IComparer<T>, IComparer {
             private readonly Comparison<T> Comparison;
             public ComparisonComparer(Comparison<T> comparison)
                 => Comparison = comparison;

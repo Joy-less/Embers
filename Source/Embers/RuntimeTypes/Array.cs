@@ -10,7 +10,7 @@ namespace Embers {
             Inner = Axis.CreateInstanceList(capacity);
             DefaultValue = default_value ?? Axis.Nil;
         }
-        public Array(CodeLocation location, IList<Instance> original, Instance? default_value = null) : base(location) {
+        public Array(CodeLocation location, ICollection<Instance> original, Instance? default_value = null) : base(location) {
             Inner = Axis.CreateInstanceList(original.Count);
             foreach (Instance Item in original) {
                 Inner.Add(Item);
@@ -35,6 +35,11 @@ namespace Embers {
         }
         public void Add(Instance Instance) {
             Inner.Add(Instance);
+        }
+        public void AddRange(IEnumerable<Instance> Instances) {
+            foreach (Instance Instance in Instances) {
+                Add(Instance);
+            }
         }
         public void Insert(int Index, Instance Instance) {
             Index = AbsoluteIndex(Index);

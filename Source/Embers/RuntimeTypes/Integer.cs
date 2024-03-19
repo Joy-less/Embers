@@ -11,22 +11,22 @@ namespace Embers {
         }
 
         // Casts to Integer
-        public static implicit operator Integer(int FromInt32)
-            => new(FromInt32);
-        public static implicit operator Integer(uint FromUInt32)
-            => new(FromUInt32);
-        public static implicit operator Integer(long FromInt64)
-            => new(FromInt64);
-        public static implicit operator Integer(ulong FromUInt64)
-            => new(FromUInt64);
-        public static implicit operator Integer(short FromInt16)
-            => new(FromInt16);
-        public static implicit operator Integer(ushort FromUInt16)
-            => new(FromUInt16);
         public static implicit operator Integer(byte FromByte)
             => new(FromByte);
         public static implicit operator Integer(sbyte FromSByte)
             => new(FromSByte);
+        public static implicit operator Integer(short FromShort)
+            => new(FromShort);
+        public static implicit operator Integer(ushort FromUShort)
+            => new(FromUShort);
+        public static implicit operator Integer(int FromInt)
+            => new(FromInt);
+        public static implicit operator Integer(uint FromUInt)
+            => new(FromUInt);
+        public static implicit operator Integer(long FromLong)
+            => new(FromLong);
+        public static implicit operator Integer(ulong FromULong)
+            => new(FromULong);
 #if NET7_0_OR_GREATER
         public static implicit operator Integer(Int128 FromInt128)
             => new(EInteger.FromString(FromInt128.ToString()));
@@ -41,6 +41,14 @@ namespace Embers {
             => new((EInteger)(EDecimal)FromFloat);
 
         // Casts from Integer
+        public static explicit operator byte(Integer FromInteger)
+            => FromInteger.Value.ToByteChecked();
+        public static explicit operator sbyte(Integer FromInteger)
+            => FromInteger.Value.ToSByteChecked();
+        public static explicit operator short(Integer FromInteger)
+            => FromInteger.Value.ToInt16Checked();
+        public static explicit operator ushort(Integer FromInteger)
+            => FromInteger.Value.ToUInt16Checked();
         public static explicit operator int(Integer FromInteger)
             => FromInteger.Value.ToInt32Checked();
         public static explicit operator uint(Integer FromInteger)
@@ -49,20 +57,20 @@ namespace Embers {
             => FromInteger.Value.ToInt64Checked();
         public static explicit operator ulong(Integer FromInteger)
             => FromInteger.Value.ToUInt64Checked();
-        public static explicit operator short(Integer FromInteger)
-            => FromInteger.Value.ToInt16Checked();
-        public static explicit operator ushort(Integer FromInteger)
-            => FromInteger.Value.ToUInt16Checked();
-        public static explicit operator byte(Integer FromInteger)
-            => FromInteger.Value.ToByteChecked();
-        public static explicit operator sbyte(Integer FromInteger)
-            => FromInteger.Value.ToSByteChecked();
 #if NET7_0_OR_GREATER
         public static explicit operator Int128(Integer FromInteger)
             => Int128.Parse(FromInteger.Value.ToString());
         public static explicit operator UInt128(Integer FromInteger)
             => UInt128.Parse(FromInteger.Value.ToString());
 #endif
+        public static explicit operator Half(Integer FromInteger)
+            => (Half)(Float)FromInteger.Value;
+        public static explicit operator float(Integer FromInteger)
+            => (float)(Float)FromInteger.Value;
+        public static explicit operator double(Integer FromInteger)
+            => (double)(Float)FromInteger.Value;
+        public static explicit operator decimal(Integer FromInteger)
+            => (decimal)(Float)FromInteger.Value;
         public static implicit operator BigInteger(Integer FromInteger)
             => BigInteger.Parse(FromInteger.Value.ToString());
         public static implicit operator EInteger(Integer FromInteger)
