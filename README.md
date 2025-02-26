@@ -8,6 +8,42 @@ An embeddable Ruby interpreter written entirely in C#.
 
 Its powerful, lightweight design is intended for use in game engines, game mods, and C# applications.
 
+> [!WARNING]  
+> This project has been inactive since 2024/03/19. Please do not use it anymore. It has unsolvable bugs, poor performance, and differences to Ruby.
+>
+> As an alternative, please consider one of the following:
+> ```cs
+> // IronRuby.Portable + IronRuby.Libraries
+> // Ruby interpreter for Ruby 1.9 (inactive since 2011).
+> 
+> Microsoft.Scripting.Hosting.ScriptEngine RubyEngine = IronRuby.Ruby.CreateEngine();
+> RubyEngine.Execute("""
+>     puts("Hello from IronRuby!")
+>     """);
+> 
+> // NLua
+> // .NET-bridged native Lua bindings for Lua 5.4 (active development).
+> 
+> using NLua.Lua NLuaEngine = new();
+> NLuaEngine.DoString("""
+>     print("Hello from NLua!")
+>     """);
+> 
+> // KeraLua
+> // Raw native Lua bindings for Lua 5.4 (active development).
+> 
+> using KeraLua.Lua KeraLuaEngine = new();
+> KeraLuaEngine.DoString("""
+>     print("Hello from KeraLua!")
+>     """);
+> ```
+>
+> My official statement for abandoning Embers:
+> > I loved using RGSS in RPG Maker and it was my motivation to create Embers. Ruby is neat.
+> > If you'd like to know why I abandoned the project, it's because of the difficulty and mess. Because I was new to creating programming languages, Embers doesn't actually use its own call stack; it uses C#, which creates problems. The main one being that `return` and `break` don't work correctly in blocks. I had already remade Embers twice before and was very burnt-out from working on the project. I have other projects so I don't really have time to work on Embers anymore.
+>
+> Thank you for your time, and good luck.
+
 ## Features
 
 - Run Ruby code in C# .NET
